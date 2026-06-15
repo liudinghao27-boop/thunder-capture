@@ -82,9 +82,9 @@ class IndustryCreate(BaseModel):
     def _validate_platforms(cls, value: list[str]) -> list[str]:
         return validate_single_platform(value) or ["douyin"]
 
-    @field_validator("target_users")
+    @field_validator("intent_keywords", "noise_keywords", "target_users", "categories")
     @classmethod
-    def _normalize_target_users(cls, value: list[str]) -> list[str]:
+    def _normalize_string_list(cls, value: list[str]) -> list[str]:
         return normalize_unique_strings(value) or []
 
     @field_validator("webhook_url")
@@ -129,9 +129,9 @@ class IndustryUpdate(BaseModel):
     def _validate_platforms(cls, value: Optional[list[str]]) -> Optional[list[str]]:
         return validate_single_platform(value)
 
-    @field_validator("target_users")
+    @field_validator("intent_keywords", "noise_keywords", "target_users", "categories")
     @classmethod
-    def _normalize_target_users(cls, value: Optional[list[str]]) -> Optional[list[str]]:
+    def _normalize_string_list(cls, value: Optional[list[str]]) -> Optional[list[str]]:
         return normalize_unique_strings(value)
 
     @field_validator("webhook_url")
