@@ -838,6 +838,11 @@
             }
         }
 
+        // Stub for compliance-mode export modal (full implementation in Task 9)
+        function openExportModal(defaultFormat) {
+            console.log('Export modal will be implemented in Task 9, format:', defaultFormat);
+        }
+
         // Toast Helper
         function showToast(message, type = 'info') {
             const container = document.getElementById('toast-container');
@@ -1125,6 +1130,7 @@
                     // Get industries list
                     try {
                         const inds = await apiFetch('/api/industries');
+                        overviewIndustries = inds || [];
                         indSel.innerHTML = '<option value="">选择项目...</option>';
                         for (const ind of inds) {
                             indSel.innerHTML += `<option value="${ind.slug}" ${ind.slug === overviewSelectedIndustry?'selected':''}>${escapeHtml(ind.name)}</option>`;
@@ -1149,7 +1155,7 @@
                     cmdScore.innerHTML = `<p class=\"text-[10px] text-slate-500 font-semibold\">就绪度</p><p class=\"text-lg font-bold ${score>=80?'text-emerald-400':score>=40?'text-amber-400':'text-slate-400'} font-display\">${score}%</p>`;
                 }
                 if (readyList) {
-                    readyList.innerHTML = [
+                    const items = [
                         { label: 'LLM 密钥', ok: ds.warnings.every(w => !w.includes('密钥') && !w.includes('key')) },
                         { label: `线索库存 (${ds.lead_inventory.pending} 条)`, ok: ds.lead_inventory.pending > 0 },
                         { label: `可用设备 (${ds.device_matrix.available}/${ds.device_matrix.total})`, ok: ds.device_matrix.available > 0 },
@@ -1159,7 +1165,17 @@
                             <span class=\"text-xs text-slate-300\">${item.label}</span>
                             <span class=\"text-xs font-bold ${item.ok?'text-emerald-400':'text-amber-400'}\">${item.ok?'✓ 正常':'⚠ 需处理'}</span>
                         </div>`
-                    ).join('');
+                    );
+                    const activeInd = overviewIndustries.find(i => i.slug === overviewSelectedIndustry);
+                    const isCompliance = activeInd && activeInd.compliance_mode;
+                    if (isCompliance) {
+                        items.push(`<div class=\"flex items-center justify-between p-3 bg-cyan-950/20 rounded-lg border border-cyan-500/20\">
+                            <span class=\"text-xs text-cyan-300\">合规模式</span>
+                            <button type=\"button\" onclick=\"editIndustry(${activeInd.id})\" class=\"text-[10px] font-bold text-cyan-300 hover:text-cyan-200\">查看配置</button>
+                        </div>
+                        <p class=\"text-[10px] text-slate-500 px-1\">已开启：只采集不发送，线索可导出或推送至 CRM</p>`);
+                    }
+                    readyList.innerHTML = items.join('');
                 }
 
                 // Next action
@@ -1253,6 +1269,7 @@
 
         let overviewSelectedIndustry = '';
         let overviewState = {};
+        let overviewIndustries = [];
         let dashboardPollTimer = null;
 
         function startDashboardPoll() {
@@ -1279,13 +1296,19 @@
             if (cmdTitle) cmdTitle.innerText = ds.has_active_job ? '任务执行中' : (ds.can_send ? '可发送' : (ds.can_collect ? '可采集' : '等待条件'));
             if (cmdDesc) cmdDesc.innerText = ds.next_action;
             const readyList = document.getElementById('overview-readiness-list');
+            const ind = overviewIndustries.find(i => i.slug === overviewSelectedIndustry);
+            const isCompliance = ind && ind.compliance_mode;
             if (readyList) {
-                readyList.innerHTML = [
+                const items = [
                     { label: 'LLM', ok: ds.warnings.every(w => !w.includes('密钥') && !w.includes('key')) },
                     { label: '线索 (' + ds.lead_inventory.pending + ' 条)', ok: ds.lead_inventory.pending > 0 },
                     { label: '设备 (' + ds.device_matrix.available + '/' + ds.device_matrix.total + ' 可用)', ok: ds.device_matrix.available > 0 },
                     { label: '队列空闲', ok: ds.active_jobs.length === 0 },
-                ].map(item => '<div class="flex items-center justify-between p-2.5 bg-slate-950/40 rounded-lg border border-slate-800/60"><span class="text-[10px] text-slate-300">' + item.label + '</span><span class="text-[10px] font-bold ' + (item.ok?'text-emerald-400':'text-amber-400') + '">' + (item.ok?'OK':'需处理') + '</span></div>').join('');
+                ].map(item => '<div class="flex items-center justify-between p-2.5 bg-slate-950/40 rounded-lg border border-slate-800/60"><span class="text-[10px] text-slate-300">' + item.label + '</span><span class="text-[10px] font-bold ' + (item.ok?'text-emerald-400':'text-amber-400') + '">' + (item.ok?'OK':'需处理') + '</span></div>');
+                if (isCompliance) {
+                    items.push(`<div class="flex items-center justify-between p-2.5 bg-cyan-950/20 rounded-lg border border-cyan-500/20"><span class="text-[10px] text-cyan-300">合规模式</span><button type="button" onclick="editIndustry(${ind.id})" class="text-[10px] font-bold text-cyan-300 hover:text-cyan-200">查看配置</button></div><p class="text-[10px] text-slate-500 px-1">已开启：只采集不发送，线索可导出或推送至 CRM</p>`);
+                }
+                readyList.innerHTML = items.join('');
             }
         }
 
@@ -1293,6 +1316,7 @@
             const sel = document.getElementById('overview-industry-select');
             overviewSelectedIndustry = sel.value;
             updateOverviewButtons();
+            updateReadinessDisplay(overviewState);
             if (overviewSelectedIndustry) { await refreshIndustryCard(overviewSelectedIndustry); }
         }
 
@@ -1336,8 +1360,18 @@
             const slug = overviewSelectedIndustry;
             const st = overviewState;
             if (!slug) { btnC.disabled = true; btnS.disabled = true; return; }
+            const ind = overviewIndustries.find(i => i.slug === slug);
+            const isCompliance = ind && ind.compliance_mode;
+            if (isCompliance) {
+                btnS.innerText = '导出高意向线索';
+                btnS.onclick = () => { router.navigate('tasks'); setTimeout(() => openExportModal(ind.slug), 200); };
+                btnS.disabled = false;
+            } else {
+                btnS.innerText = '发送';
+                btnS.onclick = () => triggerOverviewSend();
+                btnS.disabled = !st.can_send;
+            }
             btnC.disabled = !st.can_collect;
-            btnS.disabled = !st.can_send;
         }
 
         async function triggerOverviewCollect() {
