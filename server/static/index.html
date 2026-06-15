@@ -690,13 +690,13 @@
                         </button>
                         <div id="compliance-panel" class="hidden p-4 space-y-4 bg-slate-900/30">
                             <div class="flex items-center justify-between">
-                                <div>
+                                <div id="compliance-mode-label">
                                     <p class="text-xs font-semibold text-slate-200">合规模式</p>
                                     <p class="text-[10px] text-slate-500">开启后只采集评论并分类，不自动发送私信</p>
                                 </div>
-                                <label class="relative inline-flex items-center cursor-pointer">
-                                    <input type="checkbox" id="industry-compliance-mode" class="sr-only peer" onchange="onComplianceModeChange()">
-                                    <div class="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-600"></div>
+                                <label class="relative inline-flex items-center cursor-pointer" aria-labelledby="compliance-mode-label">
+                                    <input type="checkbox" id="industry-compliance-mode" class="sr-only peer" onchange="onComplianceModeChange()" aria-labelledby="compliance-mode-label">
+                                    <div role="switch" aria-checked="false" class="w-9 h-5 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-cyan-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-600"></div>
                                 </label>
                             </div>
 
@@ -1698,6 +1698,17 @@
                 document.getElementById('industry-compliance-mode').checked = Boolean(ind.compliance_mode);
                 document.getElementById('industry-webhook-url').value = ind.webhook_url || '';
                 document.getElementById('industry-auto-export').checked = Boolean(ind.auto_export_enabled);
+
+                const panel = document.getElementById('compliance-panel');
+                const chevron = document.getElementById('compliance-panel-chevron');
+                if (ind.compliance_mode || ind.webhook_url) {
+                    panel.classList.remove('hidden');
+                    chevron.innerText = '▲';
+                } else {
+                    panel.classList.add('hidden');
+                    chevron.innerText = '▼';
+                }
+
                 onComplianceModeChange();
 
                 // Reset platform radios
@@ -1749,6 +1760,10 @@
             document.getElementById('industry-categories').value = '[]';
             document.getElementById('industry-ai-desc').value = '';
             document.getElementById('industry-compliance-mode').checked = false;
+            const switchDiv = document.getElementById('industry-compliance-mode').nextElementSibling;
+            if (switchDiv && switchDiv.getAttribute('role') === 'switch') {
+                switchDiv.setAttribute('aria-checked', 'false');
+            }
             document.getElementById('industry-webhook-url').value = '';
             document.getElementById('industry-auto-export').checked = false;
             onComplianceModeChange();
@@ -1777,8 +1792,17 @@
         function onComplianceModeChange() {
             const enabled = document.getElementById('industry-compliance-mode').checked;
             const webhookSection = document.getElementById('compliance-webhook-section');
+            const urlInput = document.getElementById('industry-webhook-url');
+            const autoExport = document.getElementById('industry-auto-export');
             webhookSection.classList.toggle('opacity-50', !enabled);
-            webhookSection.classList.toggle('pointer-events-none', !enabled);
+            urlInput.disabled = !enabled;
+            autoExport.disabled = !enabled;
+
+            const toggle = document.getElementById('industry-compliance-mode');
+            const switchDiv = toggle.nextElementSibling;
+            if (switchDiv && switchDiv.getAttribute('role') === 'switch') {
+                switchDiv.setAttribute('aria-checked', enabled ? 'true' : 'false');
+            }
         }
 
         async function testIndustryWebhook() {
