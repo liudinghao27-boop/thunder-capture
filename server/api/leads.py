@@ -2,14 +2,17 @@
 
 from datetime import datetime, timezone
 from io import BytesIO
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from server.auth import get_current_user
 from server.models import get_db
+from server.models.task import TaskQueue
 from server.models.user import User
 from server.services.export import DEFAULT_EXPORT_FIELDS, generate_csv, generate_xlsx
 
@@ -38,7 +41,7 @@ class LeadSummary(BaseModel):
 class LeadExportRequest(BaseModel):
     industry_slug: str
     status: str | None = None
-    format: str = "xlsx"  # csv or xlsx
+    format: Literal["csv", "xlsx"] = "xlsx"
     limit: int = Field(default=5000, ge=1, le=10000)
     fields: list[str] | None = None
 
@@ -53,6 +56,12 @@ TASK_STATUS_LABELS = {
 
 def _task_label(status: str) -> str:
     return TASK_STATUS_LABELS.get(status, status)
+
+
+def _taskqueue_row_to_dict(row) -> dict:
+    d = {c.name: getattr(row, c.name) for c in TaskQueue.__table__.columns}
+    d["matched_categories"] = d.get("matched_categories", "")
+    return d
 
 
 def _lead_from_row(row: dict) -> dict:
@@ -87,7 +96,6 @@ def list_leads(
     """List leads with optional filtering by status and industry."""
     try:
         from server.models import SessionLocal
-        from server.models.task import TaskQueue
         db = SessionLocal()
     except Exception:
         return {"leads": [], "total": 0}
@@ -102,10 +110,7 @@ def list_leads(
         total = query.count()
         rows = query.order_by(TaskQueue.fetched_at.desc()).limit(limit).offset(offset).all()
 
-        leads = []
-        for r in rows:
-            d = {c.name: getattr(r, c.name) for c in TaskQueue.__table__.columns}
-            leads.append(_lead_from_row(d))
+        leads = [_lead_from_row(_taskqueue_row_to_dict(r)) for r in rows]
     finally:
         db.close()
 
@@ -140,7 +145,6 @@ def retry_failed_leads(
     """Reset all failed leads in an industry back to pending for retry."""
     try:
         from server.models import SessionLocal
-        from server.models.task import TaskQueue
         db = SessionLocal()
     except Exception:
         raise HTTPException(status_code=500, detail="Queue unavailable")
@@ -169,13 +173,16 @@ def export_leads(
 ):
     """Export leads as CSV or XLSX."""
     from server.models import SessionLocal
-    from server.models.task import TaskQueue
 
     db = SessionLocal()
     try:
         query = db.query(TaskQueue).filter(
             TaskQueue.industry_slug == req.industry_slug,
-            TaskQueue.owner_user_id == current_user.id,
+            or_(
+                TaskQueue.owner_user_id == current_user.id,
+                TaskQueue.owner_user_id == "",
+                TaskQueue.owner_user_id == None,
+            ),
         )
         if req.status:
             query = query.filter(TaskQueue.status == req.status)
@@ -190,11 +197,7 @@ def export_leads(
         rows = query.order_by(TaskQueue.fetched_at.desc()).limit(req.limit).offset(0).all()
         fields = req.fields or DEFAULT_EXPORT_FIELDS
 
-        lead_rows = []
-        for r in rows:
-            d = {c.name: getattr(r, c.name) for c in TaskQueue.__table__.columns}
-            d["matched_categories"] = d.get("matched_categories", "")
-            lead_rows.append(d)
+        lead_rows = [_taskqueue_row_to_dict(r) for r in rows]
 
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         filename = f"leads_{req.industry_slug}_{timestamp}"
