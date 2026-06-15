@@ -1,0 +1,2577 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>雷霆捕获系统 — 获客营销控制台</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        slate: {
+                            950: '#030712',
+                            900: '#0f172a',
+                            800: '#1e293b',
+                            700: '#334155',
+                        },
+                        cyan: {
+                            400: '#22d3ee',
+                            500: '#06b6d4',
+                            600: '#0891b2',
+                        },
+                        pink: {
+                            400: '#f472b6',
+                            500: '#ec4899',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #030712;
+        }
+        h1, h2, h3, .font-display {
+            font-family: 'Outfit', sans-serif;
+        }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.65);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .glass-card {
+            background: rgba(30, 41, 59, 0.45);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .glass-card:hover {
+            border-color: rgba(34, 211, 238, 0.35);
+            box-shadow: 0 0 20px rgba(34, 211, 238, 0.08);
+            transform: translateY(-2px);
+        }
+        .neon-text-cyan {
+            text-shadow: 0 0 8px rgba(34, 211, 238, 0.5);
+        }
+        .neon-text-pink {
+            text-shadow: 0 0 8px rgba(244, 114, 182, 0.5);
+        }
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(3, 7, 18, 0.5);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(34, 211, 238, 0.3);
+        }
+    </style>
+</head>
+<body class="h-full text-slate-100 flex flex-col antialiased">
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="fixed top-4 right-4 z-50 flex flex-col gap-2"></div>
+
+    <!-- Active View Wrapper -->
+    <div id="app-root" class="h-full flex flex-col">
+        <!-- Loader / Landing state -->
+        <div class="m-auto flex flex-col items-center gap-4">
+            <div class="w-12 h-12 border-4 border-cyan-400 border-t-transparent rounded-full animate-spin"></div>
+            <p class="text-slate-400 text-sm font-display tracking-wider">正在初始化系统控制台...</p>
+        </div>
+    </div>
+
+    <!-- UI View Templates (Hidden in DOM, parsed by JS router) -->
+    
+    <!-- 1. LOGIN / REGISTER VIEW -->
+    <template id="view-auth">
+        <div class="min-h-full flex items-center justify-center bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-950 to-black p-4">
+            <div class="w-full max-w-md p-8 rounded-2xl glass-panel shadow-2xl relative overflow-hidden">
+                <!-- Background blur effects -->
+                <div class="absolute -top-20 -left-20 w-48 h-48 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none"></div>
+                <div class="absolute -bottom-20 -right-20 w-48 h-48 bg-pink-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+                <div class="flex flex-col items-center mb-8">
+                    <div class="w-16 h-16 bg-gradient-to-tr from-cyan-500 to-pink-500 rounded-2xl flex items-center justify-center shadow-lg shadow-cyan-500/20 mb-3">
+                        <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                        </svg>
+                    </div>
+                    <h1 class="text-2xl font-bold font-display tracking-tight bg-gradient-to-r from-cyan-400 to-pink-400 bg-clip-text text-transparent">雷霆捕获系统</h1>
+                    <p class="text-slate-400 text-xs mt-1">SaaS 获客营销控制台</p>
+                </div>
+
+                <!-- Auth tabs -->
+                <div class="flex border-b border-slate-800 mb-6">
+                    <button id="tab-login" class="flex-1 pb-3 text-sm font-medium border-b-2 border-cyan-400 text-cyan-400 transition-colors">登录账户</button>
+                    <button id="tab-register" class="flex-1 pb-3 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition-colors">注册新用户</button>
+                </div>
+
+                <form id="auth-form" class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">用户名</label>
+                        <input type="text" id="auth-username" required autocomplete="username" class="w-full bg-slate-900/80 border border-slate-800 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all text-slate-200" placeholder="请输入用户名">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">密码</label>
+                        <input type="password" id="auth-password" required autocomplete="current-password" class="w-full bg-slate-900/80 border border-slate-800 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-all text-slate-200" placeholder="请输入密码">
+                    </div>
+                    <button type="submit" id="auth-submit-btn" class="w-full bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-slate-950 font-bold font-display text-sm py-3 rounded-lg shadow-lg shadow-cyan-500/20 hover:shadow-cyan-400/30 transition-all mt-6 flex items-center justify-center gap-2">
+                        <span>立即登录</span>
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </template>
+
+    <!-- 2. MAIN APPLICATION WORKSPACE -->
+    <template id="view-dashboard">
+        <div class="h-full flex overflow-hidden">
+            <!-- Sidebar -->
+            <aside class="w-64 glass-panel border-r border-slate-800/80 flex flex-col shrink-0">
+                <!-- Header -->
+                <div class="p-6 flex items-center gap-3 border-b border-slate-800/60">
+                    <div class="w-9 h-9 bg-gradient-to-tr from-cyan-500 to-pink-500 rounded-lg flex items-center justify-center shadow-lg shadow-cyan-500/20">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                        </svg>
+                    </div>
+                    <div>
+                        <h2 class="font-bold text-sm tracking-wide font-display bg-gradient-to-r from-cyan-400 to-pink-400 bg-clip-text text-transparent">雷霆捕获控制台</h2>
+                        <p class="text-[10px] text-slate-500">v0.1.0 (智能进化版)</p>
+                    </div>
+                </div>
+
+                <!-- Nav Menu -->
+                <nav class="flex-1 p-4 space-y-1">
+                    <button data-nav="overview" class="nav-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all bg-slate-800/60 text-cyan-400 border border-slate-700/30">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+                        <span>控制中心</span>
+                    </button>
+                    <button data-nav="industries" class="nav-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-400 hover:text-slate-200 hover:bg-slate-900/50">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+                        <span>项目配置</span>
+                    </button>
+                    <button data-nav="devices" class="nav-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-400 hover:text-slate-200 hover:bg-slate-900/50">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+                        <span>设备准备</span>
+                    </button>
+                    <button data-nav="tasks" class="nav-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-400 hover:text-slate-200 hover:bg-slate-900/50">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
+                        <span>线索池</span>
+                    </button>
+                    <button data-nav="jobs" class="nav-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-400 hover:text-slate-200 hover:bg-slate-900/50">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        <span>执行记录</span>
+                    </button>
+                    <button data-nav="settings" class="nav-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-400 hover:text-slate-200 hover:bg-slate-900/50">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                        <span>系统设置</span>
+                    </button>
+                </nav>
+
+                <!-- Footer / User info -->
+                <div class="p-4 border-t border-slate-800/60 bg-slate-950/40 flex items-center justify-between">
+                    <div class="flex items-center gap-2 overflow-hidden">
+                        <div class="w-8 h-8 rounded-full bg-cyan-500/10 border border-cyan-400/20 flex items-center justify-center shrink-0">
+                            <span id="user-avatar" class="text-xs font-bold text-cyan-400 uppercase font-display">U</span>
+                        </div>
+                        <div class="truncate">
+                            <p id="user-displayname" class="text-xs font-medium text-slate-200 truncate">Username</p>
+                            <p class="text-[9px] text-slate-500">已授权授权</p>
+                        </div>
+                    </div>
+                    <button id="btn-logout" class="text-slate-500 hover:text-pink-400 transition-colors p-1.5 rounded-md hover:bg-slate-900" title="登出">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                    </button>
+                </div>
+            </aside>
+
+            <!-- Main view pane -->
+            <main class="flex-1 flex flex-col bg-slate-950 overflow-y-auto">
+                <!-- Topbar -->
+                <header class="h-16 border-b border-slate-800/60 flex items-center justify-between px-8 shrink-0 bg-slate-950/60 sticky top-0 z-10 backdrop-blur-md">
+                    <h2 id="current-view-title" class="text-lg font-bold font-display tracking-wide text-slate-100">控制中心</h2>
+                    <!-- Server Live status -->
+                    <div class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                        <span class="text-[10px] text-emerald-400 font-semibold tracking-wide uppercase">本地服务端已联通</span>
+                    </div>
+                </header>
+
+                <!-- Subview Container -->
+                <div id="subview-container" class="flex-1 p-8 space-y-8">
+                    <!-- Dynamic view elements load here -->
+                </div>
+            </main>
+        </div>
+    </template>
+
+    <!-- Subview Templates -->
+
+    <!-- SUBVIEW: OVERVIEW -->
+    <template id="tpl-subview-overview">
+        <div class="space-y-8">
+            <!-- Operational command center -->
+            <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                <div class="xl:col-span-2 p-6 rounded-2xl glass-panel flex flex-col gap-5">
+                    <div class="flex flex-wrap items-start justify-between gap-4">
+                        <div>
+                            <p class="text-xs font-semibold text-cyan-400 tracking-wide uppercase">今日运营总控</p>
+                            <h3 id="overview-command-title" class="font-bold text-xl font-display text-slate-100 mt-1">正在检查系统状态</h3>
+                            <p id="overview-command-desc" class="text-xs text-slate-400 mt-2">把项目、LLM、设备、线索库存和任务状态汇总成可执行的下一步。</p>
+                        </div>
+                        <div id="overview-command-score" class="px-3 py-2 rounded-lg bg-slate-950/60 border border-slate-800 text-right">
+                            <p class="text-[10px] text-slate-500 font-semibold">就绪度</p>
+                            <p class="text-lg font-bold text-slate-200 font-display">--</p>
+                        </div>
+                    </div>
+                    <div id="overview-readiness-list" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div class="text-xs text-slate-500">正在加载就绪检查...</div>
+                    </div>
+                </div>
+                <div class="p-6 rounded-2xl glass-panel flex flex-col justify-between gap-5">
+                    <div>
+                        <p class="text-xs font-semibold text-pink-400 tracking-wide uppercase">下一步动作</p>
+                        <select id="overview-industry-select" onchange="onOverviewIndustryChange()" class="w-full mt-2 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500">
+                            <option value="">选择项目...</option>
+                        </select>
+                        <h3 id="overview-next-title" class="font-bold text-lg font-display text-slate-100 mt-2">等待状态加载</h3>
+                        <p id="overview-next-desc" class="text-xs text-slate-400 mt-2 leading-relaxed">系统会根据当前卡点给出最短路径。</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button id="overview-btn-collect" onclick="triggerOverviewCollect()" disabled class="flex-1 py-3 bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-300 font-bold font-display text-xs rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed">
+                            采集
+                        </button>
+                        <button id="overview-btn-send" onclick="triggerOverviewSend()" disabled class="flex-1 py-3 bg-pink-600/30 hover:bg-pink-600/50 text-pink-300 font-bold font-display text-xs rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed">
+                            发送
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Summary Stats Card Grid -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="p-6 rounded-xl glass-card relative overflow-hidden">
+                    <div class="absolute -right-6 -bottom-6 w-20 h-20 bg-cyan-500/5 rounded-full blur-xl pointer-events-none"></div>
+                    <p class="text-xs font-semibold text-slate-400 tracking-wide uppercase">当前获客项目</p>
+                    <h3 id="stat-industries" class="text-3xl font-bold font-display mt-2 text-cyan-400 neon-text-cyan">0</h3>
+                    <p class="text-[10px] text-slate-500 mt-1">个已配置项目</p>
+                </div>
+                <div class="p-6 rounded-xl glass-card relative overflow-hidden">
+                    <div class="absolute -right-6 -bottom-6 w-20 h-20 bg-pink-500/5 rounded-full blur-xl pointer-events-none"></div>
+                    <p class="text-xs font-semibold text-slate-400 tracking-wide uppercase">配置设备矩阵</p>
+                    <h3 id="stat-devices" class="text-3xl font-bold font-display mt-2 text-pink-400 neon-text-pink">0</h3>
+                    <p class="text-[10px] text-slate-500 mt-1">台 ADB 连接终端</p>
+                </div>
+                <div class="p-6 rounded-xl glass-card relative overflow-hidden">
+                    <p class="text-xs font-semibold text-slate-400 tracking-wide uppercase">待发送线索</p>
+                    <h3 id="stat-pending" class="text-3xl font-bold font-display mt-2 text-amber-400">0</h3>
+                </div>
+                <div class="p-6 rounded-xl glass-card relative overflow-hidden">
+                    <p class="text-xs font-semibold text-slate-400 tracking-wide uppercase">已发送</p>
+                    <h3 id="stat-done" class="text-3xl font-bold font-display mt-2 text-emerald-400">0</h3>
+                </div>
+                <div class="p-6 rounded-xl glass-card relative overflow-hidden">
+                    <p class="text-xs font-semibold text-slate-400 tracking-wide uppercase">失败</p>
+                    <h3 id="stat-failed" class="text-3xl font-bold font-display mt-2 text-pink-400">0</h3>
+                </div>
+                <div class="p-6 rounded-xl glass-card relative overflow-hidden">
+                    <p class="text-xs font-semibold text-slate-400 tracking-wide uppercase">可用设备</p>
+                    <h3 id="stat-devices-online" class="text-3xl font-bold font-display mt-2 text-cyan-400">0</h3>
+                </div>
+            </div>
+
+            <!-- Main Grid layout -->
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <!-- Active Industry Panel -->
+                <div class="lg:col-span-2 p-6 rounded-2xl glass-panel flex flex-col gap-6">
+                    <div class="flex items-center justify-between">
+                        <h3 class="font-bold text-base font-display"><span id="overview-industry-title">已启用的获客项目</span></h3>
+                        <button onclick="router.navigate('industries')" class="text-xs text-cyan-400 hover:text-cyan-300 font-semibold transition-colors flex items-center gap-1">
+                            <span>管理全部</span>
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                        </button>
+                    </div>
+                    <div id="overview-industries-list" class="space-y-3"></div>
+
+                    <!-- Warnings -->
+                    <div id="overview-warnings" class="space-y-2"></div>
+                </div>
+
+                <!-- Quick Devices Panel -->
+                <div class="p-6 rounded-2xl glass-panel flex flex-col gap-6">
+                    <div class="flex items-center justify-between">
+                        <h3 class="font-bold text-base font-display">连接设备监控</h3>
+                        <button onclick="router.navigate('devices')" class="text-xs text-cyan-400 hover:text-cyan-300 font-semibold transition-colors flex items-center gap-1">
+                            <span>详细管理</span>
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+                        </button>
+                    </div>
+
+                    <div id="overview-devices-list" class="space-y-3 flex-1">
+                        <!-- Loaded dynamically -->
+                        <p class="text-slate-500 text-xs py-4 text-center">暂无连接设备</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- SUBVIEW: INDUSTRIES -->
+    <template id="tpl-subview-industries">
+        <div class="space-y-6">
+            <div class="flex items-center justify-between">
+                <p class="text-sm text-slate-400">定制针对不同业务模式的营销词、情感分类和采集策略，系统将根据设置进行大模型判定。</p>
+                <button onclick="showCreateIndustryModal()" class="bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-slate-950 font-bold font-display text-xs px-4 py-2.5 rounded-lg shadow-lg shadow-cyan-500/10 hover:shadow-cyan-400/20 transition-all flex items-center gap-1.5 shrink-0">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+                    <span>新建获客项目</span>
+                </button>
+            </div>
+
+            <!-- Industries card grid -->
+            <div id="industries-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Loaded dynamically -->
+            </div>
+        </div>
+    </template>
+
+    <!-- SUBVIEW: DEVICES -->
+    <template id="tpl-subview-devices">
+        <div class="space-y-6">
+            <div class="flex items-center justify-between">
+                <p class="text-sm text-slate-400">配置并监控通过 USB/Wi-Fi 与 ADB 连接的 Android 设备或云手机，执行私信引流拦截。</p>
+                <div class="flex gap-2">
+                    <button id="btn-scan-devices" onclick="scanDevices()" class="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 font-bold font-display text-xs px-4 py-2.5 rounded-lg shadow-lg shadow-emerald-500/10 hover:shadow-emerald-400/20 transition-all flex items-center gap-1.5 shrink-0">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                        <span>一键扫描设备</span>
+                    </button>
+                    <button onclick="showCreateDeviceModal()" class="bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-slate-950 font-bold font-display text-xs px-4 py-2.5 rounded-lg shadow-lg shadow-cyan-500/10 hover:shadow-cyan-400/20 transition-all flex items-center gap-1.5 shrink-0">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+                        <span>手动添加设备</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Devices list table -->
+            <div class="glass-panel rounded-2xl overflow-hidden">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="border-b border-slate-800 bg-slate-950/40">
+                            <th class="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wide">设备名称</th>
+                            <th class="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wide">ADB 序列号</th>
+                            <th class="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wide text-center">状态监测</th>
+                            <th class="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wide text-center">每日限额</th>
+                            <th class="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wide text-center">最小间隔</th>
+                            <th class="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wide text-right">管理操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="devices-table-body" class="divide-y divide-slate-800/60">
+                        <!-- Loaded dynamically -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </template>
+
+    <!-- SUBVIEW: TASKS -->
+    <template id="tpl-subview-tasks">
+        <div class="space-y-6">
+            <div class="flex flex-wrap items-center justify-between gap-4">
+                <div class="flex items-center gap-3">
+                    <label class="text-xs font-semibold text-slate-400">选择项目：</label>
+                    <select id="task-filter-industry" onchange="loadTasksView()" class="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500">
+                        <!-- Dynamic options -->
+                    </select>
+                    
+                    <label class="text-xs font-semibold text-slate-400 ml-4">筛选状态：</label>
+                    <select id="task-filter-status" onchange="loadTasksView()" class="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500">
+                        <option value="">全部</option>
+                        <option value="pending">待发送 (Pending)</option>
+                        <option value="retry">重试冷却中 (Retry)</option>
+                        <option value="done">已发送 (Done)</option>
+                        <option value="failed">失败 (Failed)</option>
+                    </select>
+                    <button id="task-retry-all-btn" onclick="retryAllFailedTasks()" class="hidden px-3 py-1.5 rounded-lg border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/10 text-xs font-semibold">
+                        一键重发失败线索
+                    </button>
+                </div>
+            </div>
+
+            <!-- Tasks list table -->
+            <div class="glass-panel rounded-2xl overflow-hidden">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="border-b border-slate-800 bg-slate-950/40">
+                            <th class="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wide">线索来源</th>
+                            <th class="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wide">评论文本</th>
+                            <th class="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wide text-center">状态</th>
+                            <th class="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wide text-center">失败重试数</th>
+                            <th class="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wide text-center">冷却到期</th>
+                            <th id="task-time-header" class="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wide text-center">采集时间</th>
+                            <th class="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wide text-right">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tasks-table-body" class="divide-y divide-slate-800/60 text-xs">
+                        <!-- Loaded dynamically -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </template>
+
+    <!-- SUBVIEW: JOBS -->
+    <template id="tpl-subview-jobs">
+        <div class="space-y-6">
+            <div class="flex items-center justify-between gap-4">
+                <div>
+                    <h3 class="font-bold text-lg font-display text-slate-100">执行记录</h3>
+                    <p class="text-xs text-slate-400 mt-1">查看采集与私信任务状态，运行中的任务可请求取消。</p>
+                </div>
+                <button onclick="loadJobsView()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 font-semibold rounded-lg border border-slate-700 transition-colors">刷新</button>
+            </div>
+
+            <div class="glass-panel rounded-2xl overflow-hidden">
+                <table class="w-full text-left border-collapse">
+                    <thead>
+                        <tr class="border-b border-slate-800 bg-slate-950/40">
+                            <th class="px-5 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wide">任务</th>
+                            <th class="px-5 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wide text-center">类型</th>
+                            <th class="px-5 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wide text-center">状态</th>
+                            <th class="px-5 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wide text-center">进度</th>
+                            <th class="px-5 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wide text-center">时间</th>
+                            <th class="px-5 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wide text-right">操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="jobs-table-body" class="divide-y divide-slate-800/60 text-xs">
+                        <!-- Loaded dynamically -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </template>
+
+    <!-- SUBVIEW: SETTINGS -->
+    <template id="tpl-subview-settings">
+        <div class="max-w-2xl mx-auto space-y-6">
+            <div class="p-6 rounded-2xl glass-panel">
+                <div class="flex items-center justify-between gap-4 mb-4">
+                    <div>
+                        <h3 class="font-bold text-lg font-display text-slate-100 mb-1">系统自检</h3>
+                        <p class="text-xs text-slate-400">检查本地数据库、任务表、ADB 和 LLM Key 配置。</p>
+                    </div>
+                    <button onclick="loadSystemHealth()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 font-semibold rounded-lg border border-slate-700 transition-colors">刷新</button>
+                </div>
+                <div id="system-health-list" class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    <div class="text-slate-500">正在加载自检结果...</div>
+                </div>
+            </div>
+
+            <div class="p-6 rounded-2xl glass-panel flex flex-col gap-6">
+                <div>
+                    <h3 class="font-bold text-lg font-display text-slate-100 mb-1">系统设置 (API Key 配置)</h3>
+                    <p class="text-xs text-slate-400">配置您客户端的各家大模型 API 密钥。密钥加密保存在本地数据库中，仅用于文本分析、意图筛选与智能私信生成。</p>
+                </div>
+                
+                <form id="form-settings" class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">DeepSeek API 密钥 (Key)</label>
+                        <input type="password" id="settings-deepseek-key" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 text-slate-200" placeholder="sk-...">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">智谱 GLM API 密钥 (Key)</label>
+                        <input type="password" id="settings-zhipu-key" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 text-slate-200" placeholder="ApiKey...">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">OpenAI API 密钥 (Key) [可选网关]</label>
+                        <input type="password" id="settings-openai-key" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 text-slate-200" placeholder="sk-...">
+                    </div>
+
+                    <div class="flex items-center justify-end mt-6">
+                        <button type="submit" class="px-5 py-2 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-slate-950 font-bold font-display text-xs rounded-lg transition-all shadow-lg shadow-cyan-500/10 hover:shadow-cyan-400/20">保存设置</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </template>
+
+
+    <!-- Modals -->
+
+    <!-- Modal: Create/Edit Industry -->
+    <div id="modal-industry" class="fixed inset-0 z-40 hidden items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+        <div class="w-full max-w-3xl max-h-[calc(100vh-2rem)] rounded-2xl glass-panel shadow-2xl relative flex flex-col overflow-hidden">
+            <div class="px-6 pt-6 pb-4 border-b border-slate-900 shrink-0">
+                <h3 id="modal-industry-title" class="font-bold text-lg font-display text-slate-100">新建获客项目</h3>
+            </div>
+            
+            <form id="form-industry" class="flex-1 min-h-0 flex flex-col">
+                <div class="flex-1 min-h-0 overflow-y-auto px-6 py-4 space-y-4 overscroll-contain">
+                    <input type="hidden" id="industry-id">
+                    <input type="hidden" id="industry-categories" value="[]">
+
+                    <section class="p-4 bg-cyan-950/20 border border-cyan-800/30 rounded-xl space-y-3">
+                        <div class="flex flex-wrap justify-between items-center gap-2">
+                            <div>
+                                <h4 class="text-xs font-bold text-cyan-300 font-display">快速创建</h4>
+                                <p class="text-[10px] text-slate-500 mt-0.5">先用业务描述生成初稿，再人工确认关键词和平台。</p>
+                            </div>
+                            <label class="flex items-center gap-1 cursor-pointer">
+                                <input type="checkbox" id="ai-bigdata-enable" class="accent-cyan-500 scale-75" onchange="toggleBigDataInput()">
+                                <span class="text-[10px] text-cyan-300 font-semibold">启用社媒大数据提炼</span>
+                            </label>
+                        </div>
+                        <div class="flex gap-2">
+                            <textarea id="industry-ai-desc" class="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-cyan-500 text-slate-200 h-12 resize-none" placeholder="例如：我提供成人英语口语培训，帮助上班族提升职业沟通技巧和日常口语流利度。"></textarea>
+                            <button type="button" onclick="generateAIConfig()" id="btn-ai-generate" class="px-3 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-bold font-display text-xs rounded-lg shadow-lg shadow-cyan-500/10 hover:shadow-cyan-400/20 transition-all flex flex-col justify-center items-center gap-1 shrink-0 w-24">
+                                <span id="btn-ai-text">AI 智能生成</span>
+                                <span id="btn-ai-spinner" class="hidden animate-spin rounded-full h-4 w-4 border-2 border-slate-950 border-t-transparent"></span>
+                            </button>
+                        </div>
+                        <div id="ai-bigdata-panel" class="hidden flex items-center gap-2 pt-1.5 border-t border-cyan-950/40">
+                            <span class="text-[10px] text-cyan-400 font-semibold shrink-0">种子搜索词:</span>
+                            <input type="text" id="ai-bigdata-seed" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-[11px] focus:outline-none focus:border-cyan-500 text-slate-200" placeholder="例如：当兵">
+                        </div>
+                    </section>
+
+                    <section class="p-4 rounded-xl border border-slate-800 bg-slate-950/30 space-y-4">
+                        <div>
+                            <h4 class="text-xs font-bold text-slate-200 font-display">1. 项目基础</h4>
+                            <p class="text-[10px] text-slate-500 mt-0.5">用于区分不同业务、行业或客户项目。</p>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">项目名称</label>
+                                <input type="text" id="industry-name" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 text-slate-200" placeholder="如：征兵咨询营销">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">Slug 标识 (纯英文字符)</label>
+                                <input type="text" id="industry-slug" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 text-slate-200" placeholder="如：recruitment">
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="p-4 rounded-xl border border-slate-800 bg-slate-950/30 space-y-4">
+                        <div>
+                            <h4 class="text-xs font-bold text-slate-200 font-display">2. 采集策略</h4>
+                            <p class="text-[10px] text-slate-500 mt-0.5">先选一个平台，再配置对标账号和关键词漏斗。</p>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-400 mb-2">获客渠道平台 (单选)</label>
+                            <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                                <label class="flex items-center gap-1.5 p-2 bg-slate-900/50 border border-slate-800/80 rounded-lg cursor-pointer hover:border-cyan-500/50 transition-colors"><input type="radio" name="industry-platform" value="douyin" checked class="accent-cyan-500"><span class="text-xs text-slate-200">抖音</span></label>
+                                <label class="flex items-center gap-1.5 p-2 bg-slate-900/50 border border-slate-800/80 rounded-lg cursor-pointer hover:border-cyan-500/50 transition-colors"><input type="radio" name="industry-platform" value="kuaishou" class="accent-cyan-500"><span class="text-xs text-slate-200">快手</span></label>
+                                <label class="flex items-center gap-1.5 p-2 bg-slate-900/50 border border-slate-800/80 rounded-lg cursor-pointer hover:border-cyan-500/50 transition-colors"><input type="radio" name="industry-platform" value="wechat_channels" class="accent-cyan-500"><span class="text-xs text-slate-200">视频号</span></label>
+                                <label class="flex items-center gap-1.5 p-2 bg-slate-900/50 border border-slate-800/80 rounded-lg cursor-pointer hover:border-cyan-500/50 transition-colors"><input type="radio" name="industry-platform" value="xiaohongshu" class="accent-cyan-500"><span class="text-xs text-slate-200">小红书</span></label>
+                                <label class="flex items-center gap-1.5 p-2 bg-slate-900/50 border border-slate-800/80 rounded-lg cursor-pointer hover:border-cyan-500/50 transition-colors"><input type="radio" name="industry-platform" value="tiktok" class="accent-cyan-500"><span class="text-xs text-slate-200">TikTok</span></label>
+                                <label class="flex items-center gap-1.5 p-2 bg-slate-900/50 border border-slate-800/80 rounded-lg cursor-pointer hover:border-cyan-500/50 transition-colors"><input type="radio" name="industry-platform" value="instagram" class="accent-cyan-500"><span class="text-xs text-slate-200">Instagram</span></label>
+                                <label class="flex items-center gap-1.5 p-2 bg-slate-900/50 border border-slate-800/80 rounded-lg cursor-pointer hover:border-cyan-500/50 transition-colors"><input type="radio" name="industry-platform" value="facebook" class="accent-cyan-500"><span class="text-xs text-slate-200">Facebook</span></label>
+                                <label class="flex items-center gap-1.5 p-2 bg-slate-900/50 border border-slate-800/80 rounded-lg cursor-pointer hover:border-cyan-500/50 transition-colors"><input type="radio" name="industry-platform" value="twitter" class="accent-cyan-500"><span class="text-xs text-slate-200">Twitter (X)</span></label>
+                                <label class="flex items-center gap-1.5 p-2 bg-slate-900/50 border border-slate-800/80 rounded-lg cursor-pointer hover:border-cyan-500/50 transition-colors"><input type="radio" name="industry-platform" value="youtube" class="accent-cyan-500"><span class="text-xs text-slate-200">YouTube</span></label>
+                                <label class="flex items-center gap-1.5 p-2 bg-slate-900/50 border border-slate-800/80 rounded-lg cursor-pointer hover:border-cyan-500/50 transition-colors"><input type="radio" name="industry-platform" value="reddit" class="accent-cyan-500"><span class="text-xs text-slate-200">Reddit</span></label>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-400 mb-1">匹配关键词 (多个使用英文逗号分隔)</label>
+                            <textarea id="industry-keywords" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 text-slate-200 h-16" placeholder="如：当兵攻略,入伍条件,征兵时间"></textarea>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-slate-400 mb-1">对标同行抖音号（高优截流，选填，逗号分隔）</label>
+                            <textarea id="target-users" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 text-slate-200 h-12 placeholder-slate-600" placeholder="如：user123, dy456789"></textarea>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">视频时效/天</label>
+                                <input type="number" id="industry-video-max-age" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 text-slate-200" value="7">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">评论时效/小时</label>
+                                <input type="number" id="industry-comment-max-age" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 text-slate-200" value="48">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">视频上限</label>
+                                <input type="number" id="industry-collect-videos" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 text-slate-200" value="120">
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="p-4 rounded-xl border border-slate-800 bg-slate-950/30 space-y-4">
+                        <div>
+                            <h4 class="text-xs font-bold text-slate-200 font-display">3. 发送策略</h4>
+                            <p class="text-[10px] text-slate-500 mt-0.5">控制私信人设、文案风格和每日发送上限。</p>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">回复人设语气 (Reply Tone)</label>
+                                <input type="text" id="industry-reply-tone" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 text-slate-200" placeholder="如：老兵人设,热情亲切">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">回复文案风格 (Reply Style)</label>
+                                <input type="text" id="industry-reply-style" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 text-slate-200" placeholder="如：短句子,口语化">
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">大模型服务商</label>
+                                <select id="industry-llm-provider" onchange="onLLMProviderChange()" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 text-slate-200">
+                                    <option value="deepseek">DeepSeek (推荐)</option>
+                                    <option value="zhipu">智谱 GLM</option>
+                                    <option value="openai">OpenAI (网关模式)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">模型名称 (Model)</label>
+                                <input type="text" id="industry-llm-model" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 text-slate-200" placeholder="如: deepseek-chat">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">单设备发信上限/天</label>
+                                <input type="number" id="industry-daily-limit" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 text-slate-200" value="15">
+                            </div>
+                        </div>
+                    </section>
+
+                    <details class="p-4 rounded-xl border border-slate-800 bg-slate-950/30 space-y-4">
+                        <summary class="cursor-pointer text-xs font-bold text-slate-200 font-display">4. 矩阵高级设置</summary>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">目标设备</label>
+                                <input type="number" id="industry-matrix-devices" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 text-slate-200" value="30">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">库存天数</label>
+                                <input type="number" id="industry-inventory-days" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 text-slate-200" value="3">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">全局上限/天</label>
+                                <input type="number" id="industry-global-daily-limit" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 text-slate-200" value="0">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">关键词批次</label>
+                                <input type="number" id="industry-keyword-batch-size" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 text-slate-200" value="12">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">新增博主</label>
+                                <input type="number" id="industry-collect-authors" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 text-slate-200" value="60">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-400 mb-1">补采安全库存/天</label>
+                                <input type="number" id="industry-replenish-threshold-days" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 text-slate-200" value="1">
+                            </div>
+                        </div>
+                        <label class="flex items-center gap-2 text-xs text-slate-300 pt-4">
+                            <input type="checkbox" id="industry-auto-replenish" class="accent-cyan-500">
+                            <span>发送后库存不足时自动补采</span>
+                        </label>
+                    </details>
+
+                    <!-- 合规与导出设置 -->
+                    <div class="mt-4 border border-slate-700/50 rounded-lg overflow-hidden">
+                        <button type="button" onclick="toggleCompliancePanel()" class="w-full px-4 py-2 bg-slate-800/50 flex items-center justify-between text-xs font-semibold text-slate-300 hover:bg-slate-800">
+                            <span>⚖️ 合规与导出设置</span>
+                            <span id="compliance-panel-chevron">▼</span>
+                        </button>
+                        <div id="compliance-panel" class="hidden p-4 space-y-4 bg-slate-900/30">
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-xs font-semibold text-slate-200">合规模式</p>
+                                    <p class="text-[10px] text-slate-500">开启后只采集评论并分类，不自动发送私信</p>
+                                </div>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" id="industry-compliance-mode" class="sr-only peer" onchange="onComplianceModeChange()">
+                                    <div class="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-600"></div>
+                                </label>
+                            </div>
+
+                            <div id="compliance-webhook-section" class="space-y-2">
+                                <label class="block text-xs font-semibold text-slate-300">Webhook 推送地址（可选）</label>
+                                <input type="url" id="industry-webhook-url" placeholder="https://your-crm.com/webhook" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500">
+                                <p class="text-[10px] text-slate-500">分类完成后自动将高意向线索 POST 到该地址</p>
+                                <div class="flex items-center gap-2">
+                                    <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                                        <input type="checkbox" id="industry-auto-export" class="rounded border-slate-700 bg-slate-900 text-cyan-600">
+                                        <span>分类完成后自动推送</span>
+                                    </label>
+                                    <button type="button" onclick="testIndustryWebhook()" class="ml-auto px-2 py-1 rounded border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/10 text-[10px] font-semibold">测试 Webhook</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="flex items-center justify-end gap-3 px-6 py-4 bg-slate-950/95 border-t border-slate-900 shrink-0">
+                    <button type="button" onclick="hideIndustryModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 font-semibold rounded-lg transition-colors">取消</button>
+                    <button type="submit" class="px-4 py-2 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-slate-950 font-bold font-display text-xs rounded-lg transition-all">确认保存</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Create Device -->
+    <div id="modal-device" class="fixed inset-0 z-40 hidden items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+        <div class="w-full max-w-sm p-6 rounded-2xl glass-panel shadow-2xl relative">
+            <h3 class="font-bold text-lg font-display text-slate-100 mb-4">连接新的设备终端</h3>
+            
+            <form id="form-device" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">设备名称 (备注用)</label>
+                    <input type="text" id="device-name" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 text-slate-200" placeholder="如：小米主用引流机">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">ADB 序列串号 (Serial)</label>
+                    <input type="text" id="device-serial" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 text-slate-200" placeholder="如：he896xaisooryth6 或 127.0.0.1:5555">
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">每日私信配额</label>
+                        <input type="number" id="device-limit" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 text-slate-200" value="15">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">最小间隔时间 (秒)</label>
+                        <input type="number" id="device-interval" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 text-slate-200" value="90">
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end gap-3 mt-6">
+                    <button type="button" onclick="hideDeviceModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 font-semibold rounded-lg transition-colors">取消</button>
+                    <button type="submit" class="px-4 py-2 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-slate-950 font-bold font-display text-xs rounded-lg transition-all">保存设备</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    <!-- Remote Screen Modal -->
+    <div id="modal-remote-screen" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+        <div class="bg-slate-900 border border-slate-700/50 rounded-2xl w-full max-w-sm max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+            <!-- Header -->
+            <div class="px-5 py-4 border-b border-slate-800/50 flex items-center justify-between bg-slate-900/80">
+                <h3 id="remote-screen-title" class="font-bold text-sm font-display text-slate-100 truncate">云真机控制</h3>
+                <button onclick="closeRemoteScreen()" class="text-slate-500 hover:text-slate-300 transition-colors">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+            
+            <!-- Screen Area -->
+            <div class="relative bg-black flex-1 min-h-[400px] flex items-center justify-center overflow-hidden">
+                <div id="remote-screen-loader" class="absolute inset-0 flex items-center justify-center text-cyan-400 text-xs flex-col gap-2 z-10">
+                    <span class="w-5 h-5 rounded-full border-2 border-t-transparent border-cyan-400 animate-spin"></span>
+                    <span>正在连接设备画面...</span>
+                </div>
+                <!-- Prevent dragging image natively, handle via JS -->
+                <img id="remote-screen-img" src="" class="max-h-full max-w-full object-contain select-none cursor-crosshair z-20" draggable="false" style="display:none;">
+            </div>
+
+            <!-- Controls Area -->
+            <div class="p-4 bg-slate-900 border-t border-slate-800/50">
+                <!-- Keys -->
+                <div class="flex items-center justify-center gap-4 mb-4">
+                    <button onclick="sendRemoteKey(4)" class="p-2 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors" title="返回">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+                    </button>
+                    <button onclick="sendRemoteKey(3)" class="p-2 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors" title="主页 (Home)">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/></svg>
+                    </button>
+                    <button onclick="sendRemoteKey(187)" class="p-2 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors" title="任务列表">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"/></svg>
+                    </button>
+                </div>
+                <!-- Text Input -->
+                <div class="flex items-center gap-2">
+                    <input type="text" id="remote-input-text" placeholder="输入中文或英文字符 (需ADB键盘)" class="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 text-slate-200">
+                    <button onclick="sendRemoteText()" class="px-3 py-2 bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs rounded-lg transition-colors whitespace-nowrap">
+                        发送
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- APP LOGIC (Vanilla JS SPA Engine) -->
+    <script>
+        // API Base configuration
+        const API_BASE = window.location.origin;
+        let token = localStorage.getItem('thunder_token') || '';
+        let currentUser = null;
+        let activeJobPolls = {}; // job_id -> timer
+
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[ch]));
+        }
+
+        function formatDateTime(value) {
+            if (!value) return '—';
+            const d = new Date(value);
+            if (Number.isNaN(d.getTime())) return '—';
+            return d.toLocaleString('zh-CN', { hour12: false });
+        }
+
+        function parseJsonSafe(value, fallback = null) {
+            if (!value) return fallback;
+            if (typeof value === 'object') return value;
+            try {
+                return JSON.parse(value);
+            } catch (_) {
+                return fallback;
+            }
+        }
+
+        // Toast Helper
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            
+            const colorMap = {
+                success: 'bg-emerald-950/80 border-emerald-500/30 text-emerald-400',
+                error: 'bg-pink-950/80 border-pink-500/30 text-pink-400',
+                info: 'bg-cyan-950/80 border-cyan-500/30 text-cyan-400',
+                warning: 'bg-amber-950/80 border-amber-500/30 text-amber-400'
+            };
+            
+            toast.className = `px-4 py-3 rounded-lg border backdrop-blur-md shadow-lg transition-all duration-300 transform translate-y-2 opacity-0 text-xs font-medium flex items-center gap-2 ${colorMap[type] || colorMap.info}`;
+            
+            const iconSvg = {
+                success: '<svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+                error: '<svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+                info: '<svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+                warning: '<svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>'
+            };
+
+            toast.innerHTML = `${iconSvg[type] || iconSvg.info}<span>${escapeHtml(message)}</span>`;
+            container.appendChild(toast);
+            
+            // Trigger animation
+            setTimeout(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            }, 50);
+
+            // Hide and remove after 4 seconds
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'translate-y-[-10px]');
+                setTimeout(() => {
+                    toast.remove();
+                }, 300);
+            }, 4000);
+        }
+
+        // Authenticated fetch wrapper
+        async function apiFetch(endpoint, options = {}) {
+            options.headers = options.headers || {};
+            if (token) {
+                options.headers['Authorization'] = `Bearer ${token}`;
+            }
+            if (options.body && !(options.body instanceof FormData)) {
+                options.headers['Content-Type'] = 'application/json';
+            }
+
+            const response = await fetch(`${API_BASE}${endpoint}`, options);
+            if (response.status === 401) {
+                // Token expired/invalid
+                localStorage.removeItem('thunder_token');
+                token = '';
+                currentUser = null;
+                router.navigate('auth');
+                showToast('授权登录失效，请重新登录', 'error');
+                throw new Error('Unauthorized');
+            }
+            
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                const errMsg = errData.detail || `请求失败 (${response.status})`;
+                showToast(errMsg, 'error');
+                throw new Error(errMsg);
+            }
+            
+            return response.json();
+        }
+
+        function platformLabel(platform) {
+            const labels = {
+                douyin: '抖音',
+                kuaishou: '快手',
+                wechat_channels: '视频号',
+                xiaohongshu: '小红书',
+                tiktok: 'TikTok',
+                instagram: 'Instagram',
+                facebook: 'Facebook',
+                twitter: 'Twitter (X)',
+                youtube: 'YouTube',
+                reddit: 'Reddit',
+            };
+            return labels[platform] || String(platform || '').toUpperCase();
+        }
+
+        // Router
+        const router = {
+            currentView: '',
+            currentSubview: '',
+            
+            navigate: async function(view) {
+                stopDashboardPoll();
+                const root = document.getElementById('app-root');
+
+                // If not authenticated, force auth view
+                if (!token && view !== 'auth') {
+                    view = 'auth';
+                }
+
+                if (view === 'auth') {
+                    root.innerHTML = document.getElementById('view-auth').innerHTML;
+                    setupAuthHandlers();
+                    this.currentView = 'auth';
+                    return;
+                }
+
+                // If authenticated and user data not loaded yet
+                if (!currentUser) {
+                    try {
+                        currentUser = await apiFetch('/api/auth/me');
+                    } catch (e) {
+                        return; // Handled by apiFetch redirection
+                    }
+                }
+
+                // Render main dashboard shell if not already there
+                if (this.currentView !== 'dashboard_shell') {
+                    root.innerHTML = document.getElementById('view-dashboard').innerHTML;
+                    
+                    // User info bindings
+                    document.getElementById('user-avatar').innerText = currentUser.username[0];
+                    document.getElementById('user-displayname').innerText = currentUser.username;
+                    
+                    // Bind logout
+                    document.getElementById('btn-logout').onclick = () => {
+                        localStorage.removeItem('thunder_token');
+                        token = '';
+                        currentUser = null;
+                        router.navigate('auth');
+                        showToast('成功安全登出账户', 'success');
+                    };
+
+                    // Sidebar navigation binding
+                    document.querySelectorAll('[data-nav]').forEach(btn => {
+                        btn.onclick = () => {
+                            const target = btn.getAttribute('data-nav');
+                            // Active class styling
+                            document.querySelectorAll('[data-nav]').forEach(b => {
+                                b.className = "nav-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-400 hover:text-slate-200 hover:bg-slate-900/50";
+                            });
+                            btn.className = "nav-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all bg-slate-800/60 text-cyan-400 border border-slate-700/30";
+                            router.loadSubview(target);
+                        };
+                    });
+
+                    this.currentView = 'dashboard_shell';
+                }
+
+                this.loadSubview(view);
+            },
+
+            loadSubview: async function(subview) {
+                this.currentSubview = subview;
+                const container = document.getElementById('subview-container');
+                const title = document.getElementById('current-view-title');
+                
+                // Show subview title
+                const titles = {
+                    overview: '控制中心',
+                    industries: '获客项目配置',
+                    devices: '设备准备与检测',
+                    tasks: '线索池管理',
+                    jobs: '执行记录',
+                    settings: '系统设置 (API Key 配置)'
+                };
+                title.innerText = titles[subview] || '雷霆控制台';
+
+                // Render template
+                const tpl = document.getElementById(`tpl-subview-${subview}`);
+                if (!tpl) return;
+                
+                container.innerHTML = tpl.innerHTML;
+
+                // Load view specific data
+                if (subview === 'overview') {
+                    await loadOverviewData();
+                } else if (subview === 'industries') {
+                    await loadIndustriesView();
+                } else if (subview === 'devices') {
+                    await loadDevicesView();
+                } else if (subview === 'tasks') {
+                    await populateTaskIndustryDropdown();
+                    await loadTasksView();
+                } else if (subview === 'jobs') {
+                    await loadJobsView();
+                } else if (subview === 'settings') {
+                    await loadSettingsView();
+                }
+            }
+        };
+
+        // --- SUBVIEW HANDLERS ---
+
+        function renderReadinessItem(label, detail, ok, actionText, actionHandler) {
+            const action = !ok && actionText
+                ? `<button type="button" onclick="${actionHandler}" class="text-[10px] font-bold text-cyan-300 hover:text-cyan-200">${actionText}</button>`
+                : `<span class="text-[10px] font-bold text-emerald-400">OK</span>`;
+            return `
+                <div class="p-3 rounded-xl border ${ok ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-amber-500/5 border-amber-500/20'}">
+                    <div class="flex items-center justify-between gap-3">
+                        <span class="text-xs font-bold ${ok ? 'text-emerald-300' : 'text-amber-300'}">${escapeHtml(label)}</span>
+                        ${action}
+                    </div>
+                    <p class="text-[10px] text-slate-500 mt-1 leading-relaxed">${escapeHtml(detail)}</p>
+                </div>
+            `;
+        }
+
+        function renderOverviewCommandCenter(overview, devices, health, aggregate, activeJobs) {
+            const list = document.getElementById('overview-readiness-list');
+            const title = document.getElementById('overview-command-title');
+            const desc = document.getElementById('overview-command-desc');
+            const score = document.getElementById('overview-command-score');
+            const nextTitle = document.getElementById('overview-next-title');
+            const nextDesc = document.getElementById('overview-next-desc');
+            const nextAction = document.getElementById('overview-next-action');
+            if (!list || !nextAction) return;
+
+            const checks = health?.checks || [];
+            const healthCheck = name => checks.find(c => c.name === name);
+            const hasProject = Number(overview.industry_count || 0) > 0;
+            const hasDevice = devices.length > 0;
+            const hasLLM = Boolean(healthCheck('llm_keys')?.ok);
+            const coreOk = Boolean(health) && ['server_db', 'jobs_table', 'engine_db'].every(name => healthCheck(name)?.ok === true);
+            const hasPending = aggregate.totalPending > 0;
+            const isWorking = activeJobs.length > 0;
+            const primaryIndustry = aggregate.primaryIndustryId || overview.industries?.[0]?.id || '';
+            const collectIndustry = aggregate.collectIndustryId || primaryIndustry;
+            const readyCount = [hasProject, hasLLM, hasDevice, hasPending, coreOk].filter(Boolean).length;
+            const readyPercent = Math.round((readyCount / 5) * 100);
+
+            score.innerHTML = `
+                <p class="text-[10px] text-slate-500 font-semibold">就绪度</p>
+                <p class="text-lg font-bold ${readyPercent >= 80 ? 'text-emerald-400' : readyPercent >= 60 ? 'text-cyan-400' : 'text-amber-400'} font-display">${readyPercent}%</p>
+            `;
+            title.innerText = isWorking ? '任务执行中，关注进度和取消状态' : readyPercent >= 80 ? '系统已具备今日获客条件' : '还有关键项需要补齐';
+            desc.innerText = `项目 ${overview.industry_count || 0} 个，设备 ${devices.length} 台，待发送线索 ${aggregate.totalPending} 条，库存缺口 ${aggregate.totalDeficit} 条。`;
+
+            list.innerHTML = [
+                renderReadinessItem('获客项目', hasProject ? `${overview.industry_count} 个项目已配置` : '还没有获客项目，无法启动采集。', hasProject, '新建项目', 'showCreateIndustryModal()'),
+                renderReadinessItem('LLM 密钥', hasLLM ? (healthCheck('llm_keys')?.detail || '至少一个模型 Key 可用') : '未配置 LLM Key，意向识别和文案生成会失败。', hasLLM, '去配置', "router.navigate('settings')"),
+                renderReadinessItem('设备矩阵', hasDevice ? `${devices.length} 台设备已录入，发送前仍建议检测在线状态。` : '还没有录入手机或云手机，无法执行私信发送。', hasDevice, '扫描设备', "router.navigate('devices')"),
+                renderReadinessItem('线索库存', hasPending ? `当前待发送 ${aggregate.totalPending} 条。` : '没有待发送线索，建议先跑一次采集。', hasPending, '采集线索', collectIndustry ? `triggerCollect('${collectIndustry}')` : 'showCreateIndustryModal()'),
+                renderReadinessItem('系统自检', coreOk ? '本地数据库和任务表可用。' : '本地运行环境存在异常，请先查看系统设置。', coreOk, '查看自检', "router.navigate('settings')"),
+            ].join('');
+
+            if (!hasProject) {
+                nextTitle.innerText = '先创建获客项目';
+                nextDesc.innerText = '配置平台、关键词和对标账号，这是后续采集和发送的基础。';
+                nextAction.innerText = '新建获客项目';
+                nextAction.onclick = showCreateIndustryModal;
+            } else if (!hasLLM) {
+                nextTitle.innerText = '补齐 LLM Key';
+                nextDesc.innerText = '意向识别依赖模型能力，先配置 DeepSeek、智谱或 OpenAI Key。';
+                nextAction.innerText = '去系统设置';
+                nextAction.onclick = () => router.navigate('settings');
+            } else if (!hasDevice) {
+                nextTitle.innerText = '连接测试设备';
+                nextDesc.innerText = '建议先接入 1 台手机完成测试发送，再扩展到矩阵设备。';
+                nextAction.innerText = '去扫描设备';
+                nextAction.onclick = () => router.navigate('devices');
+            } else if (!hasPending) {
+                nextTitle.innerText = '先采集一批线索';
+                nextDesc.innerText = '当前没有待发送库存，建议先做小批量采集验证关键词漏斗。';
+                nextAction.innerText = '开始采集线索';
+                nextAction.onclick = () => collectIndustry ? triggerCollect(collectIndustry) : router.navigate('industries');
+            } else {
+                nextTitle.innerText = isWorking ? '查看执行记录' : '启动矩阵发送';
+                nextDesc.innerText = isWorking ? '当前有任务运行中，可以查看进度或发出停止请求。' : '线索和设备已具备，发送前确认平台账号已登录。';
+                nextAction.innerText = isWorking ? '查看执行记录' : '开始发送任务';
+                nextAction.onclick = () => isWorking ? router.navigate('jobs') : triggerSend(primaryIndustry);
+            }
+        }
+
+        // 1. OVERVIEW — powered by GET /api/dashboard/state
+        async function loadOverviewData() {
+            try {
+                const ds = await apiFetch('/api/dashboard/state');
+                overviewState = ds;
+                overviewSelectedIndustry = ds.project.active_industry_slug;
+
+                // Populate industry selector
+                const indSel = document.getElementById('overview-industry-select');
+                if (indSel) {
+                    // Get industries list
+                    try {
+                        const inds = await apiFetch('/api/industries');
+                        indSel.innerHTML = '<option value="">选择项目...</option>';
+                        for (const ind of inds) {
+                            indSel.innerHTML += `<option value="${ind.slug}" ${ind.slug === overviewSelectedIndustry?'selected':''}>${escapeHtml(ind.name)}</option>`;
+                        }
+                    } catch(e) {}
+                }
+                updateOverviewButtons();
+                updateReadinessDisplay(ds);
+                if (ds.has_active_job) startDashboardPoll();
+                document.getElementById('stat-industries').innerText = ds.project.industry_count;
+                document.getElementById('stat-devices').innerText = ds.device_matrix.total;
+
+                // Command center — 今日运营总控
+                const cmdTitle = document.getElementById('overview-command-title');
+                const cmdDesc = document.getElementById('overview-command-desc');
+                const cmdScore = document.getElementById('overview-command-score');
+                const readyList = document.getElementById('overview-readiness-list');
+                if (cmdTitle) cmdTitle.innerText = ds.can_send ? '✅ 发送就绪' : (ds.can_collect ? '📋 可采集' : '⏳ 等待条件');
+                if (cmdDesc) cmdDesc.innerText = ds.next_action;
+                if (cmdScore) {
+                    const score = (ds.device_matrix.available > 0 ? 40 : 0) + (ds.lead_inventory.pending > 0 ? 40 : 0) + (ds.warnings.length === 0 ? 20 : 0);
+                    cmdScore.innerHTML = `<p class=\"text-[10px] text-slate-500 font-semibold\">就绪度</p><p class=\"text-lg font-bold ${score>=80?'text-emerald-400':score>=40?'text-amber-400':'text-slate-400'} font-display\">${score}%</p>`;
+                }
+                if (readyList) {
+                    readyList.innerHTML = [
+                        { label: 'LLM 密钥', ok: ds.warnings.every(w => !w.includes('密钥') && !w.includes('key')) },
+                        { label: `线索库存 (${ds.lead_inventory.pending} 条)`, ok: ds.lead_inventory.pending > 0 },
+                        { label: `可用设备 (${ds.device_matrix.available}/${ds.device_matrix.total})`, ok: ds.device_matrix.available > 0 },
+                        { label: '任务队列', ok: !ds.has_active_job || ds.active_jobs.length === 0 },
+                    ].map(item =>
+                        `<div class=\"flex items-center justify-between p-3 bg-slate-950/40 rounded-lg border border-slate-800/60\">
+                            <span class=\"text-xs text-slate-300\">${item.label}</span>
+                            <span class=\"text-xs font-bold ${item.ok?'text-emerald-400':'text-amber-400'}\">${item.ok?'✓ 正常':'⚠ 需处理'}</span>
+                        </div>`
+                    ).join('');
+                }
+
+                // Next action
+                const nextTitle = document.getElementById('overview-next-title');
+                const nextDesc = document.getElementById('overview-next-desc');
+                const nextAction = document.getElementById('overview-next-action');
+                if (nextTitle) nextTitle.innerText = ds.can_send ? '准备就绪' : (ds.can_collect ? '可以采集' : '等待条件');
+                if (nextDesc) nextDesc.innerText = ds.next_action;
+                if (nextAction) {
+                    nextAction.innerText = ds.can_send ? '开始发送' : (ds.can_collect ? '开始采集' : '查看详情');
+                    nextAction.className = (ds.can_send || ds.can_collect)
+                        ? 'px-6 py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white shadow-lg shadow-cyan-500/20 transition-all'
+                        : 'px-6 py-3 rounded-xl font-bold text-sm bg-slate-700 text-slate-400';
+                    nextAction.onclick = ds.can_send ? () => triggerSend(ds.project.active_industry_slug)
+                        : (ds.can_collect ? () => triggerCollect(ds.project.active_industry_slug) : null);
+                }
+
+                // Leads stats
+                document.getElementById('stat-pending').innerText = ds.lead_inventory.pending;
+                document.getElementById('stat-done').innerText = ds.lead_inventory.done;
+                document.getElementById('stat-failed').innerText = ds.lead_inventory.failed;
+
+                // Device matrix
+                const onlineCount = ds.device_matrix.available;
+                document.getElementById('stat-devices-online').innerText = onlineCount;
+                const devList = document.getElementById('overview-devices-list');
+                if (devList && ds.device_matrix.devices) {
+                    devList.innerHTML = ds.device_matrix.devices.slice(0, 10).map(d =>
+                        `<div class="flex items-center justify-between text-xs px-3 py-2 bg-slate-950/40 rounded-lg">
+                            <span class="text-slate-300">${escapeHtml(d.name)}</span>
+                            <span class="text-[10px] px-2 py-0.5 rounded ${d.status==='idle'?'bg-emerald-900/60 text-emerald-400':d.status==='offline'?'bg-slate-700 text-slate-400':'bg-amber-900/60 text-amber-400'}">${d.status_label}</span>
+                        </div>`).join('');
+                }
+
+                // Warnings
+                const warnList = document.getElementById('overview-warnings');
+                if (warnList && ds.warnings.length > 0) {
+                    warnList.innerHTML = ds.warnings.map(w =>
+                        `<div class="flex items-center gap-2 text-xs text-amber-400 bg-amber-950/30 px-3 py-2 rounded-lg"><span class="text-[10px]">⚠</span>${escapeHtml(w)}</div>`
+                    ).join('');
+                } else if (warnList) {
+                    warnList.innerHTML = '<div class="text-xs text-emerald-400 px-3 py-2">✓ 系统运行正常</div>';
+                }
+
+                // Industry cards — 已启用的获客项目
+                const indNameEl = document.getElementById('overview-industry-title');
+                if (indNameEl && ds.project.active_industry_name) {
+                    indNameEl.innerText = ds.project.active_industry_name;
+                }
+                const indList = document.getElementById('overview-industries-list');
+                if (indList) {
+                    const inv = ds.lead_inventory;
+                    const dev = ds.device_matrix;
+                    const rate = inv.total > 0 ? Math.round(inv.done / Math.max(inv.total, 1) * 100) : 0;
+                    const stockDays = inv.funnel?.inventory_days_remaining;
+                    const activeJobs = ds.active_jobs || [];
+                    indList.innerHTML = `
+                    <div class="grid grid-cols-4 gap-3 mb-3">
+                        <div class="text-center bg-slate-950/50 p-3 rounded-lg">
+                            <p class="text-[10px] text-slate-500">待发送</p>
+                            <p class="text-lg font-bold ${inv.pending > 0 ? 'text-amber-400' : 'text-slate-400'} font-display">${inv.pending}</p>
+                        </div>
+                        <div class="text-center bg-slate-950/50 p-3 rounded-lg">
+                            <p class="text-[10px] text-slate-500">已发送</p>
+                            <p class="text-lg font-bold text-emerald-400 font-display">${inv.done}</p>
+                        </div>
+                        <div class="text-center bg-slate-950/50 p-3 rounded-lg">
+                            <p class="text-[10px] text-slate-500">转化率</p>
+                            <p class="text-lg font-bold ${rate >= 80 ? 'text-emerald-400' : rate >= 50 ? 'text-cyan-400' : 'text-amber-400'} font-display">${rate}%</p>
+                        </div>
+                        <div class="text-center bg-slate-950/50 p-3 rounded-lg">
+                            <p class="text-[10px] text-slate-500">库存天数</p>
+                            <p class="text-lg font-bold ${stockDays && stockDays > 3 ? 'text-emerald-400' : stockDays && stockDays > 0 ? 'text-amber-400' : 'text-pink-400'} font-display">${stockDays ?? '—'}</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-4 text-[10px] text-slate-400 px-1">
+                        <span>设备: <b class="text-slate-200">${dev.available}/${dev.total}</b> 可用</span>
+                        ${dev.offline > 0 ? `<span class="text-slate-500">${dev.offline} 离线</span>` : ''}
+                        ${dev.isolated > 0 ? `<span class="text-amber-400">${dev.isolated} 需处理</span>` : ''}
+                        <span>任务: <b class="${activeJobs.length > 0 ? 'text-cyan-400' : 'text-slate-200'}">${activeJobs.length} 活跃</b></span>
+                        <span>失败: <b class="${inv.failed > 0 ? 'text-pink-400' : 'text-slate-200'}">${inv.failed}</b></span>
+                    </div>`;
+                }
+
+            } catch (e) {
+                console.error('Dashboard load failed', e);
+                const warnList = document.getElementById('overview-warnings');
+                if (warnList) warnList.innerHTML = '<div class="text-xs text-red-400">✗ 加载失败，请刷新重试</div>';
+            }
+        }
+
+        let overviewSelectedIndustry = '';
+        let overviewState = {};
+        let dashboardPollTimer = null;
+
+        function startDashboardPoll() {
+            if (dashboardPollTimer) return;
+            dashboardPollTimer = setInterval(async () => {
+                if (router.currentSubview !== 'overview') { stopDashboardPoll(); return; }
+                try {
+                    const ds = await apiFetch('/api/dashboard/state');
+                    overviewState = ds;
+                    updateOverviewButtons();
+                    updateReadinessDisplay(ds);
+                    if (ds.active_jobs.length === 0 && overviewSelectedIndustry) {
+                        await refreshIndustryCard(overviewSelectedIndustry);
+                    }
+                } catch(e) {}
+            }, 10000);
+        }
+
+        function stopDashboardPoll() { if (dashboardPollTimer) { clearInterval(dashboardPollTimer); dashboardPollTimer = null; } }
+
+        function updateReadinessDisplay(ds) {
+            const cmdTitle = document.getElementById('overview-command-title');
+            const cmdDesc = document.getElementById('overview-command-desc');
+            if (cmdTitle) cmdTitle.innerText = ds.has_active_job ? '任务执行中' : (ds.can_send ? '可发送' : (ds.can_collect ? '可采集' : '等待条件'));
+            if (cmdDesc) cmdDesc.innerText = ds.next_action;
+            const readyList = document.getElementById('overview-readiness-list');
+            if (readyList) {
+                readyList.innerHTML = [
+                    { label: 'LLM', ok: ds.warnings.every(w => !w.includes('密钥') && !w.includes('key')) },
+                    { label: '线索 (' + ds.lead_inventory.pending + ' 条)', ok: ds.lead_inventory.pending > 0 },
+                    { label: '设备 (' + ds.device_matrix.available + '/' + ds.device_matrix.total + ' 可用)', ok: ds.device_matrix.available > 0 },
+                    { label: '队列空闲', ok: ds.active_jobs.length === 0 },
+                ].map(item => '<div class="flex items-center justify-between p-2.5 bg-slate-950/40 rounded-lg border border-slate-800/60"><span class="text-[10px] text-slate-300">' + item.label + '</span><span class="text-[10px] font-bold ' + (item.ok?'text-emerald-400':'text-amber-400') + '">' + (item.ok?'OK':'需处理') + '</span></div>').join('');
+            }
+        }
+
+        async function onOverviewIndustryChange() {
+            const sel = document.getElementById('overview-industry-select');
+            overviewSelectedIndustry = sel.value;
+            updateOverviewButtons();
+            if (overviewSelectedIndustry) { await refreshIndustryCard(overviewSelectedIndustry); }
+        }
+
+        async function refreshIndustryCard(slug) {
+            try {
+                const stats = await apiFetch('/api/leads/stats?industry_slug=' + slug);
+                const inds = await apiFetch('/api/industries');
+                const ind = inds.find(i => i.slug === slug);
+                const indNameEl = document.getElementById('overview-industry-title');
+                if (indNameEl && ind) indNameEl.innerText = ind.name;
+
+                const indList = document.getElementById('overview-industries-list');
+                if (!indList) return;
+                const total = stats.pending + stats.done + stats.failed;
+                const rate = total > 0 ? Math.round(stats.done / Math.max(total, 1) * 100) : 0;
+                indList.innerHTML = `
+                <div class="grid grid-cols-4 gap-3 mb-3">
+                    <div class="text-center bg-slate-950/50 p-3 rounded-lg">
+                        <p class="text-[10px] text-slate-500">待发送</p>
+                        <p class="text-lg font-bold ${stats.pending > 0 ? 'text-amber-400' : 'text-slate-400'} font-display">${stats.pending}</p>
+                    </div>
+                    <div class="text-center bg-slate-950/50 p-3 rounded-lg">
+                        <p class="text-[10px] text-slate-500">已发送</p>
+                        <p class="text-lg font-bold text-emerald-400 font-display">${stats.done}</p>
+                    </div>
+                    <div class="text-center bg-slate-950/50 p-3 rounded-lg">
+                        <p class="text-[10px] text-slate-500">转化率</p>
+                        <p class="text-lg font-bold ${rate >= 80 ? 'text-emerald-400' : 'text-cyan-400'} font-display">${rate}%</p>
+                    </div>
+                    <div class="text-center bg-slate-950/50 p-3 rounded-lg">
+                        <p class="text-[10px] text-slate-500">失败</p>
+                        <p class="text-lg font-bold ${stats.failed > 0 ? 'text-pink-400' : 'text-slate-400'} font-display">${stats.failed}</p>
+                    </div>
+                </div>`;
+            } catch(e) {}
+        }
+
+        function updateOverviewButtons() {
+            const btnC = document.getElementById('overview-btn-collect');
+            const btnS = document.getElementById('overview-btn-send');
+            const slug = overviewSelectedIndustry;
+            const st = overviewState;
+            if (!slug) { btnC.disabled = true; btnS.disabled = true; return; }
+            btnC.disabled = !st.can_collect;
+            btnS.disabled = !st.can_send;
+        }
+
+        async function triggerOverviewCollect() {
+            if (!overviewSelectedIndustry) return showToast('请先选择项目', 'warning');
+            await triggerCollect(overviewSelectedIndustry);
+        }
+        async function triggerOverviewSend() {
+            if (!overviewSelectedIndustry) return showToast('请先选择项目', 'warning');
+            await triggerSend(overviewSelectedIndustry);
+        }
+
+        // Heartbeat verification inside overview / device page
+        async function quickHeartbeat(btn, deviceId) {
+            const indicator = btn.nextElementSibling;
+            indicator.className = "w-2 h-2 rounded-full bg-amber-500 animate-pulse";
+            btn.disabled = true;
+            try {
+                const res = await apiFetch(`/api/devices/${deviceId}/heartbeat`, { method: 'POST' });
+                if (res.online) {
+                    indicator.className = "w-2 h-2 rounded-full bg-emerald-500";
+                    const health = res.health || {};
+                    const details = [health.model, health.battery_level != null ? `电量${health.battery_level}%` : '', health.adb_keyboard_active ? '键盘OK' : '键盘未启用'].filter(Boolean).join(' · ');
+                    showToast(`设备 ${res.serial} 在线${details ? '：' + details : ''}`, 'success');
+                } else {
+                    indicator.className = "w-2 h-2 rounded-full bg-pink-500";
+                    showToast(`设备 ${res.serial} 离线：${res.health?.error || 'ADB 不可用'}`, 'warning');
+                }
+            } catch (e) {
+                indicator.className = "w-2 h-2 rounded-full bg-pink-500";
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        // 2. INDUSTRIES
+        async function loadIndustriesView() {
+            try {
+                const list = await apiFetch('/api/industries');
+                const jobs = await apiFetch('/api/jobs?limit=100').catch(() => []);
+                const activeJobs = jobs.filter(j => j.status === 'running' || j.status === 'cancelling');
+                const grid = document.getElementById('industries-grid');
+                grid.innerHTML = '';
+                
+                if (list.length === 0) {
+                    grid.innerHTML = `<p class="text-slate-500 text-sm py-8 text-center col-span-3">您还没有任何获客项目，请先点击右上角新建。</p>`;
+                    return;
+                }
+
+                for (const ind of list) {
+                    const card = document.createElement('div');
+                    card.className = "p-6 rounded-2xl glass-panel relative overflow-hidden flex flex-col gap-4";
+                    
+                    const keywords = ind.keywords || [];
+                    const kws = keywords.slice(0, 5).join(', ') + (keywords.length > 5 ? '...' : '');
+                    const allKeywords = keywords.join(', ');
+                    const channels = (ind.platforms || []).map(platformLabel).join(', ');
+                    const collectJob = Object.values(activeJobPolls).find(p => p.industryId === ind.id && p.type === 'collect')
+                        || activeJobs.find(j => j.industry_slug === ind.slug && j.type === 'collect');
+                    const sendJob = Object.values(activeJobPolls).find(p => p.industryId === ind.id && p.type === 'send')
+                        || activeJobs.find(j => j.industry_slug === ind.slug && j.type === 'send');
+                    const hasCollectJob = Boolean(collectJob);
+                    const hasSendJob = Boolean(sendJob);
+                    const stats = await apiFetch(`/api/industries/${ind.id}/stats`).catch(() => ({}));
+                    const funnel = await apiFetch(`/api/industries/${ind.id}/funnel?limit=5`).catch(() => ({}));
+                    const stockDays = Number(stats.stock_days || 0);
+                    const deficit = Number(stats.pending_deficit || 0);
+                    const inventoryClass = deficit > 0 ? 'text-amber-400' : 'text-emerald-400';
+                    const collectSummary = funnel.latest_collect?.summary || {};
+                    const sendSummary = funnel.latest_send?.summary || {};
+                    const replenishPlan = funnel.replenishment || {};
+                    const sourceTypes = funnel.source_types || [];
+                    const targetSource = sourceTypes.find(s => s.type === 'target') || {};
+                    const keywordSource = sourceTypes.find(s => s.type === 'keyword') || {};
+                    const bloggerStats = funnel.bloggers || {};
+                    const sourcePerf = funnel.source_performance || [];
+                    const sourceScoreMap = Object.fromEntries(sourcePerf.map(s => [s.source, s]));
+                    const quota = funnel.quota || {};
+                    const globalLimit = Number(quota.global_daily_limit || stats.global_daily_limit || 0);
+                    const globalSent = Number(quota.sent || stats.global_sent_today || 0);
+                    const globalReserved = Number(quota.reserved || stats.global_reserved || 0);
+                    const globalQuotaText = globalLimit > 0 ? `${globalSent}+${globalReserved}/${globalLimit}` : `${globalSent}+${globalReserved}/不限`;
+                    const latestSendDeviceText = Object.keys(sendSummary).length
+                        ? `${sendSummary.sent || 0}封 · ${sendSummary.online_count || 0}/${sendSummary.target_count || 0}设备`
+                        : '-';
+                    const replenishText = replenishPlan.should_replenish
+                        ? `${replenishPlan.reason || '库存不足'} · 缺口 ${replenishPlan.pending_deficit || 0}`
+                        : '';
+                    const topSources = (funnel.keywords || []).slice(0, 3);
+                    const topSourceHtml = topSources.length
+                        ? topSources.map(s => `
+                            <div class="flex items-center justify-between gap-2">
+                                <span class="truncate text-slate-400" title="${escapeHtml(s.keyword || '')}">${escapeHtml(s.keyword || 'unknown')}</span>
+                                <span class="font-semibold text-slate-200">${Number(s.pending || 0) + Number(s.done || 0) + Number(s.claimed || 0)} / 质${sourceScoreMap[s.keyword]?.quality_score ?? '-'}</span>
+                            </div>
+                        `).join('')
+                        : `<div class="text-slate-600">暂无来源数据</div>`;
+
+                    card.innerHTML = `
+                        <div class="flex items-start justify-between">
+                            <div>
+                                <h4 class="font-bold font-display text-base text-slate-100">${escapeHtml(ind.name)}</h4>
+                                <p class="text-[10px] text-slate-500 mt-0.5">SLUG: ${escapeHtml(ind.slug)}</p>
+                            </div>
+                            <div class="flex gap-1.5">
+                                <button onclick="editIndustry('${ind.id}')" class="p-1.5 text-slate-400 hover:text-cyan-400 hover:bg-slate-900 rounded-lg transition-all" title="编辑">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                                </button>
+                                <button onclick="deleteIndustry('${ind.id}')" class="p-1.5 text-slate-400 hover:text-pink-400 hover:bg-slate-900 rounded-lg transition-all" title="删除">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="space-y-2 text-xs text-slate-300 border-t border-b border-slate-900 py-3">
+                            <div class="flex justify-between"><span class="text-slate-500">匹配词：</span><span class="truncate max-w-[200px]" title="${escapeHtml(allKeywords)}">${escapeHtml(kws)}</span></div>
+                            <div class="flex justify-between"><span class="text-slate-500">获客渠道：</span><span>${escapeHtml(channels)}</span></div>
+                            <div class="flex justify-between"><span class="text-slate-500">LLM 服务商：</span><span>${escapeHtml(ind.llm_provider)} (${escapeHtml(ind.llm_model)})</span></div>
+                            <div class="flex justify-between"><span class="text-slate-500">语气文案：</span><span>${escapeHtml(ind.reply_tone)} / ${escapeHtml(ind.reply_style)}</span></div>
+                        </div>
+
+                        <div class="grid grid-cols-4 gap-2 text-center bg-slate-950/40 p-2.5 rounded-lg border border-slate-900">
+                            <div>
+                                <p class="text-[9px] text-slate-500 font-semibold">Pending</p>
+                                <p class="text-xs font-bold text-slate-200">${stats.pending || 0}</p>
+                            </div>
+                            <div>
+                                <p class="text-[9px] text-slate-500 font-semibold">设备容量</p>
+                                <p class="text-xs font-bold text-cyan-400">${stats.daily_send_capacity || 0}</p>
+                            </div>
+                            <div>
+                                <p class="text-[9px] text-slate-500 font-semibold">库存天</p>
+                                <p class="text-xs font-bold ${inventoryClass}">${stockDays}</p>
+                            </div>
+                            <div>
+                                <p class="text-[9px] text-slate-500 font-semibold">缺口</p>
+                                <p class="text-xs font-bold ${inventoryClass}">${deficit}</p>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between bg-slate-950/40 px-3 py-2 rounded-lg border border-slate-900 text-[10px]">
+                            <span class="text-slate-500 font-semibold">今日全局发送</span>
+                            <span class="text-slate-200 font-bold">${globalQuotaText}</span>
+                        </div>
+
+                        <div class="flex items-center justify-between bg-slate-950/40 px-3 py-2 rounded-lg border border-slate-900 text-[10px]">
+                            <span class="text-slate-500 font-semibold">最近矩阵发送</span>
+                            <span class="text-slate-200 font-bold">${escapeHtml(latestSendDeviceText)}</span>
+                        </div>
+                        ${replenishText ? `
+                            <div class="bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[10px] px-3 py-2 rounded-lg flex items-center justify-between">
+                                <span>${escapeHtml(replenishText)}</span>
+                                <button onclick="triggerReplenish('${ind.id}')" class="text-amber-200 font-bold hover:text-white">补采</button>
+                            </div>
+                        ` : ''}
+
+                        <div class="bg-slate-950/40 p-3 rounded-lg border border-slate-900 space-y-3">
+                            <div class="flex items-center justify-between">
+                                <p class="text-[10px] text-slate-500 font-semibold">采集漏斗</p>
+                                <p class="text-[10px] text-slate-600 font-mono">${escapeHtml((funnel.latest_collect?.job_id || '').slice(0, 8)) || '-'}</p>
+                            </div>
+                            <div class="grid grid-cols-3 gap-2 text-center">
+                                <div>
+                                    <p class="text-[9px] text-slate-500">候选评论</p>
+                                    <p class="text-xs font-bold text-slate-200">${collectSummary.candidate_comments ?? '-'}</p>
+                                </div>
+                                <div>
+                                    <p class="text-[9px] text-slate-500">LLM通过</p>
+                                    <p class="text-xs font-bold text-cyan-400">${collectSummary.classified_passed ?? '-'}</p>
+                                </div>
+                                <div>
+                                    <p class="text-[9px] text-slate-500">实际入队</p>
+                                    <p class="text-xs font-bold text-emerald-400">${collectSummary.enqueued ?? '-'}</p>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-3 gap-2 text-center border-t border-slate-900 pt-2">
+                                <div>
+                                    <p class="text-[9px] text-slate-500">对标线索</p>
+                                    <p class="text-xs font-bold text-amber-400">${targetSource.total || 0}</p>
+                                </div>
+                                <div>
+                                    <p class="text-[9px] text-slate-500">关键词线索</p>
+                                    <p class="text-xs font-bold text-violet-300">${keywordSource.total || 0}</p>
+                                </div>
+                                <div>
+                                    <p class="text-[9px] text-slate-500">博主池</p>
+                                    <p class="text-xs font-bold text-slate-200">${bloggerStats.active || 0}</p>
+                                </div>
+                            </div>
+                            <div class="text-[10px] space-y-1 border-t border-slate-900 pt-2">
+                                ${topSourceHtml}
+                            </div>
+                        </div>
+
+                        <div class="flex items-center gap-3">
+                            <button onclick="router.navigate('industries'); editIndustry('${ind.id}')" class="flex-1 py-2 bg-slate-700/30 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-bold rounded-lg transition-all">编辑配置</button>
+                            <button onclick="deleteIndustry('${ind.id}')" class="flex-1 py-2 bg-pink-500/10 hover:bg-pink-500/20 text-pink-400 border border-pink-400/20 text-xs font-bold rounded-lg transition-all">删除</button>
+                        </div>
+                    `;
+                    grid.appendChild(card);
+                }
+            } catch (e) {}
+        }
+
+        // Job trigger collect
+        async function triggerCollect(indId, forceDiscover = false) {
+            try {
+                localStorage.setItem('thunder_last_task_industry', indId);
+                // Check blogger count to decide skip_discover
+                let skipDiscover = true;
+                if (!forceDiscover) {
+                    try {
+                        const stats = await apiFetch('/api/leads/stats?industry_slug=' + indId);
+                        // If no bloggers exist yet, force full discovery
+                        if ((stats.pending + stats.done + stats.failed) === 0) {
+                            skipDiscover = false;
+                            showToast('首次采集 — 正在全面发现对标博主...', 'info');
+                        }
+                    } catch(e) { skipDiscover = true; }
+                } else {
+                    skipDiscover = false;
+                }
+                const res = await apiFetch('/api/jobs/collect/start', {
+                    method: 'POST',
+                    body: JSON.stringify({ industry_slug: indId, skip_discover: skipDiscover })
+                });
+                showToast(`采集已提交，Job: ${res.job_id.slice(0, 8)}`, 'info');
+                pollJobProgress(res.job_id, indId, 'collect');
+                startDashboardPoll();
+            } catch (e) {
+                showToast(e.message || '采集启动失败', 'error');
+            }
+        }
+
+        async function triggerReplenish(indId) {
+            try {
+                const res = await apiFetch(`/api/industries/${indId}/replenish`, {
+                    method: 'POST', body: JSON.stringify({ force: true })
+                });
+                if (!res.started) { showToast(res.reason || '库存充足', 'success'); return; }
+                showToast(`补采已提交: ${res.mode}`, 'info');
+                pollJobProgress(res.job_id, indId, 'collect');
+            } catch (e) {
+                showToast(e.message || '补采失败', 'error');
+            }
+        }
+
+        async function triggerSend(indId) {
+            try {
+                const res = await apiFetch('/api/jobs/send/start', {
+                    method: 'POST',
+                    body: JSON.stringify({ industry_slug: indId })
+                });
+                showToast(`发送已提交，Job: ${res.job_id.slice(0, 8)}`, 'info');
+                pollJobProgress(res.job_id, indId, 'send');
+                startDashboardPoll();
+            } catch (e) {
+                showToast(e.message || '发送启动失败', 'error');
+            }
+        }
+
+        // Job status polling
+        function pollJobProgress(jobId, industryId, type) {
+            if (activeJobPolls[jobId]) return;
+            
+            showToast(`正在监测 ${type === 'collect' ? '线索采集' : '自动发信'} 进度...`, 'info');
+            activeJobPolls[jobId] = {
+                jobId,
+                type,
+                industryId,
+                timer: setInterval(async () => {
+                    try {
+                        const status = await apiFetch(`/api/tasks/status/${jobId}`);
+                        if (status.status === 'done') {
+                            const sendSummary = status.send_summary || {};
+                            const collectSummary = status.collect_summary || {};
+                            const doneMessage = type === 'send' && Object.keys(sendSummary).length
+                                ? `自动发信完成：发送 ${sendSummary.sent || 0} 封，在线设备 ${sendSummary.online_count || 0}/${sendSummary.target_count || 0}`
+                                : type === 'collect' && Object.keys(collectSummary).length
+                                    ? `线索采集完成：候选 ${collectSummary.candidate_comments || 0}，入队 ${collectSummary.enqueued || 0}`
+                                    : `${type === 'collect' ? '线索采集' : '自动发信'} 任务执行成功！100% 完成`;
+                            showToast(doneMessage, 'success');
+                            clearInterval(activeJobPolls[jobId].timer);
+                            delete activeJobPolls[jobId];
+                            // Refresh current view
+                            if (router.currentView === 'dashboard_shell') {
+                                if (type === 'collect') {
+                                    localStorage.setItem('thunder_last_task_industry', industryId);
+                                }
+                                router.loadSubview(router.currentSubview || 'overview');
+                            }
+                        } else if (status.status === 'failed') {
+                            showToast(`任务执行失败: ${status.error || '原因未知'}`, 'error');
+                            clearInterval(activeJobPolls[jobId].timer);
+                            delete activeJobPolls[jobId];
+                            if (router.currentView === 'dashboard_shell') {
+                                router.loadSubview(router.currentSubview || 'overview');
+                            }
+                        } else if (status.status === 'cancelled') {
+                            showToast(`${type === 'collect' ? '线索采集' : '自动发信'}任务已取消`, 'warning');
+                            clearInterval(activeJobPolls[jobId].timer);
+                            delete activeJobPolls[jobId];
+                            if (router.currentView === 'dashboard_shell') {
+                                router.loadSubview(router.currentSubview || 'overview');
+                            }
+                        } else {
+                            // running, show progress info in logs
+                            console.log(`Job ${jobId} progress: ${status.progress || 0}%`);
+                        }
+                    } catch (e) {
+                        clearInterval(activeJobPolls[jobId].timer);
+                        delete activeJobPolls[jobId];
+                    }
+                }, 3000)
+            };
+        }
+
+        async function cancelRunningJob(jobId) {
+            if (!jobId || !confirm('确定停止这个任务？当前手机动作会在安全停顿点后停止。')) return;
+            try {
+                await apiFetch(`/api/tasks/status/${jobId}/cancel`, { method: 'POST' });
+                if (activeJobPolls[jobId]) {
+                    activeJobPolls[jobId].status = 'cancelling';
+                }
+                showToast('已提交停止请求', 'warning');
+                if (router.currentView === 'dashboard_shell') {
+                    router.loadSubview(router.currentSubview || 'overview');
+                }
+            } catch (e) {}
+        }
+
+        // Edit industry modal load
+        async function editIndustry(id) {
+            try {
+                const ind = await apiFetch(`/api/industries/${id}`);
+                document.getElementById('industry-id').value = ind.id;
+                document.getElementById('industry-name').value = ind.name;
+                document.getElementById('industry-slug').value = ind.slug;
+                document.getElementById('industry-slug').disabled = true; // slug locked
+                document.getElementById('industry-keywords').value = ind.keywords.join(',');
+                document.getElementById('target-users').value = (ind.target_users || []).join(',');
+                document.getElementById('industry-reply-tone').value = ind.reply_tone;
+                document.getElementById('industry-reply-style').value = ind.reply_style;
+                document.getElementById('industry-llm-provider').value = ind.llm_provider || 'deepseek';
+                document.getElementById('industry-llm-model').value = ind.llm_model || 'deepseek-chat';
+                document.getElementById('industry-daily-limit').value = ind.daily_limit;
+                document.getElementById('industry-video-max-age').value = ind.video_max_age_days;
+                document.getElementById('industry-comment-max-age').value = ind.comment_max_age_hours;
+                document.getElementById('industry-matrix-devices').value = ind.matrix_target_devices || 30;
+                document.getElementById('industry-inventory-days').value = ind.lead_inventory_days || 3;
+                document.getElementById('industry-global-daily-limit').value = ind.global_daily_limit || 0;
+                document.getElementById('industry-auto-replenish').checked = Boolean(ind.auto_replenish_enabled);
+                document.getElementById('industry-replenish-threshold-days').value = ind.replenish_threshold_days || 1;
+                document.getElementById('industry-keyword-batch-size').value = ind.keyword_batch_size || 12;
+                document.getElementById('industry-collect-authors').value = ind.collect_authors_per_run || 60;
+                document.getElementById('industry-collect-videos').value = ind.collect_video_limit || 120;
+                document.getElementById('industry-categories').value = JSON.stringify(ind.categories || []);
+                document.getElementById('industry-ai-desc').value = '';
+                document.getElementById('industry-compliance-mode').checked = Boolean(ind.compliance_mode);
+                document.getElementById('industry-webhook-url').value = ind.webhook_url || '';
+                document.getElementById('industry-auto-export').checked = Boolean(ind.auto_export_enabled);
+                onComplianceModeChange();
+
+                // Reset platform radios
+                const platformRadios = document.querySelectorAll('input[name="industry-platform"]');
+                platformRadios.forEach(cb => cb.checked = false);
+                // Select the first configured platform; platform collection is single-select.
+                if (ind.platforms && Array.isArray(ind.platforms) && ind.platforms.length > 0) {
+                    const cb = document.querySelector(`input[name="industry-platform"][value="${ind.platforms[0]}"]`);
+                    if (cb) cb.checked = true;
+                } else {
+                    // Fallback default
+                    const cb = document.querySelector('input[name="industry-platform"][value="douyin"]');
+                    if (cb) cb.checked = true;
+                }
+
+                document.getElementById('modal-industry-title').innerText = '修改获客项目设置';
+                document.getElementById('modal-industry').classList.replace('hidden', 'flex');
+            } catch (e) {}
+        }
+
+        // Delete industry
+        async function deleteIndustry(id) {
+            if (!confirm('是否确定删除该获客项目配置（该操作不可逆，将隐藏相关线索）？')) return;
+            try {
+                await apiFetch(`/api/industries/${id}`, { method: 'DELETE' });
+                showToast('已成功删除获客项目', 'success');
+                loadIndustriesView();
+            } catch (e) {}
+        }
+
+        // LLM Provider default model mapping
+        function onLLMProviderChange() {
+            const provider = document.getElementById('industry-llm-provider').value;
+            const modelInput = document.getElementById('industry-llm-model');
+            if (provider === 'deepseek') {
+                modelInput.value = 'deepseek-chat';
+            } else if (provider === 'zhipu') {
+                modelInput.value = 'glm-4-flash';
+            } else if (provider === 'openai') {
+                modelInput.value = 'gpt-4o-mini';
+            }
+        }
+
+        // Modal triggers
+        function showCreateIndustryModal() {
+            document.getElementById('form-industry').reset();
+            document.getElementById('industry-id').value = '';
+            document.getElementById('industry-slug').disabled = false;
+            document.getElementById('industry-categories').value = '[]';
+            document.getElementById('industry-ai-desc').value = '';
+            document.getElementById('industry-compliance-mode').checked = false;
+            document.getElementById('industry-webhook-url').value = '';
+            document.getElementById('industry-auto-export').checked = false;
+            onComplianceModeChange();
+
+            // Reset platform radios to default (only douyin checked)
+            const platformRadios = document.querySelectorAll('input[name="industry-platform"]');
+            platformRadios.forEach(cb => {
+                cb.checked = (cb.value === 'douyin');
+            });
+
+            document.getElementById('modal-industry-title').innerText = '新建获客项目';
+            document.getElementById('modal-industry').classList.replace('hidden', 'flex');
+        }
+        function hideIndustryModal() {
+            document.getElementById('modal-industry').classList.replace('flex', 'hidden');
+        }
+
+        // Compliance config panel
+        function toggleCompliancePanel() {
+            const panel = document.getElementById('compliance-panel');
+            const chevron = document.getElementById('compliance-panel-chevron');
+            panel.classList.toggle('hidden');
+            chevron.innerText = panel.classList.contains('hidden') ? '▼' : '▲';
+        }
+
+        function onComplianceModeChange() {
+            const enabled = document.getElementById('industry-compliance-mode').checked;
+            const webhookSection = document.getElementById('compliance-webhook-section');
+            webhookSection.classList.toggle('opacity-50', !enabled);
+            webhookSection.classList.toggle('pointer-events-none', !enabled);
+        }
+
+        async function testIndustryWebhook() {
+            const urlInput = document.getElementById('industry-webhook-url');
+            const url = urlInput.value.trim();
+            if (!url) {
+                showToast('请先填写 Webhook URL', 'warning');
+                return;
+            }
+            const industryId = document.getElementById('industry-id')?.value;
+            if (!industryId) {
+                showToast('请先保存项目', 'warning');
+                return;
+            }
+            try {
+                const data = await apiFetch(`/api/industries/${industryId}/webhook-test`, { method: 'POST' });
+                if (data && data.ok) {
+                    showToast('Webhook 测试成功', 'success');
+                } else {
+                    showToast(`Webhook 测试失败: ${data && (data.error || data.response_preview) ? (data.error || data.response_preview) : '未知错误'}`, 'error');
+                }
+            } catch (e) {
+                showToast(e.message || '测试失败', 'error');
+            }
+        }
+
+        // Toggle Big Data input panel visibility
+        function toggleBigDataInput() {
+            const enabled = document.getElementById('ai-bigdata-enable').checked;
+            const panel = document.getElementById('ai-bigdata-panel');
+            if (enabled) {
+                panel.classList.remove('hidden');
+            } else {
+                panel.classList.add('hidden');
+            }
+        }
+
+        // AI Config Generation
+        async function generateAIConfig() {
+            const desc = document.getElementById('industry-ai-desc').value.trim();
+            if (!desc) {
+                showToast('请先输入您的业务描述！', 'warning');
+                return;
+            }
+
+            const bigDataEnabled = document.getElementById('ai-bigdata-enable').checked;
+            let seedKeyword = '';
+            let url = '/api/industries/generate-config';
+            let requestBody = { description: desc };
+
+            if (bigDataEnabled) {
+                seedKeyword = document.getElementById('ai-bigdata-seed').value.trim();
+                if (!seedKeyword) {
+                    showToast('启用大数据提炼时，请先输入“种子搜索词”！', 'warning');
+                    return;
+                }
+                url = '/api/industries/generate-config-bigdata';
+                requestBody.seed_keyword = seedKeyword;
+                showToast('正在初始化浏览器拉取抖音热门大数据，此步约耗时 15-20 秒，请稍候...', 'info', 10000);
+            }
+
+            const btnText = document.getElementById('btn-ai-text');
+            const btnSpinner = document.getElementById('btn-ai-spinner');
+            const btn = document.getElementById('btn-ai-generate');
+
+            // Loading state
+            btn.disabled = true;
+            btnText.classList.add('hidden');
+            btnSpinner.classList.remove('hidden');
+
+            try {
+                const res = await apiFetch(url, {
+                    method: 'POST',
+                    body: JSON.stringify(requestBody)
+                });
+
+                if (res) {
+                    document.getElementById('industry-name').value = res.name || '';
+                    
+                    const slugInput = document.getElementById('industry-slug');
+                    if (!slugInput.disabled) {
+                        slugInput.value = res.slug || '';
+                    }
+
+                    if (res.keywords && Array.isArray(res.keywords)) {
+                        document.getElementById('industry-keywords').value = res.keywords.join(',');
+                    }
+
+                    document.getElementById('industry-reply-tone').value = res.reply_tone || '';
+                    document.getElementById('industry-reply-style').value = res.reply_style || '';
+                    
+                    if (res.llm_provider) {
+                        document.getElementById('industry-llm-provider').value = res.llm_provider;
+                        document.getElementById('industry-llm-model').value = res.llm_model || 'deepseek-chat';
+                    }
+                    
+                    document.getElementById('industry-categories').value = JSON.stringify(res.categories || []);
+
+                    if (res.bigdata_used) {
+                        showToast('🎉 成功抓取抖音热门大数据，AI 已提炼出精准痛点词库并填充表单！', 'success');
+                    } else {
+                        showToast('AI 智能匹配配置成功，已自动填充下方表单！', 'success');
+                    }
+                }
+            } catch (err) {
+                console.error(err);
+                showToast(err.message || 'AI 生成配置失败，请检查大模型 API 密钥或浏览器登录状态', 'error');
+            } finally {
+                // Restore state
+                btn.disabled = false;
+                btnText.classList.remove('hidden');
+                btnSpinner.classList.add('hidden');
+            }
+        }
+
+        // Save industry submit
+        document.getElementById('form-industry').onsubmit = async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('industry-id').value;
+            const keywordsRaw = document.getElementById('industry-keywords').value;
+            const keywords = keywordsRaw.split(',').map(k => k.trim()).filter(k => k);
+            
+            const targetUsersRaw = document.getElementById('target-users').value;
+            const targetUsers = [...new Set(targetUsersRaw.split(',').map(u => u.trim()).filter(u => u))];
+            
+            let categories = [];
+            try {
+                categories = JSON.parse(document.getElementById('industry-categories').value || '[]');
+            } catch (err) {}
+
+            // Get selected platform. Collection is single-platform by design.
+            const platformInput = document.querySelector('input[name="industry-platform"]:checked');
+            if (!platformInput) {
+                showToast('请选择一个获客渠道平台！', 'warning');
+                return;
+            }
+            const platforms = [platformInput.value];
+
+            const payload = {
+                name: document.getElementById('industry-name').value,
+                keywords: keywords,
+                reply_tone: document.getElementById('industry-reply-tone').value,
+                reply_style: document.getElementById('industry-reply-style').value,
+                llm_provider: document.getElementById('industry-llm-provider').value,
+                llm_model: document.getElementById('industry-llm-model').value,
+                daily_limit: parseInt(document.getElementById('industry-daily-limit').value),
+                video_max_age_days: parseInt(document.getElementById('industry-video-max-age').value),
+                comment_max_age_hours: parseInt(document.getElementById('industry-comment-max-age').value),
+                matrix_target_devices: parseInt(document.getElementById('industry-matrix-devices').value),
+                lead_inventory_days: parseInt(document.getElementById('industry-inventory-days').value),
+                global_daily_limit: parseInt(document.getElementById('industry-global-daily-limit').value || '0'),
+                auto_replenish_enabled: document.getElementById('industry-auto-replenish').checked,
+                replenish_threshold_days: parseInt(document.getElementById('industry-replenish-threshold-days').value || '1'),
+                keyword_batch_size: parseInt(document.getElementById('industry-keyword-batch-size').value),
+                collect_authors_per_run: parseInt(document.getElementById('industry-collect-authors').value),
+                collect_video_limit: parseInt(document.getElementById('industry-collect-videos').value),
+                categories: categories,
+                target_users: targetUsers,
+                platforms: platforms,
+                compliance_mode: document.getElementById('industry-compliance-mode').checked,
+                webhook_url: document.getElementById('industry-webhook-url').value.trim(),
+                auto_export_enabled: document.getElementById('industry-auto-export').checked,
+            };
+
+            try {
+                if (id) {
+                    await apiFetch(`/api/industries/${id}`, {
+                        method: 'PUT',
+                        body: JSON.stringify(payload)
+                    });
+                    showToast('获客项目修改成功', 'success');
+                } else {
+                    payload.slug = document.getElementById('industry-slug').value;
+                    await apiFetch('/api/industries', {
+                        method: 'POST',
+                        body: JSON.stringify(payload)
+                    });
+                    showToast('新建获客项目成功', 'success');
+                }
+                hideIndustryModal();
+                loadIndustriesView();
+            } catch (err) {}
+        };
+
+        // 3. DEVICES
+        async function loadDevicesView() {
+            try {
+                const list = await apiFetch('/api/devices');
+                const tbody = document.getElementById('devices-table-body');
+                tbody.innerHTML = '';
+
+                if (list.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-8 text-center text-slate-500">暂无连接设备，请点击右上角添加。</td></tr>`;
+                    return;
+                }
+
+                for (const d of list) {
+                    const tr = document.createElement('tr');
+                    tr.className = "hover:bg-slate-900/30 transition-colors";
+                    const statusLabel = {
+                        idle: '空闲',
+                        running: '执行中',
+                        cooldown: '冷却',
+                        offline: '离线',
+                        keyboard_error: '键盘异常',
+                        error: '异常',
+                        isolated: '已隔离',
+                        daily_limit: '设备上限',
+                        global_limit: '全局上限',
+                    }[d.runtime_status || 'idle'] || (d.runtime_status || '未知');
+                    const statusClass = {
+                        idle: 'text-emerald-400',
+                        running: 'text-cyan-400',
+                        cooldown: 'text-amber-400',
+                        offline: 'text-slate-500',
+                        keyboard_error: 'text-pink-400',
+                        error: 'text-pink-400',
+                        isolated: 'text-pink-400',
+                        daily_limit: 'text-amber-400',
+                        global_limit: 'text-amber-400',
+                    }[d.runtime_status || 'idle'] || 'text-slate-400';
+                    const keyboardText = d.keyboard_ready ? '键盘OK' : '键盘未就绪';
+                    const keyboardClass = d.keyboard_ready ? 'text-emerald-400' : 'text-pink-400';
+                    tr.innerHTML = `
+                        <td class="px-6 py-4 text-xs font-bold text-slate-200">${escapeHtml(d.name)}</td>
+                        <td class="px-6 py-4 text-xs text-slate-400 font-mono">${escapeHtml(d.adb_serial)}</td>
+                        <td class="px-6 py-4 text-center">
+                            <div class="flex items-center justify-center gap-2 mb-1">
+                                <button onclick="quickHeartbeat(this, '${d.id}')" class="px-2 py-1 bg-slate-900 hover:bg-slate-800 text-[10px] font-semibold text-slate-300 rounded border border-slate-800 transition-colors">实时检测</button>
+                                <span class="w-2 h-2 rounded-full bg-slate-700"></span>
+                            </div>
+                            <div class="text-[10px] ${statusClass} font-semibold">${statusLabel} · 失败${d.consecutive_failures || 0}</div>
+                            <div class="text-[10px] ${keyboardClass}" title="${escapeHtml(d.keyboard_message || '')}">${keyboardText}</div>
+                        </td>
+                        <td class="px-6 py-4 text-xs text-slate-300 text-center font-semibold">${d.daily_limit} 封/天</td>
+                        <td class="px-6 py-4 text-xs text-slate-300 text-center">${d.min_interval_sec} 秒</td>
+                        <td class="px-6 py-4 text-right whitespace-nowrap">
+                            <button onclick="openRemoteScreen('${d.id}', '${escapeHtml(d.name)}')" class="px-2 py-1 mr-1 text-[10px] text-emerald-400 hover:bg-slate-900 rounded border border-emerald-500/20 transition-all">云真机(屏幕)</button>
+                            <button onclick="prepareDeviceKeyboard('${d.id}')" class="px-2 py-1 mr-1 text-[10px] text-cyan-400 hover:bg-slate-900 rounded border border-cyan-500/20 transition-all">准备键盘</button>
+                            <button onclick="resetDeviceFuse('${d.id}')" class="px-2 py-1 mr-1 text-[10px] text-amber-400 hover:bg-slate-900 rounded border border-amber-500/20 transition-all">重置熔断</button>
+                            <button onclick="deleteDevice('${d.id}')" class="p-1.5 text-slate-500 hover:text-pink-400 hover:bg-slate-900 rounded-lg transition-all" title="注销设备">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                            </button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                }
+            } catch (e) {}
+        }
+
+        // Remote Screen Control Functions
+        let activeRemoteDeviceId = null;
+        let remoteSwipeStartX = 0;
+        let remoteSwipeStartY = 0;
+        let remoteSwipeStartTime = 0;
+
+        function openRemoteScreen(id, name) {
+            activeRemoteDeviceId = id;
+            document.getElementById('remote-screen-title').innerText = `云真机控制 - ${name}`;
+            
+            const loader = document.getElementById('remote-screen-loader');
+            const img = document.getElementById('remote-screen-img');
+            
+            loader.style.display = 'flex';
+            img.style.display = 'none';
+            img.src = `/api/devices/${id}/screen/stream?_=${Date.now()}`;
+            
+            img.onload = function() {
+                loader.style.display = 'none';
+                img.style.display = 'block';
+            };
+            
+            img.onerror = function() {
+                loader.innerText = '屏幕连接失败，请确认设备在线。';
+            };
+
+            if (!img.dataset.listenersBound) {
+                img.dataset.listenersBound = "true";
+                
+                img.addEventListener('mousedown', function(e) {
+                    const rect = img.getBoundingClientRect();
+                    remoteSwipeStartX = (e.clientX - rect.left) / rect.width;
+                    remoteSwipeStartY = (e.clientY - rect.top) / rect.height;
+                    remoteSwipeStartTime = Date.now();
+                    e.preventDefault();
+                });
+
+                img.addEventListener('mouseup', function(e) {
+                    if (!activeRemoteDeviceId) return;
+                    const rect = img.getBoundingClientRect();
+                    const endX = (e.clientX - rect.left) / rect.width;
+                    const endY = (e.clientY - rect.top) / rect.height;
+                    const duration = Date.now() - remoteSwipeStartTime;
+
+                    const dx = endX - remoteSwipeStartX;
+                    const dy = endY - remoteSwipeStartY;
+                    const dist = Math.hypot(dx, dy);
+
+                    if (dist > 0.05) {
+                        // Swipe
+                        apiFetch(`/api/devices/${activeRemoteDeviceId}/control/swipe`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                x1_pct: remoteSwipeStartX,
+                                y1_pct: remoteSwipeStartY,
+                                x2_pct: endX,
+                                y2_pct: endY,
+                                duration_ms: Math.max(duration, 150)
+                            })
+                        }).catch(() => {});
+                    } else {
+                        // Tap
+                        apiFetch(`/api/devices/${activeRemoteDeviceId}/control/click`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                x_pct: remoteSwipeStartX,
+                                y_pct: remoteSwipeStartY
+                            })
+                        }).catch(() => {});
+                    }
+                });
+            }
+
+            document.getElementById('modal-remote-screen').style.display = 'flex';
+        }
+
+        function closeRemoteScreen() {
+            activeRemoteDeviceId = null;
+            const img = document.getElementById('remote-screen-img');
+            img.src = '';
+            document.getElementById('modal-remote-screen').style.display = 'none';
+        }
+
+        async function sendRemoteKey(keyCode) {
+            if (!activeRemoteDeviceId) return;
+            try {
+                await apiFetch(`/api/devices/${activeRemoteDeviceId}/control/key`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key_code: keyCode })
+                });
+            } catch (e) {}
+        }
+
+        async function sendRemoteText() {
+            if (!activeRemoteDeviceId) return;
+            const input = document.getElementById('remote-input-text');
+            const text = input.value;
+            if (!text) return;
+            try {
+                await apiFetch(`/api/devices/${activeRemoteDeviceId}/control/text`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: text })
+                });
+                input.value = '';
+                showToast('文本已发送到设备', 'success');
+            } catch (e) {}
+        }
+
+        // Scan devices via ADB
+        async function scanDevices() {
+            const btn = document.getElementById('btn-scan-devices');
+            if (btn) {
+                btn.disabled = true;
+                btn.classList.add('opacity-75', 'cursor-not-allowed');
+                btn.querySelector('span').innerText = '正在扫描...';
+            }
+            try {
+                const res = await apiFetch('/api/devices/scan', { method: 'POST' });
+                const keyboardFailed = Array.isArray(res) && res.some(d => d.keyboard_ready === false);
+                if (keyboardFailed) {
+                    showToast('设备已绑定，部分手机 ADB 键盘未就绪，请确认 USB 安装授权或手动运行安装脚本。', 'warning');
+                } else {
+                    showToast('扫描完成，在线设备已绑定，ADB 键盘已准备。', 'success');
+                }
+                // Refresh list
+                await loadDevicesView();
+            } catch (e) {
+                // error is already shown by apiFetch toast
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-75', 'cursor-not-allowed');
+                    btn.querySelector('span').innerText = '一键扫描设备';
+                }
+            }
+        }
+
+        async function prepareDeviceKeyboard(id) {
+            try {
+                const res = await apiFetch(`/api/devices/${id}/prepare-keyboard`, { method: 'POST' });
+                if (res.keyboard_ready) {
+                    showToast('ADB 键盘已准备完成', 'success');
+                } else {
+                    showToast(res.keyboard_message || 'ADB 键盘准备失败', 'warning');
+                }
+                await loadDevicesView();
+            } catch (e) {}
+        }
+
+        async function resetDeviceFuse(id) {
+            try {
+                await apiFetch(`/api/devices/${id}/reset-fuse`, { method: 'POST' });
+                showToast('设备熔断状态已重置', 'success');
+                await loadDevicesView();
+            } catch (e) {}
+        }
+
+        // Delete device
+        async function deleteDevice(id) {
+            document.getElementById('modal-device').classList.replace('flex', 'hidden');
+        }
+
+        // Save Device
+        document.getElementById('form-device').onsubmit = async (e) => {
+            e.preventDefault();
+            const payload = {
+                name: document.getElementById('device-name').value,
+                adb_serial: document.getElementById('device-serial').value,
+                daily_limit: parseInt(document.getElementById('device-limit').value),
+                min_interval_sec: parseInt(document.getElementById('device-interval').value),
+            };
+
+            try {
+                await apiFetch('/api/devices', {
+                    method: 'POST',
+                    body: JSON.stringify(payload)
+                });
+                showToast('添加设备连接参数成功', 'success');
+                hideDeviceModal();
+                loadDevicesView();
+            } catch (err) {}
+        };
+
+        // 4. TASKS / LEADS QUEUE
+        async function populateTaskIndustryDropdown() {
+            try {
+                const list = await apiFetch('/api/industries');
+                const select = document.getElementById('task-filter-industry');
+                select.innerHTML = '';
+                
+                if (list.length === 0) {
+                    select.innerHTML = '<option value="">无项目</option>';
+                    return;
+                }
+                
+                list.forEach((ind, idx) => {
+                    const opt = document.createElement('option');
+                    opt.value = ind.id;
+                    opt.innerText = ind.name;
+                    select.appendChild(opt);
+                });
+                const lastIndustryId = localStorage.getItem('thunder_last_task_industry');
+                if (lastIndustryId && Array.from(select.options).some(opt => opt.value === lastIndustryId)) {
+                    select.value = lastIndustryId;
+                }
+            } catch (e) {}
+        }
+
+        async function loadTasksView() {
+            const industryId = document.getElementById('task-filter-industry').value;
+            const status = document.getElementById('task-filter-status').value;
+            const tbody = document.getElementById('tasks-table-body');
+            const retryAllBtn = document.getElementById('task-retry-all-btn');
+            const timeHeader = document.getElementById('task-time-header');
+            if (retryAllBtn) retryAllBtn.classList.toggle('hidden', status !== 'failed');
+            if (timeHeader) timeHeader.innerText = status === 'done' ? '发送成功时间' : '采集时间';
+            tbody.innerHTML = '';
+
+            if (!industryId) {
+                tbody.innerHTML = `<tr><td colspan="7" class="px-6 py-8 text-center text-slate-500">请先在项目配置中创建您的第一个获客项目。</td></tr>`;
+                return;
+            }
+
+            // Use new /api/leads endpoint
+            try {
+                let url = `/api/leads?industry_slug=${industryId}&limit=50`;
+                if (status) url += `&status=${status}`;
+                const resp = await apiFetch(url);
+                const list = resp.leads || [];
+                if (list.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="7" class="px-6 py-8 text-center text-slate-500">该项目当前条件下未录入任何意向线索。</td></tr>`;
+                    return;
+                }
+                // Update retry button to use new endpoint
+                if (retryAllBtn) retryAllBtn.onclick = () => retryAllFailed(industryId);
+
+                for (const t of list) {
+                    const tr = document.createElement('tr');
+                    tr.className = "hover:bg-slate-900/30 transition-colors";
+                    
+                    const statusColors = {
+                        pending: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
+                        retry: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+                        done: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+                        failed: 'bg-pink-500/10 text-pink-400 border-pink-500/20',
+                        claimed: 'bg-violet-500/10 text-violet-400 border-violet-500/20'
+                    };
+
+                    const statusLabels = {
+                        claimed: '处理中',
+                        pending: '待处理',
+                        retry: '冷却重试',
+                        done: '已引流',
+                        failed: '失败'
+                    };
+
+                    const statusText = statusLabels[t.status] || t.status || '未知';
+                    const statusBadge = `<span class="px-2.5 py-1 rounded-full border text-[9px] font-semibold ${statusColors[t.status] || 'bg-slate-800 text-slate-400'}">${escapeHtml(statusText)}</span>`;
+                    const dateValue = t.status === 'done'
+                        ? (t.processed_at || t.fetched_at || t.created_at || t.claimed_at)
+                        : (t.fetched_at || t.created_at || t.claimed_at || t.processed_at);
+                    const dateStr = formatDateTime(dateValue);
+                    const retryAfter = formatDateTime(t.retry_after);
+                    const userId = t.user_id || t.sec_uid || t.unique_id || t.short_id || '';
+                    const userIdPreview = userId ? `${String(userId).slice(0, 15)}${String(userId).length > 15 ? '...' : ''}` : '—';
+                    const userName = t.user_name || '用户';
+                    const text = t.text || '';
+                    const intentMeta = parseJsonSafe(t.matched_categories, {});
+                    const confidence = intentMeta.confidence ? `置信度: ${intentMeta.confidence}` : '';
+                    const question = intentMeta.question ? `问题: ${intentMeta.question}` : '';
+                    const evidence = intentMeta.evidence ? `依据: ${intentMeta.evidence}` : '';
+                    const metaLine = [confidence, question, evidence].filter(Boolean).join(' | ');
+                    const metaHtml = metaLine
+                        ? `<div class="mt-1 text-[10px] text-cyan-400 truncate" title="${escapeHtml(metaLine)}">${escapeHtml(metaLine)}</div>`
+                        : '';
+                    const retryButton = t.status === 'failed'
+                        ? `<button onclick="retryTask('${escapeHtml(industryId)}', ${Number(t.id)})" class="px-2.5 py-1 rounded border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/10 text-[10px] font-semibold">重新发送</button>`
+                        : `<span class="text-[10px] text-slate-600">-</span>`;
+
+                    tr.innerHTML = `
+                        <td class="px-6 py-4">
+                            <div class="flex flex-col">
+                                <span class="font-bold text-slate-200">${escapeHtml(userName)}</span>
+                                <span class="text-[9px] text-slate-500 truncate max-w-[120px] font-mono" title="${escapeHtml(userId)}">${escapeHtml(userIdPreview)}</span>
+                            </div>
+                        </td>
+                        <td class="px-6 py-4 max-w-[360px] font-medium text-slate-300" title="${escapeHtml(text)}">
+                            <div class="truncate">${escapeHtml(text)}</div>
+                            ${metaHtml}
+                        </td>
+                        <td class="px-6 py-4 text-center">${statusBadge}</td>
+                        <td class="px-6 py-4 text-center font-bold text-slate-300">${Number(t.retry_count || 0)} 次</td>
+                        <td class="px-6 py-4 text-center text-slate-400 font-mono text-[10px]">${retryAfter}</td>
+                        <td class="px-6 py-4 text-center text-slate-500 font-mono text-[10px]">${dateStr}</td>
+                        <td class="px-6 py-4 text-right">${retryButton}</td>
+                    `;
+                    tbody.appendChild(tr);
+                }
+            } catch (e) {}
+        }
+
+        async function retryTask(industryId, taskId) {
+            if (!industryId || !taskId) return;
+            if (!confirm('确定将该失败线索重新加入待发送队列吗？')) return;
+            try {
+                await apiFetch(`/api/industries/${industryId}/tasks/${taskId}/retry`, { method: 'POST' });
+                showToast('已重新加入待发送队列', 'success');
+                await loadTasksView();
+                await refreshSidebarSummary();
+            } catch (e) {}
+        }
+
+        async function retryAllFailed(industrySlug) {
+            if (!confirm('确定将失败线索重新加入待发送队列吗？')) return;
+            try {
+                const res = await apiFetch('/api/leads/retry-failed' + (industrySlug ? `?industry_slug=${industrySlug}` : ''), { method: 'POST' });
+                showToast(`已重置 ${res.retried} 条`, 'success');
+                await loadTasksView();
+            } catch (e) { showToast(e.message || '重试失败', 'error'); }
+        }
+
+        async function retryAllFailedTasks() {
+            const industryId = document.getElementById('task-filter-industry')?.value;
+            const status = document.getElementById('task-filter-status')?.value;
+            if (!industryId || status !== 'failed') return;
+            if (!confirm('确定将当前项目所有失败线索重新加入待发送队列吗？')) return;
+            try {
+                const res = await apiFetch('/api/leads/retry-failed?industry_slug=' + industryId, { method: 'POST' });
+                showToast(`已重新加入待发送队列：${res.retried || 0} 条`, 'success');
+                await loadTasksView();
+                await refreshSidebarSummary();
+            } catch (e) {}
+        }
+
+        // 5. JOBS
+        async function loadJobsView() {
+            const tbody = document.getElementById('jobs-table-body');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+
+            try {
+                const jobs = await apiFetch('/api/jobs?limit=100');
+                if (!jobs.length) {
+                    tbody.innerHTML = `<tr><td colspan="6" class="px-6 py-8 text-center text-slate-500">暂无后台任务记录。</td></tr>`;
+                    return;
+                }
+
+                const statusColors = {
+                    running: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
+                    cancelling: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+                    cancelled: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+                    done: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+                    failed: 'bg-pink-500/10 text-pink-400 border-pink-500/20'
+                };
+                const statusLabels = {
+                    running: '运行中',
+                    cancelling: '取消中',
+                    cancelled: '已取消',
+                    done: '已完成',
+                    failed: '失败'
+                };
+                const typeLabels = { collect: '采集', send: '私信' };
+
+                for (const job of jobs) {
+                    const tr = document.createElement('tr');
+                    tr.className = "hover:bg-slate-900/30 transition-colors";
+                    const canCancel = job.status === 'running' || job.status === 'cancelling';
+                    const statusText = statusLabels[job.status] || job.status || '未知';
+                    const typeText = typeLabels[job.type] || job.type || '任务';
+                    const progress = Number(job.progress || 0);
+                    const error = job.error ? `<div class="text-[10px] text-pink-400 mt-1 truncate max-w-[260px]" title="${escapeHtml(job.error)}">${escapeHtml(job.error)}</div>` : '';
+                    const sendSummary = job.send_summary || job.payload?.send_summary || {};
+                    const collectSummary = job.collect_summary || job.payload?.collect_summary || {};
+                    const categoryRows = sendSummary.result_summary?.by_category || [];
+                    const categoryText = categoryRows.slice(0, 2).map(c => `${c.label}:${c.devices}`).join(' · ');
+                    const autoReplenish = sendSummary.auto_replenish || {};
+                    const summaryHtml = job.type === 'send' && Object.keys(sendSummary).length
+                        ? `<div class="text-[10px] text-cyan-400 mt-1 truncate max-w-[300px]" title="${escapeHtml(categoryText)}">发送 ${sendSummary.sent || 0} / 尝试 ${sendSummary.attempted || 0} / 设备 ${sendSummary.online_count || 0}/${sendSummary.target_count || 0}${categoryText ? ' · ' + escapeHtml(categoryText) : ''}</div>
+                           ${sendSummary.replenish_recommended ? `<div class="text-[10px] text-amber-400 mt-1">库存不足，建议补采 ${sendSummary.inventory_after?.pending_deficit || 0} 条</div>` : ''}
+                           ${autoReplenish.started ? `<div class="text-[10px] text-emerald-400 mt-1">已自动补采：${escapeHtml((autoReplenish.job_id || '').slice(0, 8))}</div>` : ''}`
+                        : job.type === 'collect' && Object.keys(collectSummary).length
+                            ? `<div class="text-[10px] text-cyan-400 mt-1">候选 ${collectSummary.candidate_comments ?? 0} / 通过 ${collectSummary.classified_passed ?? 0} / 入队 ${collectSummary.enqueued ?? 0}</div>`
+                            : '';
+                    tr.innerHTML = `
+                        <td class="px-5 py-4">
+                            <div class="flex flex-col">
+                                <span class="font-mono text-slate-300">${escapeHtml((job.job_id || '').slice(0, 8))}</span>
+                                <span class="text-[10px] text-slate-500 truncate max-w-[260px]">${escapeHtml(job.industry_name || job.industry_slug || '未绑定项目')}</span>
+                                ${summaryHtml}
+                                ${error}
+                            </div>
+                        </td>
+                        <td class="px-5 py-4 text-center text-slate-300 font-semibold">${escapeHtml(typeText)}</td>
+                        <td class="px-5 py-4 text-center"><span class="px-2.5 py-1 rounded-full border text-[9px] font-semibold ${statusColors[job.status] || 'bg-slate-800 text-slate-400'}">${escapeHtml(statusText)}</span></td>
+                        <td class="px-5 py-4 text-center">
+                            <div class="w-24 mx-auto h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                                <div class="h-full bg-cyan-400" style="width:${Math.max(0, Math.min(progress, 100))}%"></div>
+                            </div>
+                            <div class="text-[10px] text-slate-500 mt-1">${progress}%</div>
+                        </td>
+                        <td class="px-5 py-4 text-center text-slate-500 font-mono text-[10px]">${formatDateTime(job.created_at)}</td>
+                        <td class="px-5 py-4 text-right">
+                            <button onclick="cancelJob('${escapeHtml(job.job_id)}')" ${canCancel ? '' : 'disabled'} class="px-2.5 py-1 rounded border text-[10px] font-semibold transition-colors ${canCancel ? 'border-amber-500/30 text-amber-400 hover:bg-amber-500/10' : 'border-slate-800 text-slate-600 cursor-not-allowed'}">取消</button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                }
+            } catch (e) {}
+        }
+
+        async function cancelJob(jobId) {
+            if (!jobId || !confirm('确定请求取消该后台任务？当前手机动作会在安全停顿点后停止。')) return;
+            try {
+                await apiFetch(`/api/tasks/status/${jobId}/cancel`, { method: 'POST' });
+                showToast('已提交取消请求', 'warning');
+                await loadJobsView();
+            } catch (e) {}
+        }
+
+        // 5. SETTINGS
+        async function loadSettingsView() {
+            try {
+                await loadSystemHealth();
+                const settings = await apiFetch('/api/auth/settings');
+                document.getElementById('settings-deepseek-key').value = settings.deepseek_key || '';
+                document.getElementById('settings-zhipu-key').value = settings.zhipu_key || '';
+                document.getElementById('settings-openai-key').value = settings.openai_key || '';
+
+                document.getElementById('form-settings').onsubmit = async (e) => {
+                    e.preventDefault();
+                    const payload = {
+                        deepseek_key: document.getElementById('settings-deepseek-key').value,
+                        zhipu_key: document.getElementById('settings-zhipu-key').value,
+                        openai_key: document.getElementById('settings-openai-key').value,
+                    };
+                    try {
+                        const updated = await apiFetch('/api/auth/settings', {
+                            method: 'POST',
+                            body: JSON.stringify(payload)
+                        });
+                        document.getElementById('settings-deepseek-key').value = updated.deepseek_key || '';
+                        document.getElementById('settings-zhipu-key').value = updated.zhipu_key || '';
+                        document.getElementById('settings-openai-key').value = updated.openai_key || '';
+                        showToast('系统设置保存成功！', 'success');
+                    } catch (err) {}
+                };
+            } catch (e) {}
+        }
+
+        async function loadSystemHealth() {
+            const container = document.getElementById('system-health-list');
+            if (!container) return;
+            container.innerHTML = '<div class="text-slate-500">正在加载自检结果...</div>';
+            try {
+                const health = await apiFetch('/api/system/health');
+                container.innerHTML = '';
+                for (const check of health.checks || []) {
+                    const item = document.createElement('div');
+                    item.className = `p-3 rounded-lg border ${check.ok ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-pink-500/5 border-pink-500/20'}`;
+                    item.innerHTML = `
+                        <div class="flex items-center justify-between gap-3">
+                            <span class="font-semibold ${check.ok ? 'text-emerald-400' : 'text-pink-400'}">${escapeHtml(check.name)}</span>
+                            <span class="text-[10px] ${check.ok ? 'text-emerald-400' : 'text-pink-400'}">${check.ok ? 'OK' : '异常'}</span>
+                        </div>
+                        <div class="text-[10px] text-slate-500 mt-1 truncate" title="${escapeHtml(check.detail)}">${escapeHtml(check.detail || '')}</div>
+                    `;
+                    container.appendChild(item);
+                }
+            } catch (e) {
+                container.innerHTML = '<div class="text-pink-400">系统自检加载失败</div>';
+            }
+        }
+
+
+        // --- AUTH HANDLERS ---
+        
+        function setupAuthHandlers() {
+            let activeTab = 'login'; // or 'register'
+            
+            const tabLogin = document.getElementById('tab-login');
+            const tabRegister = document.getElementById('tab-register');
+            const submitBtn = document.getElementById('auth-submit-btn');
+
+            tabLogin.onclick = () => {
+                activeTab = 'login';
+                tabLogin.className = "flex-1 pb-3 text-sm font-medium border-b-2 border-cyan-400 text-cyan-400 transition-colors";
+                tabRegister.className = "flex-1 pb-3 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition-colors";
+                submitBtn.querySelector('span').innerText = '立即登录';
+            };
+
+            tabRegister.onclick = () => {
+                activeTab = 'register';
+                tabRegister.className = "flex-1 pb-3 text-sm font-medium border-b-2 border-cyan-400 text-cyan-400 transition-colors";
+                tabLogin.className = "flex-1 pb-3 text-sm font-medium border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition-colors";
+                submitBtn.querySelector('span').innerText = '新建并注册账号';
+            };
+
+            document.getElementById('auth-form').onsubmit = async (e) => {
+                e.preventDefault();
+                const username = document.getElementById('auth-username').value;
+                const password = document.getElementById('auth-password').value;
+
+                const url = activeTab === 'login' ? '/api/auth/login' : '/api/auth/register';
+                
+                try {
+                    const res = await fetch(`${API_BASE}${url}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ username, password })
+                    });
+                    
+                    if (!res.ok) {
+                        const err = await res.json();
+                        showToast(err.detail || '账户验证失败', 'error');
+                        return;
+                    }
+
+                    const data = await res.json();
+                    token = data.access_token;
+                    localStorage.setItem('thunder_token', token);
+                    
+                    showToast(activeTab === 'login' ? '欢迎回来，登录成功！' : '账号创建并自动授权成功！', 'success');
+                    router.navigate('overview');
+                } catch (err) {
+                    showToast('网络连接失败，请检查本地后端是否正常启动', 'error');
+                }
+            };
+        }
+
+
+        // --- ENTRY POINT ---
+        window.onload = () => {
+            // Check initial auth state
+            if (token) {
+                router.navigate('overview');
+            } else {
+                router.navigate('auth');
+            }
+        };
+    </script>
+</body>
+</html>
