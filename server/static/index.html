@@ -811,25 +811,28 @@
 
     <!-- Export Modal -->
     <div id="modal-export" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-        <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl">
-            <div class="p-5 border-b border-slate-800 flex justify-between items-center">
+        <div class="glass-panel rounded-2xl w-full max-w-md shadow-2xl">
+            <div class="p-6 border-b border-slate-800 flex justify-between items-center">
                 <h3 class="font-bold text-lg font-display text-slate-100">导出线索</h3>
-                <button onclick="closeExportModal()" class="text-slate-500 hover:text-slate-300">✕</button>
+                <button id="export-close-btn" onclick="closeExportModal()" class="text-slate-500 hover:text-slate-300">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
             </div>
-            <div class="p-5 space-y-4">
+            <div class="p-6 space-y-4">
                 <p class="text-xs text-slate-400">将导出当前筛选条件下的线索，最多 5000 条。</p>
                 <div>
                     <label class="block text-xs font-semibold text-slate-300 mb-1">格式</label>
-                    <select id="export-format-select" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200">
+                    <select id="export-format-select" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200">
                         <option value="xlsx">Excel (.xlsx)</option>
                         <option value="csv">CSV (.csv)</option>
                     </select>
                 </div>
                 <div>
                     <label class="block text-xs font-semibold text-slate-300 mb-1">状态</label>
-                    <select id="export-status-select" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200">
+                    <select id="export-status-select" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200">
                         <option value="">全部</option>
                         <option value="pending">待处理</option>
+                        <option value="retry">重试冷却中</option>
                         <option value="done">已发送</option>
                         <option value="failed">失败</option>
                     </select>
@@ -838,9 +841,9 @@
                     <span class="text-xs text-cyan-400">正在生成文件...</span>
                 </div>
             </div>
-            <div class="p-5 border-t border-slate-800 flex justify-end gap-3">
-                <button onclick="closeExportModal()" class="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 text-xs hover:bg-slate-800">取消</button>
-                <button onclick="confirmExportLeads()" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold">确认导出</button>
+            <div class="p-6 border-t border-slate-800 flex justify-end gap-3">
+                <button id="export-cancel-btn" onclick="closeExportModal()" class="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 text-xs hover:bg-slate-800">取消</button>
+                <button id="export-confirm-btn" onclick="confirmExportLeads()" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold">确认导出</button>
             </div>
         </div>
     </div>
@@ -892,6 +895,9 @@
         function closeExportModal() {
             document.getElementById('modal-export').classList.replace('flex', 'hidden');
             document.getElementById('export-loading').classList.add('hidden');
+            document.getElementById('export-confirm-btn').disabled = false;
+            document.getElementById('export-cancel-btn').disabled = false;
+            document.getElementById('export-close-btn').disabled = false;
         }
 
         async function confirmExportLeads() {
@@ -902,16 +908,19 @@
             }
             const format = document.getElementById('export-format-select').value;
             const status = document.getElementById('export-status-select').value;
-            document.getElementById('export-loading').classList.remove('hidden');
+            const loading = document.getElementById('export-loading');
+            const confirmBtn = document.getElementById('export-confirm-btn');
+            const cancelBtn = document.getElementById('export-cancel-btn');
+            const closeBtn = document.getElementById('export-close-btn');
+
+            loading.classList.remove('hidden');
+            if (confirmBtn) confirmBtn.disabled = true;
+            if (cancelBtn) cancelBtn.disabled = true;
+            if (closeBtn) closeBtn.disabled = true;
 
             try {
-                const token = localStorage.getItem('thunder_token') || '';
-                const resp = await fetch('/api/leads/export', {
+                const resp = await apiFetchRaw('/api/leads/export', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': token ? `Bearer ${token}` : '',
-                    },
                     body: JSON.stringify({
                         industry_slug: industryId,
                         format: format,
@@ -938,7 +947,10 @@
             } catch (e) {
                 showToast(e.message || '导出失败', 'error');
             } finally {
-                document.getElementById('export-loading').classList.add('hidden');
+                loading.classList.add('hidden');
+                if (confirmBtn) confirmBtn.disabled = false;
+                if (cancelBtn) cancelBtn.disabled = false;
+                if (closeBtn) closeBtn.disabled = false;
             }
         }
 
@@ -981,34 +993,35 @@
         }
 
         // Authenticated fetch wrapper
-        async function apiFetch(endpoint, options = {}) {
+        async function apiFetchRaw(endpoint, options = {}) {
             options.headers = options.headers || {};
+            const token = localStorage.getItem('thunder_token') || '';
             if (token) {
                 options.headers['Authorization'] = `Bearer ${token}`;
             }
-            if (options.body && !(options.body instanceof FormData)) {
+            if (options.body && !(options.body instanceof FormData) && !(options.body instanceof Blob)) {
                 options.headers['Content-Type'] = 'application/json';
             }
 
             const response = await fetch(`${API_BASE}${endpoint}`, options);
             if (response.status === 401) {
-                // Token expired/invalid
                 localStorage.removeItem('thunder_token');
-                token = '';
-                currentUser = null;
-                router.navigate('auth');
-                showToast('授权登录失效，请重新登录', 'error');
-                throw new Error('Unauthorized');
+                window.location.href = '/login';
+                throw new Error('登录已过期，请重新登录');
             }
-            
+            return response;
+        }
+
+        async function apiFetch(endpoint, options = {}) {
+            const response = await apiFetchRaw(endpoint, options);
+            if (response.status === 204 || response.headers.get('content-length') === '0') {
+                return {};
+            }
+            const data = await response.json().catch(() => ({}));
             if (!response.ok) {
-                const errData = await response.json().catch(() => ({}));
-                const errMsg = errData.detail || `请求失败 (${response.status})`;
-                showToast(errMsg, 'error');
-                throw new Error(errMsg);
+                throw new Error(data.detail || data.message || `请求失败 (${response.status})`);
             }
-            
-            return response.json();
+            return data;
         }
 
         function platformLabel(platform) {
