@@ -1,5 +1,6 @@
 """配置加载器 — YAML 驱动，行业无关"""
 
+import logging
 import os
 import re
 import yaml
@@ -77,7 +78,73 @@ def load_system() -> dict:
     return cfg
 
 
-def load_industry(slug: str) -> IndustryConfig:
+def _single_platform(platforms: list[str] | None) -> list[str]:
+    cleaned = [str(p).strip() for p in (platforms or []) if str(p).strip()]
+    return [cleaned[0] if cleaned else "douyin"]
+
+
+def _load_industry_from_db(slug: str) -> IndustryConfig | None:
+    """Load an active industry config from the database, or None on miss/error."""
+    try:
+        from server.models import SessionLocal
+        from server.models.industry import Industry
+        from server.models.user import User
+        from server.secret_store import decrypt_secret
+        from sqlalchemy.exc import SQLAlchemyError
+    except ImportError:
+        return None
+
+    try:
+        with SessionLocal() as db:
+            industry = (
+                db.query(Industry)
+                .filter(Industry.slug == slug, Industry.is_active == True)
+                .first()
+            )
+            if industry is None:
+                return None
+
+            user = db.query(User).filter(User.id == industry.user_id).first()
+            return IndustryConfig(
+                name=industry.name,
+                slug=industry.slug,
+                keywords=industry.keywords or [],
+                reply_tone=industry.reply_tone,
+                reply_style=industry.reply_style,
+                reply_hook=getattr(industry, "reply_hook", ""),
+                categories=industry.categories or [],
+                daily_limit=industry.daily_limit,
+                video_max_age_days=industry.video_max_age_days,
+                comment_max_age_hours=industry.comment_max_age_hours,
+                platforms=_single_platform(industry.platforms),
+                llm_provider=industry.llm_provider or "deepseek",
+                llm_model=industry.llm_model or "deepseek-chat",
+                deepseek_key=decrypt_secret(user.deepseek_key) if user else "",
+                zhipu_key=decrypt_secret(user.zhipu_key) if user else "",
+                openai_key=decrypt_secret(user.openai_key) if user else "",
+                intent_keywords=industry.intent_keywords or [],
+                noise_keywords=industry.noise_keywords or [],
+                target_users=industry.target_users or [],
+                user_id=industry.user_id,
+                matrix_target_devices=industry.matrix_target_devices or 30,
+                lead_inventory_days=industry.lead_inventory_days or 3,
+                global_daily_limit=industry.global_daily_limit or 0,
+                auto_replenish_enabled=bool(industry.auto_replenish_enabled),
+                replenish_threshold_days=industry.replenish_threshold_days or 1,
+                keyword_batch_size=industry.keyword_batch_size or 12,
+                collect_authors_per_run=industry.collect_authors_per_run or 60,
+                collect_video_limit=industry.collect_video_limit or 120,
+                compliance_mode=bool(getattr(industry, "compliance_mode", False)),
+                webhook_url=getattr(industry, "webhook_url", "") or "",
+                auto_export_enabled=bool(getattr(industry, "auto_export_enabled", False)),
+            )
+    except SQLAlchemyError as e:
+        logging.getLogger("thunder.config").warning("Failed to load industry %s from DB: %s", slug, e)
+        return None
+
+
+def load_industry_yaml(slug: str) -> IndustryConfig:
+    """Load an industry config from YAML (explicit fallback, no DB lookup)."""
     path = CONFIG_DIR / "industries" / f"{slug}.yaml"
     if not path.exists():
         raise FileNotFoundError(f"行业配置不存在: {path}")
@@ -85,6 +152,14 @@ def load_industry(slug: str) -> IndustryConfig:
         data = yaml.safe_load(f)
     return IndustryConfig(**{k: v for k, v in data.items()
                              if k in IndustryConfig.__dataclass_fields__})
+
+
+def load_industry(slug: str) -> IndustryConfig:
+    cfg = _load_industry_from_db(slug)
+    if cfg is not None:
+        return cfg
+
+    return load_industry_yaml(slug)
 
 
 def list_industries() -> list[str]:

@@ -472,11 +472,12 @@ def _trigger_auto_export(slug: str, user_id: str, passed: list[dict]) -> None:
 
 def run_collect_job(industry_cfg, skip_discover: bool = False) -> str:
     """Trigger a background collection job. Returns job_id."""
-    # Merge YAML config for richer keywords/tuning
+    # Merge YAML template config for richer keywords/tuning that may not be
+    # persisted to the DB yet (backward compatibility with existing YAML templates).
     slug = getattr(industry_cfg, "slug", "")
     try:
-        from core.config import load_industry
-        yaml_cfg = load_industry(slug)
+        from core.config import load_industry_yaml
+        yaml_cfg = load_industry_yaml(slug)
         for field in ("keywords", "reply_tone", "reply_style", "categories",
                       "video_max_age_days", "comment_max_age_hours",
                       "intent_keywords", "noise_keywords"):
