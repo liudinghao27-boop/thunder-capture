@@ -102,6 +102,27 @@ class IndustryGenerateConfigReq(BaseModel):
     description: str
 
 
+def _has_api_key(user: User | None = None) -> bool:
+    """Return True if any LLM API key is available (env, user secret, or system.yaml)."""
+    if os.getenv("THUNDER_DEEPSEEK_KEY") or os.getenv("THUNDER_ZHIPU_KEY") or os.getenv("THUNDER_OPENAI_KEY"):
+        return True
+
+    if user:
+        if has_secret(user.deepseek_key) or has_secret(user.zhipu_key) or has_secret(user.openai_key):
+            return True
+
+    try:
+        from core.config import load_system
+        cfg = load_system()
+        api_keys = cfg.get("api_keys", {})
+        if api_keys.get("deepseek") or api_keys.get("zhipu") or api_keys.get("openai"):
+            return True
+    except Exception:
+        pass
+
+    return False
+
+
 def select_available_llm(user: User | None = None):
     """Detect available LLM provider and model by checking env variables or system.yaml."""
     if os.getenv("THUNDER_DEEPSEEK_KEY"):
@@ -374,6 +395,66 @@ def create_industry(
     db.commit()
     db.refresh(industry)
     return industry
+
+
+def _industry_ready_state(ind: Industry, db: Session, user: User) -> dict:
+    """Compute readiness score and next-step guidance for an industry."""
+    from server.models.device import Device
+
+    checks = {
+        "has_keywords": bool(ind.keywords),
+        "has_intent_keywords": bool(ind.intent_keywords),
+        "has_noise_keywords": bool(ind.noise_keywords),
+        "has_categories": bool(ind.categories),
+        "has_reply_persona": bool(ind.reply_tone and ind.reply_style),
+        "has_api_key": _has_api_key(user),
+        "has_device": db.query(Device).filter(
+            Device.user_id == user.id,
+            Device.is_active == True,
+        ).first()
+        is not None,
+        "compliance_ready": not bool(ind.compliance_mode) or bool(ind.webhook_url),
+    }
+
+    total = len(checks)
+    passed = sum(checks.values())
+    score = int(passed * 100 // total)
+
+    if not checks["has_api_key"]:
+        next_step = "请先配置 LLM API Key"
+    elif not checks["has_keywords"]:
+        next_step = "请至少添加一个搜索关键词"
+    elif not checks["has_intent_keywords"]:
+        next_step = "请添加意图词以提高分类准确率"
+    elif not checks["has_noise_keywords"]:
+        next_step = "请添加噪声词以过滤无意义评论"
+    elif not checks["has_reply_persona"]:
+        next_step = "请设置回复人设和风格"
+    elif not checks["compliance_ready"]:
+        next_step = "合规模式已开启，请配置 Webhook URL"
+    elif not checks["has_device"]:
+        next_step = "请至少添加一台活跃设备以执行发送"
+    else:
+        next_step = "项目已就绪，可以开始采集"
+
+    return {
+        "ok": score >= 75,
+        "industry_id": ind.id,
+        "score": score,
+        "checks": checks,
+        "next_step": next_step,
+    }
+
+
+@router.get("/{industry_id}/ready-state")
+def get_industry_ready_state(
+    industry_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Return readiness score and next-step guidance for an industry."""
+    ind = _get_owned_industry(industry_id, current_user, db)
+    return _industry_ready_state(ind, db, current_user)
 
 
 @router.get("/{industry_id}", response_model=IndustryOut)
