@@ -814,6 +814,56 @@ def get_industry_bloggers(
     return bloggers
 
 
+class ComplianceConfigUpdate(BaseModel):
+    compliance_mode: bool | None = None
+    webhook_url: str | None = None
+    auto_export_enabled: bool | None = None
+
+
+@router.put("/{industry_id}/compliance-config", response_model=IndustryOut)
+def update_compliance_config(
+    industry_id: str,
+    body: ComplianceConfigUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ind = _get_owned_industry(industry_id, current_user, db)
+    if body.compliance_mode is not None:
+        ind.compliance_mode = body.compliance_mode
+    if body.webhook_url is not None:
+        ind.webhook_url = body.webhook_url
+    if body.auto_export_enabled is not None:
+        ind.auto_export_enabled = body.auto_export_enabled
+    db.commit()
+    db.refresh(ind)
+    return ind
+
+
+@router.post("/{industry_id}/webhook-test")
+def test_webhook(
+    industry_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ind = _get_owned_industry(industry_id, current_user, db)
+    if not ind.webhook_url:
+        raise HTTPException(status_code=400, detail="未配置 Webhook URL")
+
+    from server.services.webhook import push_leads_to_webhook
+    result = push_leads_to_webhook(
+        webhook_url=ind.webhook_url,
+        industry_slug=ind.slug,
+        industry_name=ind.name,
+        leads=[{
+            "id": 0,
+            "user_name": "测试用户",
+            "text": "这是一条测试线索",
+            "status": "pending",
+        }],
+    )
+    return result
+
+
 def _get_owned_industry(industry_id: str, user: User, db: Session) -> Industry:
     ind = db.query(Industry).filter(Industry.id == industry_id).first()
     if not ind or ind.user_id != user.id:
