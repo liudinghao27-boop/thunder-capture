@@ -41,6 +41,22 @@ def send_dm_task(
         task_data: Task dict with source_sec_uid, source_name, etc.
         reply_msg: Generated reply message text
     """
+    # Compliance check: skip DM sends when compliance mode is enabled.
+    try:
+        from server.models import SessionLocal
+        from server.models.industry import Industry
+
+        db = SessionLocal()
+        try:
+            industry = db.query(Industry).filter(Industry.slug == industry_slug).first()
+            if industry and industry.compliance_mode:
+                log.info("Compliance mode enabled for %s; skipping Celery DM send.", industry_slug)
+                return {"ok": True, "skipped": True, "reason": "compliance_mode"}
+        finally:
+            db.close()
+    except Exception:
+        pass
+
     # TODO: Call core/agent/executor.py PhoneAgentExecutor
     # Currently wraps DeviceWorker logic
     log.info(
