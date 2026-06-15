@@ -1,5 +1,6 @@
 """Industry schemas."""
 
+import re
 from datetime import datetime
 from typing import Optional
 
@@ -86,6 +87,13 @@ class IndustryCreate(BaseModel):
     def _normalize_target_users(cls, value: list[str]) -> list[str]:
         return normalize_unique_strings(value) or []
 
+    @field_validator("webhook_url")
+    @classmethod
+    def _validate_webhook_url(cls, value: str) -> str:
+        if value and not re.match(r"^https?://\S+$", value):
+            raise ValueError("webhook_url must be a valid HTTP/HTTPS URL")
+        return value
+
 
 class IndustryUpdate(BaseModel):
     name: Optional[str] = None
@@ -111,9 +119,9 @@ class IndustryUpdate(BaseModel):
     keyword_batch_size: Optional[int] = None
     collect_authors_per_run: Optional[int] = None
     collect_video_limit: Optional[int] = None
-    compliance_mode: bool | None = None
-    webhook_url: str | None = None
-    auto_export_enabled: bool | None = None
+    compliance_mode: Optional[bool] = None
+    webhook_url: Optional[str] = None
+    auto_export_enabled: Optional[bool] = None
     is_active: Optional[bool] = None
 
     @field_validator("platforms")
@@ -126,6 +134,13 @@ class IndustryUpdate(BaseModel):
     def _normalize_target_users(cls, value: Optional[list[str]]) -> Optional[list[str]]:
         return normalize_unique_strings(value)
 
+    @field_validator("webhook_url")
+    @classmethod
+    def _validate_webhook_url(cls, value: Optional[str]) -> Optional[str]:
+        if value and not re.match(r"^https?://\S+$", value):
+            raise ValueError("webhook_url must be a valid HTTP/HTTPS URL")
+        return value
+
 
 class IndustryOut(BaseModel):
     id: str
@@ -136,7 +151,7 @@ class IndustryOut(BaseModel):
     platforms: list
     reply_tone: str
     reply_style: str
-    reply_hook: str
+    reply_hook: str = ""
     categories: list
     daily_limit: int
     video_max_age_days: int
@@ -145,7 +160,7 @@ class IndustryOut(BaseModel):
     llm_model: str
     intent_keywords: list
     noise_keywords: list
-    target_users: list
+    target_users: list[str] = []
     matrix_target_devices: int = 30
     lead_inventory_days: int = 3
     global_daily_limit: int = 0

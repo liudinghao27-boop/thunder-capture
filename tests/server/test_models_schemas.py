@@ -35,3 +35,90 @@ def test_industry_config_has_compliance_fields():
     assert cfg.compliance_mode is True
     assert cfg.webhook_url == "https://example.com/hook"
     assert cfg.auto_export_enabled is True
+
+
+def test_industry_create_defaults():
+    data = IndustryCreate(name="测试", slug="test-ind")
+    assert data.compliance_mode is False
+    assert data.webhook_url == ""
+    assert data.auto_export_enabled is False
+
+
+def test_industry_update_accepts_compliance_fields():
+    data = IndustryUpdate(compliance_mode=True, webhook_url="https://x.com")
+    assert data.compliance_mode is True
+    assert data.webhook_url == "https://x.com"
+
+
+def test_industry_out_defaults():
+    out = IndustryOut(
+        id="1", user_id="u1", name="测试", slug="test-ind",
+        keywords=[], platforms=["douyin"], reply_tone="a", reply_style="b",
+        reply_hook="", categories=[], daily_limit=15,
+        video_max_age_days=14, comment_max_age_hours=48,
+        llm_provider="deepseek", llm_model="deepseek-chat",
+        intent_keywords=[], noise_keywords=[], target_users=[],
+        is_active=True, created_at="2026-06-15T10:00:00",
+    )
+    assert out.compliance_mode is False
+    assert out.webhook_url == ""
+    assert out.auto_export_enabled is False
+
+
+def test_industry_out_model_validate():
+    ind = Industry(name="测试", slug="test-ind")
+    # SQLAlchemy Column defaults are not populated until flush; set attrs directly.
+    ind.id = "1"
+    ind.user_id = "u1"
+    ind.keywords = []
+    ind.platforms = ["douyin"]
+    ind.reply_tone = "a"
+    ind.reply_style = "b"
+    ind.reply_hook = ""
+    ind.categories = []
+    ind.daily_limit = 15
+    ind.video_max_age_days = 14
+    ind.comment_max_age_hours = 48
+    ind.llm_provider = "deepseek"
+    ind.llm_model = "deepseek-chat"
+    ind.intent_keywords = []
+    ind.noise_keywords = []
+    ind.target_users = []
+    ind.matrix_target_devices = 30
+    ind.lead_inventory_days = 3
+    ind.global_daily_limit = 0
+    ind.auto_replenish_enabled = False
+    ind.replenish_threshold_days = 1
+    ind.keyword_batch_size = 12
+    ind.collect_authors_per_run = 60
+    ind.collect_video_limit = 120
+    ind.compliance_mode = False
+    ind.webhook_url = ""
+    ind.auto_export_enabled = False
+    ind.is_active = True
+    from datetime import datetime, timezone
+    ind.created_at = datetime(2026, 6, 15, 10, 0, 0, tzinfo=timezone.utc)
+    out = IndustryOut.model_validate(ind)
+    assert out.compliance_mode is False
+    assert out.webhook_url == ""
+    assert out.auto_export_enabled is False
+
+
+def test_target_users_normalization():
+    data = IndustryCreate(name="测试", slug="test-ind", target_users=[" a ", "a", "b"])
+    assert data.target_users == ["a", "b"]
+
+
+def test_single_platform_validation():
+    with pytest.raises(ValueError):
+        IndustryCreate(name="测试", slug="test-ind", platforms=["douyin", "kuaishou"])
+
+
+def test_webhook_url_validator_accepts_empty_and_http():
+    assert IndustryCreate(name="测试", slug="test-ind", webhook_url="").webhook_url == ""
+    assert IndustryCreate(name="测试", slug="test-ind", webhook_url="https://x.com").webhook_url == "https://x.com"
+
+
+def test_webhook_url_validator_rejects_invalid():
+    with pytest.raises(ValueError):
+        IndustryCreate(name="测试", slug="test-ind", webhook_url="not-a-url")
