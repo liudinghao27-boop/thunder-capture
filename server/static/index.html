@@ -1362,10 +1362,11 @@
             if (!slug) { btnC.disabled = true; btnS.disabled = true; return; }
             const ind = overviewIndustries.find(i => i.slug === slug);
             const isCompliance = ind && ind.compliance_mode;
+            const hasLeads = st.lead_inventory && (st.lead_inventory.pending > 0 || st.lead_inventory.done > 0 || st.lead_inventory.failed > 0);
             if (isCompliance) {
                 btnS.innerText = '导出高意向线索';
                 btnS.onclick = () => { router.navigate('tasks'); setTimeout(() => openExportModal(ind.slug), 200); };
-                btnS.disabled = false;
+                btnS.disabled = !hasLeads;
             } else {
                 btnS.innerText = '发送';
                 btnS.onclick = () => triggerOverviewSend();
