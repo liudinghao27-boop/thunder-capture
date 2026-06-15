@@ -1,19 +1,17 @@
 """End-to-end export API integration test with an in-memory SQLAlchemy DB."""
 
-import pytest
 from fastapi.testclient import TestClient
+import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
-from server.main import app
 from server.auth import get_current_user
+from server.main import app
 from server.models import Base, get_db
-from server.models.user import User
 from server.models.industry import Industry
 from server.models.task import TaskQueue
-
-
-from sqlalchemy.pool import StaticPool
+from server.models.user import User
 
 TEST_DATABASE_URL = "sqlite:///:memory:"
 engine = create_engine(
