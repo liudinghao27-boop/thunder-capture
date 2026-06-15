@@ -1,0 +1,24 @@
+# Celery Worker for Thunder Capture
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# System deps for psycopg2 build
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc libpq-dev && \
+    rm -rf /var/lib/apt/lists/*
+
+# Python deps
+COPY requirements/base.txt requirements/server.txt requirements/adapters.txt /app/requirements/
+RUN pip install --no-cache-dir \
+    -r requirements/base.txt \
+    -r requirements/server.txt \
+    -r requirements/adapters.txt
+
+# App code
+COPY . .
+
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+
+CMD ["celery", "-A", "adapters.celery.app", "worker", "-l", "info", "-Q", "collect,classify,send", "-c", "4", "--max-tasks-per-child=50"]

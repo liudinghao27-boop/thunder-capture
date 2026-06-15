@@ -1,0 +1,117 @@
+# Dify Workflow Template — 社媒评论意向分类
+# ============================================
+# 导入方法:
+#   1. 打开 Dify → 工作室 → 导入应用
+#   2. 上传此文件
+#   3. 配置 LLM 节点 (推荐 DeepSeek V3 或 GPT-4o-mini)
+#   4. 发布 → 获取 API Key
+#   5. 将 API Key 填入 .env: DIFY_API_KEY=app-xxx
+#
+# 工作流输入:
+#   - industry: 行业名称 (e.g., "征兵咨询")
+#   - categories: 分类列表 (e.g., "咨询类, 意向明确类")
+#   - comments_json: JSON 数组 [{"index":0, "text":"...", "nickname":"...", "source":"...", "video_desc":"..."}]
+#   - batch_size: 本批数量
+#
+# 工作流输出:
+#   - results: JSON 数组 [
+#       {"index": 0, "is_target": true, "confidence": "high",
+#        "category": "咨询类", "question": "征兵需要什么条件",
+#        "suggested_reply_topic": "入伍条件介绍", "evidence": "用户在询问具体条件"}
+#     ]
+#
+# 注意: Dify DSL 为声明式，以下为语义级模板，实际导入需通过 Dify 可视化界面创建。
+#       完整 DSL 可通过 Dify 导出功能获取精确格式。
+
+app:
+  name: "社媒评论意向分类器"
+  description: "判断社交媒体评论是否为潜在客户线索，输出分类结果和回复建议"
+  mode: workflow
+
+workflow:
+  # ── 节点 1: 代码节点 — 解析输入 JSON ──
+  - id: parse_input
+    type: code
+    title: "解析评论输入"
+    language: python3
+    inputs:
+      comments_json: "{{inputs.comments_json}}"
+    code: |
+      import json
+      def main(comments_json: str) -> dict:
+          comments = json.loads(comments_json)
+          texts = [c.get("text", "") for c in comments]
+          return {
+              "comments": json.dumps(comments, ensure_ascii=False),
+              "text_lines": "\n".join(
+                  f"[{c['index']}] {c['text']}\n    昵称:{c.get('nickname','')}; 来源:{c.get('source','')}"
+                  for c in comments
+              )
+          }
+
+  # ── 节点 2: LLM — 批量意向分类 ──
+  - id: classify
+    type: llm
+    title: "LLM 意向分类"
+    model:
+      provider: deepseek
+      name: deepseek-chat
+    prompt_template: |
+      你是{{inputs.industry}}行业的线索质检员，需要判断评论是否来自潜在客户。
+
+      只把"正在咨询、求方案、求价格、求条件、求推荐、准备行动"的评论判为目标线索。
+      以下内容必须判为非目标：夸赞、玩笑、路过、情绪表达、同行广告、泛泛讨论、没有明确需求的问题。
+
+      行业名称：{{inputs.industry}}
+      行业服务分类：{{inputs.categories}}
+
+      请分析下面 {{inputs.batch_size}} 条评论：
+
+      {{parse_input.text_lines}}
+
+      返回 JSON 数组，每个对象必须对应原 index：
+      [
+        {
+          "index": 0,
+          "is_target": true,
+          "confidence": "high",
+          "category": "分类名称",
+          "question": "用户明确想解决的问题",
+          "suggested_reply_topic": "后续回复方向",
+          "evidence": "为什么这是明确意向"
+        }
+      ]
+
+      规则：
+      1. confidence 只能是 high、medium、low。
+      2. 只有评论本身有明确需求、咨询或行动信号，才允许 is_target=true。
+      3. 仅仅出现行业关键词，但没有需求表达，必须 is_target=false。
+      4. 不确定时设置 is_target=false。
+      5. 只输出 JSON，不要输出解释。
+    temperature: 0
+    max_tokens: 2048
+
+  # ── 节点 3: 代码节点 — 格式化为标准输出 ──
+  - id: format_output
+    type: code
+    title: "格式化输出"
+    language: python3
+    inputs:
+      llm_output: "{{classify.text}}"
+    code: |
+      import json
+      def main(llm_output: str) -> dict:
+          text = llm_output.strip()
+          text = text.replace("```json", "").replace("```", "").strip()
+          try:
+              results = json.loads(text)
+          except json.JSONDecodeError:
+              results = []
+          if not isinstance(results, list):
+              results = [results]
+          return {"results": json.dumps(results, ensure_ascii=False)}
+
+outputs:
+  - name: results
+    type: string
+    from: format_output.results

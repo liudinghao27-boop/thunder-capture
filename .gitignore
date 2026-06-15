@@ -3,10 +3,30 @@
 
 # Database files
 *.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
 
 # Environment files
 .env
 .env.local
+
+# Thunder Capture local runtime state
+server.log
+logs/
+data/chrome_profile/
+data/profiles/
+data/checkpoints/
+data/*cookies*.json
+data/*.jsonl
+config/system.yaml
+
+# Local AI-agent/tooling metadata
+.codex/
+.claude/
+.context/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -285,9 +305,15 @@ docs/apps/linkdin/debug*/
 docs/apps/linkdin/samples/insights/*
 
 scripts/
-!scripts/gen-sbom.sh
-!scripts/update_stats.py
-!scripts/reset_db.py
+!scripts/
+!scripts/db/
+!scripts/db/*.py
+!scripts/device/
+!scripts/device/*.py
+!scripts/diagnostics/
+!scripts/diagnostics/*.py
+!scripts/smoke/
+!scripts/smoke/*.py
 
 
 # Databse files
@@ -310,12 +336,23 @@ config/system.yaml
 
 # Runtime artifacts
 data/chrome_profile/
+data/chrome_data/
 data/*.png
 data/*log*
 data/*.db
 data/*.db-*
+data/*.json
+data/*.jsonl
+data/*.apk
+data/ADBKeyboard.apk
+data/*.txt
+data/*.backup*
+data/backup/
+logs/
+*.log
 
-# External repo (should be a submodule)
+# External repos (managed as submodules or external deps)
+deps/
 Open-AutoGLM/
 
 # Env files

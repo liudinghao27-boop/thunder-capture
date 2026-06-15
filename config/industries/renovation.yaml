@@ -1,0 +1,22 @@
+categories:
+- 咨询类
+- 其他
+comment_max_age_hours: 48
+daily_limit: 15
+keywords:
+- 装修
+- 家装
+- 新房装修
+- 旧房翻新
+- 全屋定制
+- 装修避坑
+- 装修预算
+- 装修设计
+- 整装
+name: 装修获客
+platforms:
+- douyin
+reply_style: 专业但亲切，用数据和案例说话，15-30字
+reply_tone: 资深设计师
+slug: renovation
+video_max_age_days: 14

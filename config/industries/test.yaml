@@ -1,0 +1,15 @@
+categories:
+- 咨询类
+- 其他
+comment_max_age_hours: 48
+daily_limit: 15
+keywords:
+- 测试
+- 试用
+name: 测试获客
+platforms:
+- douyin
+reply_style: 简短
+reply_tone: 亲切
+slug: test
+video_max_age_days: 14

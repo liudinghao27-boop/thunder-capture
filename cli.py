@@ -4,33 +4,55 @@
 import sys
 import os
 import io
+from pathlib import Path
+
+# Load .env before anything else
+_env_path = Path(__file__).resolve().parent / ".env"
+if _env_path.exists():
+    with open(_env_path, encoding="utf-8") as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if _line and not _line.startswith("#") and "=" in _line:
+                _k, _v = _line.split("=", 1)
+                os.environ.setdefault(_k.strip(), _v.strip())
+
+# MUST be first — fix Windows encoding BEFORE any logging or module imports
+if sys.platform == "win32":
+    os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+    if hasattr(sys.stdout, "buffer") and not isinstance(sys.stdout, io.TextIOWrapper):
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "buffer") and not isinstance(sys.stderr, io.TextIOWrapper):
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
+
 import asyncio
+import time
 import logging
 from pathlib import Path
 
-if sys.platform == "win32":
-    os.environ.setdefault("PYTHONIOENCODING", "utf-8")
-    if hasattr(sys.stdout, "buffer"):
-        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
-    if hasattr(sys.stderr, "buffer"):
-        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
-
 BASE_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(BASE_DIR))
+# Make vendored deps importable
+sys.path.insert(0, str(BASE_DIR / "deps" / "crawl4ai"))
 
-from engine.config import (
+from core.config import (
     IndustryConfig, load_system, load_industry,
     list_industries, create_industry,
 )
-from engine.queue import (init, queue_stats, blogger_stats, reclaim_stale_claims,
-                          get_consumer_state, get_bloggers, add_blogger, set_blogger_status)
-from engine.classify import classify_batch, enqueue_classified
-from engine.sender import run_senders
+from server.services.task_stats import (
+    queue_stats, blogger_source_stats as blogger_stats, 
+    get_wave_state as get_consumer_state, get_bloggers, add_blogger
+)
+from core.classify import classify_batch, enqueue_classified
+from core.task.worker import run_senders
 
+os.makedirs("logs", exist_ok=True)
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler("logs/thunder.log", encoding="utf-8")
+    ],
 )
 log = logging.getLogger("thunder")
 
@@ -62,25 +84,54 @@ def cmd_collect(args):
     industry = load_industry(args.industry)
     init()
 
-    from engine.discover import run_discovery
+    _run_collect_once(industry, args)
+    bs = blogger_stats(industry.slug)
+
+    # ── Loop mode: re-run every N minutes ──
+    if args.loop:
+        interval = int(args.loop) * 60
+        log.info(f"定时模式启动: 每 {args.loop} 分钟采集一次 (Ctrl+C 停止)")
+        iteration = 1
+        try:
+            while True:
+                time.sleep(interval)
+                iteration += 1
+                log.info(f"=== 第 {iteration} 轮 ===")
+                _run_collect_once(industry, args)
+        except KeyboardInterrupt:
+            log.info(f"定时模式停止，共 {iteration} 轮")
+
+
+def _run_collect_once(industry, args):
+    from core.discover import run_discovery
     comments = asyncio.run(run_discovery(
         industry,
         max_authors=args.max_authors,
         video_age_days=args.video_age,
         skip_discover=args.skip_discover,
+        crawldir=args.crawldir or None,
     ))
-
     if not comments:
         log.info("无候选评论")
         return
-
     passed = classify_batch(comments, industry)
     count = enqueue_classified(passed)
-
     s = queue_stats(industry.slug)
     bs = blogger_stats(industry.slug)
-    log.info(f"采集完成: 入队 {count} 条 | 博主 {bs['active']} active | "
-             f"队列 {s['pending']} pending")
+    log.info(f"入队 {count} 条 | 博主 {bs['active']} active | 队列 {s['pending']} pending")
+
+
+_initialized = False
+
+def init():
+    """初始化数据库连接和模型 (仅首次执行)"""
+    global _initialized
+    if _initialized:
+        return
+    from server.models import Base, engine
+    from server.services.migrations import initialize_database
+    initialize_database(Base, engine)
+    _initialized = True
 
 
 def cmd_send(args):
@@ -118,11 +169,11 @@ def cmd_stats(args):
         print(f"全局队列: {s['total']} total, {s['pending']} pending")
         for d in sys_cfg.get("devices", []):
             from datetime import date
-            st = get_consumer_state(d["id"])
+            st = get_consumer_state(d["id"]) or {}
             today = str(date.today())
-            ds = st["daily_sent"] if st["last_sent_date"] == today else 0
-            print(f"  [{d['id']}] {ds}/{st['daily_limit']} today "
-                  f"({st['total_sent']} ok / {st['total_failed']} fail)")
+            ds = st.get("daily_sent", 0) if st.get("last_sent_date") == today else 0
+            print(f"  [{d['id']}] {ds}/{st.get('daily_limit', 0)} today "
+                  f"({st.get('total_sent', 0)} ok / {st.get('total_failed', 0)} fail)")
 
 
 def cmd_bloggers(args):
@@ -141,7 +192,7 @@ def cmd_bloggers(args):
         ok = add_blogger(sec_uid, nickname, industry_slug=args.industry or "")
         print(f"{'OK' if ok else '已存在'}: {nickname}")
     elif args.pause:
-        ok = set_blogger_status(args.pause, "paused")
+        ok = set_blogger_status(args.pause, "paused", args.industry or "")
         print(f"{'OK' if ok else '失败'}: pause {args.pause}")
 
 
@@ -169,6 +220,10 @@ if __name__ == "__main__":
     p.add_argument("--video-age", type=int, default=7)
     p.add_argument("--skip-discover", action="store_true",
                    help="跳过博主发现，只增量采集已有博主的评论")
+    p.add_argument("--crawldir", default="data",
+                   help="检查点目录（支持断点续传，默认 data/）")
+    p.add_argument("--loop", metavar="N",
+                   help="定时循环：每 N 分钟执行一次采集 (Ctrl+C 停止)")
 
     # send
     p = sub.add_parser("send")
@@ -183,6 +238,10 @@ if __name__ == "__main__":
     p.add_argument("--skip-discover", action="store_true",
                    help="跳过博主发现，只增量采集已有博主的评论")
     p.add_argument("--devices", "-d")
+    p.add_argument("--crawldir", default="data",
+                   help="检查点目录（支持断点续传，默认 data/）")
+    p.add_argument("--loop", metavar="N",
+                   help="定时循环：每 N 分钟执行一次采集 (Ctrl+C 停止)")
 
     # stats
     p = sub.add_parser("stats")

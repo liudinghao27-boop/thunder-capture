@@ -1,51 +1,43 @@
-version: '3.8'
-
-# Shared configuration for all environments
-x-base-config: &base-config
-  ports:
-    - "11235:11235"  # Gunicorn port
-  env_file:
-    - .llm.env       # API keys (create from .llm.env.example)
-  # Uncomment to set default environment variables (will overwrite .llm.env)
-  # environment:
-  #   - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-  #   - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
-  #   - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-  #   - GROQ_API_KEY=${GROQ_API_KEY:-}
-  #   - TOGETHER_API_KEY=${TOGETHER_API_KEY:-}
-  #   - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
-  #   - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-  #   - LLM_PROVIDER=${LLM_PROVIDER:-}  # Optional: Override default provider (e.g., "anthropic/claude-3-opus")
-  volumes:
-    - /dev/shm:/dev/shm  # Chromium performance
-  deploy:
-    resources:
-      limits:
-        memory: 4G
-      reservations:
-        memory: 1G
-  restart: unless-stopped
-  healthcheck:
-    test: ["CMD", "curl", "-f", "http://localhost:11235/health"]
-    interval: 30s
-    timeout: 10s
-    retries: 3
-    start_period: 40s
-  user: "appuser"
+# 雷霆捕获系统 — 核心基础设施
+#
+# 启动:  docker compose up -d
+# 停止:  docker compose down
+# 状态:  docker compose ps
 
 services:
-  crawl4ai:
-    # 1. Default: Pull multi-platform test image from Docker Hub
-    # 2. Override with local image via: IMAGE=local-test docker compose up
-    image: ${IMAGE:-unclecode/crawl4ai:${TAG:-latest}}
-    
-    # Local build config (used with --build)
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        INSTALL_TYPE: ${INSTALL_TYPE:-default}
-        ENABLE_GPU: ${ENABLE_GPU:-false}
-    
-    # Inherit shared config
-    <<: *base-config
+  postgres:
+    image: postgres:16-alpine
+    container_name: thunder-pg
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: thunder
+      POSTGRES_PASSWORD: thunder123
+      POSTGRES_DB: thunder
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U thunder"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: thunder-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  pg_data:
+  redis_data:
+

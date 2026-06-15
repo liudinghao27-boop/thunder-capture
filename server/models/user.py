@@ -20,3 +20,6 @@ class User(Base):
     password_hash = Column(String(256), nullable=False)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=_utcnow)
+    deepseek_key = Column(String(128), default="")
+    zhipu_key = Column(String(128), default="")
+    openai_key = Column(String(128), default="")
