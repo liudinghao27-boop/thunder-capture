@@ -1,0 +1,218 @@
+"""Lead pool management routes — CRUD, filter, retry."""
+
+from datetime import datetime, timezone
+from io import BytesIO
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+
+from server.auth import get_current_user
+from server.models import get_db
+from server.models.user import User
+from server.services.export import DEFAULT_EXPORT_FIELDS, generate_csv, generate_xlsx
+
+router = APIRouter(prefix="/api/leads", tags=["leads"])
+
+
+# ── Models ────────────────────────────────────────
+
+class LeadSummary(BaseModel):
+    id: int
+    status: str
+    status_label: str = ""
+    platform: str = ""
+    keyword: str = ""
+    video_id: str = ""
+    user_name: str = ""
+    text: str = ""
+    ai_reply: str = ""
+    error: str = ""
+    retry_count: int = 0
+    fetched_at: str = ""
+    processed_at: str = ""
+    claimed_at: str = ""
+
+
+class LeadExportRequest(BaseModel):
+    industry_slug: str
+    status: str | None = None
+    format: str = "xlsx"  # csv or xlsx
+    limit: int = Field(default=5000, ge=1, le=10000)
+    fields: list[str] | None = None
+
+
+TASK_STATUS_LABELS = {
+    "pending": "待发送",
+    "claimed": "执行中",
+    "done": "已发送",
+    "failed": "失败",
+}
+
+
+def _task_label(status: str) -> str:
+    return TASK_STATUS_LABELS.get(status, status)
+
+
+def _lead_from_row(row: dict) -> dict:
+    return {
+        "id": row["id"],
+        "status": row.get("status", ""),
+        "status_label": _task_label(row.get("status", "")),
+        "platform": row.get("platform", ""),
+        "keyword": row.get("keyword", ""),
+        "video_id": row.get("video_id", ""),
+        "user_name": row.get("user_name", ""),
+        "text": row.get("text", ""),
+        "ai_reply": row.get("ai_reply", ""),
+        "error": row.get("error", ""),
+        "retry_count": int(row.get("retry_count", 0) or 0),
+        "fetched_at": row.get("fetched_at", ""),
+        "processed_at": row.get("processed_at", ""),
+        "claimed_at": row.get("claimed_at", ""),
+    }
+
+
+# ── Routes ────────────────────────────────────────
+
+@router.get("")
+def list_leads(
+    current_user: User = Depends(get_current_user),
+    industry_slug: str = Query(default=""),
+    status: str = Query(default=""),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+):
+    """List leads with optional filtering by status and industry."""
+    try:
+        from server.models import SessionLocal
+        from server.models.task import TaskQueue
+        db = SessionLocal()
+    except Exception:
+        return {"leads": [], "total": 0}
+
+    try:
+        query = db.query(TaskQueue)
+        if industry_slug:
+            query = query.filter(TaskQueue.industry_slug == industry_slug)
+        if status:
+            query = query.filter(TaskQueue.status == status)
+
+        total = query.count()
+        rows = query.order_by(TaskQueue.fetched_at.desc()).limit(limit).offset(offset).all()
+
+        leads = []
+        for r in rows:
+            d = {c.name: getattr(r, c.name) for c in TaskQueue.__table__.columns}
+            leads.append(_lead_from_row(d))
+    finally:
+        db.close()
+
+    return {"leads": leads, "total": total, "limit": limit, "offset": offset}
+
+
+@router.get("/stats")
+def lead_stats(
+    current_user: User = Depends(get_current_user),
+    industry_slug: str = Query(default=""),
+):
+    """Get lead pool statistics by status."""
+    try:
+        from server.services.task_stats import queue_stats
+        stats = queue_stats(industry_slug) if industry_slug else queue_stats()
+        return {
+            "total": stats.get("total", 0),
+            "pending": stats.get("pending", 0),
+            "claimed": stats.get("claimed", 0),
+            "done": stats.get("done", 0),
+            "failed": stats.get("failed", 0),
+        }
+    except Exception:
+        return {"total": 0, "pending": 0, "claimed": 0, "done": 0, "failed": 0}
+
+
+@router.post("/retry-failed")
+def retry_failed_leads(
+    current_user: User = Depends(get_current_user),
+    industry_slug: str = Query(default=""),
+):
+    """Reset all failed leads in an industry back to pending for retry."""
+    try:
+        from server.models import SessionLocal
+        from server.models.task import TaskQueue
+        db = SessionLocal()
+    except Exception:
+        raise HTTPException(status_code=500, detail="Queue unavailable")
+
+    try:
+        query = db.query(TaskQueue).filter(TaskQueue.status == 'failed')
+        if industry_slug:
+            query = query.filter(TaskQueue.industry_slug == industry_slug)
+        n = query.update({
+            TaskQueue.status: 'pending',
+            TaskQueue.consumer_id: None,
+            TaskQueue.claim_token: None,
+            TaskQueue.claimed_at: None,
+            TaskQueue.error: ''
+        })
+        db.commit()
+        return {"ok": True, "retried": n}
+    finally:
+        db.close()
+
+
+@router.post("/export")
+def export_leads(
+    req: LeadExportRequest,
+    current_user = Depends(get_current_user),
+):
+    """Export leads as CSV or XLSX."""
+    from server.models import SessionLocal
+    from server.models.task import TaskQueue
+
+    db = SessionLocal()
+    try:
+        query = db.query(TaskQueue).filter(
+            TaskQueue.industry_slug == req.industry_slug,
+            TaskQueue.owner_user_id == current_user.id,
+        )
+        if req.status:
+            query = query.filter(TaskQueue.status == req.status)
+
+        total = query.count()
+        if total > req.limit:
+            raise HTTPException(
+                status_code=400,
+                detail=f"结果 {total} 条超过限制 {req.limit}，请缩小筛选范围",
+            )
+
+        rows = query.order_by(TaskQueue.fetched_at.desc()).limit(req.limit).offset(0).all()
+        fields = req.fields or DEFAULT_EXPORT_FIELDS
+
+        lead_rows = []
+        for r in rows:
+            d = {c.name: getattr(r, c.name) for c in TaskQueue.__table__.columns}
+            d["matched_categories"] = d.get("matched_categories", "")
+            lead_rows.append(d)
+
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        filename = f"leads_{req.industry_slug}_{timestamp}"
+
+        if req.format == "csv":
+            return StreamingResponse(
+                generate_csv(lead_rows, fields=fields),
+                media_type="text/csv; charset=utf-8-sig",
+                headers={"Content-Disposition": f"attachment; filename={filename}.csv"},
+            )
+        elif req.format == "xlsx":
+            buffer = generate_xlsx(lead_rows, fields=fields)
+            return StreamingResponse(
+                buffer,
+                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                headers={"Content-Disposition": f"attachment; filename={filename}.xlsx"},
+            )
+        else:
+            raise HTTPException(status_code=400, detail="format 必须是 csv 或 xlsx")
+    finally:
+        db.close()
