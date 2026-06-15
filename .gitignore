@@ -257,6 +257,8 @@ tree.md
 .do
 /plans
 plans/
+!docs/superpowers/plans/
+!docs/superpowers/plans/**
 
 # Codeium
 .codeiumignore
