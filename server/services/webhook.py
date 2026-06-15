@@ -37,9 +37,14 @@ def push_leads_to_webhook(
     leads: list[dict[str, Any]],
     timeout: float = 10.0,
 ) -> dict:
-    """POST leads to external webhook URL. Returns result dict for logging."""
+    """POST leads to external webhook URL. Returns result dict for logging.
+
+    NOTE: This function performs a synchronous blocking HTTP request.
+    Only call it from synchronous code paths (e.g. sync FastAPI routes or
+    background threads). Do not call directly from async handlers.
+    """
     if not webhook_url:
-        return {"ok": False, "error": "webhook_url empty"}
+        return {"ok": False, "status_code": None, "response_preview": "", "error": "webhook_url empty"}
 
     payload = WebhookPayload(
         industry_slug=industry_slug,
@@ -58,11 +63,15 @@ def push_leads_to_webhook(
             "ok": 200 <= resp.status_code < 300,
             "status_code": resp.status_code,
             "response_preview": resp.text[:500],
+            "error": "",
         }
         if not result["ok"]:
             result["error"] = f"webhook returned {resp.status_code}"
         log.info("Webhook push to %s: %s", webhook_url, result)
         return result
+    except httpx.HTTPError as e:
+        log.warning("Webhook push HTTP error: %s", e)
+        return {"ok": False, "status_code": None, "response_preview": "", "error": str(e)[:500]}
     except Exception as e:
-        log.warning("Webhook push failed: %s", e)
-        return {"ok": False, "error": str(e)[:500]}
+        log.exception("Webhook push unexpected error: %s", e)
+        return {"ok": False, "status_code": None, "response_preview": "", "error": str(e)[:500]}
