@@ -413,6 +413,12 @@
                     <button id="task-retry-all-btn" onclick="retryAllFailedTasks()" class="hidden px-3 py-1.5 rounded-lg border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/10 text-xs font-semibold">
                         一键重发失败线索
                     </button>
+                    <button onclick="openExportModal('xlsx')" class="px-3 py-1.5 rounded-lg border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10 text-xs font-semibold">
+                        导出 Excel
+                    </button>
+                    <button onclick="openExportModal('csv')" class="px-3 py-1.5 rounded-lg border border-slate-500/30 text-slate-300 hover:bg-slate-500/10 text-xs font-semibold">
+                        导出 CSV
+                    </button>
                 </div>
             </div>
 
@@ -803,6 +809,42 @@
         </div>
     </div>
 
+    <!-- Export Modal -->
+    <div id="modal-export" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+        <div class="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl">
+            <div class="p-5 border-b border-slate-800 flex justify-between items-center">
+                <h3 class="font-bold text-lg font-display text-slate-100">导出线索</h3>
+                <button onclick="closeExportModal()" class="text-slate-500 hover:text-slate-300">✕</button>
+            </div>
+            <div class="p-5 space-y-4">
+                <p class="text-xs text-slate-400">将导出当前筛选条件下的线索，最多 5000 条。</p>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">格式</label>
+                    <select id="export-format-select" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200">
+                        <option value="xlsx">Excel (.xlsx)</option>
+                        <option value="csv">CSV (.csv)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-300 mb-1">状态</label>
+                    <select id="export-status-select" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200">
+                        <option value="">全部</option>
+                        <option value="pending">待处理</option>
+                        <option value="done">已发送</option>
+                        <option value="failed">失败</option>
+                    </select>
+                </div>
+                <div id="export-loading" class="hidden text-center py-2">
+                    <span class="text-xs text-cyan-400">正在生成文件...</span>
+                </div>
+            </div>
+            <div class="p-5 border-t border-slate-800 flex justify-end gap-3">
+                <button onclick="closeExportModal()" class="px-4 py-2 rounded-lg border border-slate-700 text-slate-300 text-xs hover:bg-slate-800">取消</button>
+                <button onclick="confirmExportLeads()" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold">确认导出</button>
+            </div>
+        </div>
+    </div>
+
     <!-- APP LOGIC (Vanilla JS SPA Engine) -->
     <script>
         // API Base configuration
@@ -838,9 +880,66 @@
             }
         }
 
-        // Stub for compliance-mode export modal (full implementation in Task 9)
         function openExportModal(defaultFormat) {
-            console.log('Export modal will be implemented in Task 9, format:', defaultFormat);
+            const modal = document.getElementById('modal-export');
+            const formatSelect = document.getElementById('export-format-select');
+            if (defaultFormat) {
+                formatSelect.value = defaultFormat;
+            }
+            modal.classList.replace('hidden', 'flex');
+        }
+
+        function closeExportModal() {
+            document.getElementById('modal-export').classList.replace('flex', 'hidden');
+            document.getElementById('export-loading').classList.add('hidden');
+        }
+
+        async function confirmExportLeads() {
+            const industryId = document.getElementById('task-filter-industry').value;
+            if (!industryId) {
+                showToast('请先选择项目', 'warning');
+                return;
+            }
+            const format = document.getElementById('export-format-select').value;
+            const status = document.getElementById('export-status-select').value;
+            document.getElementById('export-loading').classList.remove('hidden');
+
+            try {
+                const token = localStorage.getItem('thunder_token') || '';
+                const resp = await fetch('/api/leads/export', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': token ? `Bearer ${token}` : '',
+                    },
+                    body: JSON.stringify({
+                        industry_slug: industryId,
+                        format: format,
+                        status: status || undefined,
+                    }),
+                });
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    throw new Error(err.detail || '导出失败');
+                }
+                const blob = await resp.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                const disposition = resp.headers.get('content-disposition') || '';
+                const filenameMatch = disposition.match(/filename="?([^"]+)"?/);
+                a.download = filenameMatch ? filenameMatch[1] : `leads.${format}`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                window.URL.revokeObjectURL(url);
+                showToast('导出成功', 'success');
+                closeExportModal();
+            } catch (e) {
+                showToast(e.message || '导出失败', 'error');
+            } finally {
+                document.getElementById('export-loading').classList.add('hidden');
+            }
         }
 
         // Toast Helper
