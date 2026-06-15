@@ -596,8 +596,9 @@
                             </div>
                         </div>
                         <div>
-                            <label class="block text-xs font-semibold text-slate-400 mb-1">匹配关键词 (多个使用英文逗号分隔)</label>
-                            <textarea id="industry-keywords" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 text-slate-200 h-16" placeholder="如：当兵攻略,入伍条件,征兵时间"></textarea>
+                            <label class="block text-xs font-semibold text-slate-400 mb-1">匹配关键词 (回车、逗号、Tab 或失焦添加)</label>
+                            <input type="hidden" id="industry-keywords" value="[]">
+                            <div id="industry-keywords-tags"></div>
                         </div>
                         <div>
                             <label class="block text-xs font-semibold text-slate-400 mb-1">对标同行抖音号（高优截流，选填，逗号分隔）</label>
@@ -855,6 +856,7 @@
         let token = localStorage.getItem('thunder_token') || '';
         let currentUser = null;
         let activeJobPolls = {}; // job_id -> timer
+        let industryKeywordsTagInput = null;
 
         function escapeHtml(value) {
             return String(value ?? '').replace(/[&<>"']/g, (ch) => ({
@@ -864,6 +866,130 @@
                 '"': '&quot;',
                 "'": '&#39;'
             }[ch]));
+        }
+
+        /**
+         * Reusable tag input component.
+         * Renders a hidden input with JSON.stringify(tags) for form submission.
+         */
+        function createTagInput(containerId, hiddenInputId, initialTags = []) {
+            const container = document.getElementById(containerId);
+            const hiddenInput = document.getElementById(hiddenInputId);
+            if (!container || !hiddenInput) return null;
+
+            // Reuse existing instance to avoid duplicate event listeners.
+            if (container._tagInputApi) {
+                container._tagInputApi.setTags(initialTags);
+                return container._tagInputApi;
+            }
+
+            let tags = [...new Set((initialTags || []).map(t => String(t).trim()).filter(t => t))];
+
+            function sync() {
+                hiddenInput.value = JSON.stringify(tags);
+            }
+
+            function render() {
+                container.innerHTML = '';
+                const wrapper = document.createElement('div');
+                wrapper.className = 'flex flex-wrap gap-1.5 items-center w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 focus-within:border-cyan-500 focus-within:ring-1 focus-within:ring-cyan-500 transition-all cursor-text min-h-[36px]';
+
+                tags.forEach(tag => {
+                    const pill = document.createElement('span');
+                    pill.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-xs';
+                    pill.innerHTML = `${escapeHtml(tag)}<button type="button" class="tag-remove hover:text-cyan-100 leading-none ml-0.5" title="移除">×</button>`;
+                    pill.querySelector('.tag-remove').onclick = (e) => {
+                        e.stopPropagation();
+                        removeTag(tag);
+                    };
+                    wrapper.appendChild(pill);
+                });
+
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'tag-input-field flex-1 min-w-[80px] bg-transparent border-none outline-none text-xs text-slate-200 placeholder-slate-600 py-1';
+                input.placeholder = tags.length ? '' : '输入后按回车、逗号或 Tab';
+                wrapper.appendChild(input);
+                container.appendChild(wrapper);
+                sync();
+            }
+
+            function addTag(raw) {
+                const values = String(raw || '').split(/[,，;；\n]+/).map(v => v.trim()).filter(v => v);
+                let changed = false;
+                values.forEach(val => {
+                    if (!tags.includes(val)) {
+                        tags.push(val);
+                        changed = true;
+                    }
+                });
+                if (changed) render();
+                return changed;
+            }
+
+            function removeTag(tag) {
+                const before = tags.length;
+                tags = tags.filter(t => t !== tag);
+                if (tags.length !== before) render();
+            }
+
+            function setTags(newTags) {
+                tags = [...new Set((newTags || []).map(t => String(t).trim()).filter(t => t))];
+                render();
+            }
+
+            function getTags() {
+                return [...tags];
+            }
+
+            container.addEventListener('click', (e) => {
+                const input = container.querySelector('.tag-input-field');
+                if (input && e.target !== input) input.focus();
+            });
+
+            container.addEventListener('keydown', (e) => {
+                const input = e.target;
+                if (!input || !input.classList.contains('tag-input-field')) return;
+                if (e.isComposing) return; // let IME composition finish
+
+                if (e.key === 'Enter' || e.key === 'Tab') {
+                    e.preventDefault();
+                    addTag(input.value);
+                    input.value = '';
+                } else if (e.key === ',') {
+                    e.preventDefault();
+                    addTag(input.value);
+                    input.value = '';
+                } else if (e.key === 'Backspace' && input.value === '' && tags.length > 0) {
+                    e.preventDefault();
+                    tags.pop();
+                    render();
+                    const newInput = container.querySelector('.tag-input-field');
+                    if (newInput) newInput.focus();
+                }
+            });
+
+            container.addEventListener('paste', (e) => {
+                const input = e.target;
+                if (!input || !input.classList.contains('tag-input-field')) return;
+                e.preventDefault();
+                const pasted = (e.clipboardData || window.clipboardData).getData('text');
+                addTag(pasted);
+            });
+
+            container.addEventListener('blur', (e) => {
+                const input = e.target;
+                if (!input || !input.classList.contains('tag-input-field')) return;
+                if (input.value.trim()) {
+                    addTag(input.value);
+                    input.value = '';
+                }
+            }, true);
+
+            render();
+            const api = { setTags, getTags, addTag, removeTag };
+            container._tagInputApi = api;
+            return api;
         }
 
         function formatDateTime(value) {
@@ -1823,7 +1949,8 @@
                 document.getElementById('industry-name').value = ind.name;
                 document.getElementById('industry-slug').value = ind.slug;
                 document.getElementById('industry-slug').disabled = true; // slug locked
-                document.getElementById('industry-keywords').value = ind.keywords.join(',');
+                document.getElementById('industry-keywords').value = JSON.stringify(ind.keywords || []);
+                industryKeywordsTagInput = createTagInput('industry-keywords-tags', 'industry-keywords', ind.keywords || []);
                 document.getElementById('target-users').value = (ind.target_users || []).join(',');
                 document.getElementById('industry-reply-tone').value = ind.reply_tone;
                 document.getElementById('industry-reply-style').value = ind.reply_style;
@@ -1905,6 +2032,8 @@
             document.getElementById('industry-id').value = '';
             document.getElementById('industry-slug').disabled = false;
             document.getElementById('industry-categories').value = '[]';
+            document.getElementById('industry-keywords').value = '[]';
+            industryKeywordsTagInput = createTagInput('industry-keywords-tags', 'industry-keywords', []);
             document.getElementById('industry-ai-desc').value = '';
             document.getElementById('industry-compliance-mode').checked = false;
             const switchDiv = document.getElementById('industry-compliance-mode').nextElementSibling;
@@ -2035,7 +2164,12 @@
                     }
 
                     if (res.keywords && Array.isArray(res.keywords)) {
-                        document.getElementById('industry-keywords').value = res.keywords.join(',');
+                        document.getElementById('industry-keywords').value = JSON.stringify(res.keywords);
+                        if (industryKeywordsTagInput) {
+                            industryKeywordsTagInput.setTags(res.keywords);
+                        } else {
+                            industryKeywordsTagInput = createTagInput('industry-keywords-tags', 'industry-keywords', res.keywords);
+                        }
                     }
 
                     document.getElementById('industry-reply-tone').value = res.reply_tone || '';
@@ -2069,9 +2203,16 @@
         document.getElementById('form-industry').onsubmit = async (e) => {
             e.preventDefault();
             const id = document.getElementById('industry-id').value;
-            const keywordsRaw = document.getElementById('industry-keywords').value;
-            const keywords = keywordsRaw.split(',').map(k => k.trim()).filter(k => k);
-            
+            let keywords = [];
+            try {
+                keywords = JSON.parse(document.getElementById('industry-keywords').value || '[]');
+            } catch (err) {}
+            if (!Array.isArray(keywords)) keywords = [];
+            if (keywords.length === 0) {
+                showToast('请至少添加一个匹配关键词！', 'warning');
+                return;
+            }
+
             const targetUsersRaw = document.getElementById('target-users').value;
             const targetUsers = [...new Set(targetUsersRaw.split(',').map(u => u.trim()).filter(u => u))];
             
