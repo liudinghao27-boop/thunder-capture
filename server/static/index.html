@@ -873,6 +873,31 @@
         </div>
     </div>
 
+    <!-- Onboarding Wizard Modal -->
+    <div id="modal-onboarding" role="dialog" aria-modal="true" aria-labelledby="onboarding-title" aria-describedby="onboarding-content" class="fixed inset-0 z-[60] hidden items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+        <div class="w-full max-w-md rounded-2xl glass-panel shadow-2xl relative flex flex-col overflow-hidden" tabindex="-1" id="onboarding-panel">
+            <div class="px-6 pt-6 pb-4">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 id="onboarding-title" class="font-bold text-lg font-display text-slate-100">欢迎来到雷霆捕获系统</h3>
+                    <span id="onboarding-step-counter" class="text-xs font-semibold text-slate-500 font-display">1/4</span>
+                </div>
+                <div id="onboarding-dots" class="flex items-center justify-center gap-2" aria-hidden="true">
+                    <!-- Dots rendered by JS -->
+                </div>
+            </div>
+            <div id="onboarding-content" class="px-6 pb-6 text-sm text-slate-300 leading-relaxed min-h-[120px]" aria-live="polite">
+                <!-- Content rendered by JS -->
+            </div>
+            <div class="flex items-center justify-between gap-3 px-6 py-4 bg-slate-950/80 border-t border-slate-900">
+                <button type="button" onclick="skipOnboarding()" class="px-4 py-2 text-xs text-slate-400 hover:text-slate-200 font-semibold transition-colors">跳过</button>
+                <div class="flex items-center gap-3">
+                    <button type="button" id="onboarding-prev-btn" onclick="prevOnboardingStep()" class="hidden px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 font-semibold rounded-lg transition-colors">上一步</button>
+                    <button type="button" id="onboarding-next-btn" onclick="nextOnboardingStep()" class="px-4 py-2 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-slate-950 font-bold font-display text-xs rounded-lg transition-all shadow-lg shadow-cyan-500/10 hover:shadow-cyan-400/20">下一步</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- APP LOGIC (Vanilla JS SPA Engine) -->
     <script>
         // API Base configuration
@@ -1301,6 +1326,7 @@
                 // Load view specific data
                 if (subview === 'overview') {
                     await loadOverviewData();
+                    startOnboarding();
                 } else if (subview === 'industries') {
                     await loadIndustriesView();
                 } else if (subview === 'devices') {
@@ -2932,6 +2958,134 @@
             };
         }
 
+
+        // --- ONBOARDING WIZARD ---
+        const ONBOARDING_STEPS = [
+            {
+                title: '欢迎来到雷霆捕获系统',
+                body: '雷霆捕获系统帮助您在抖音、快手、小红书等平台自动采集高意向评论并批量发送私信。首次使用只需完成 3 个基础配置，即可开始获客。',
+                action: '下一步',
+                actionType: 'next'
+            },
+            {
+                title: '配置 LLM API Key',
+                body: '系统使用大模型完成评论意向识别、情感分类和私信文案生成。请先至少配置 DeepSeek、智谱 GLM 或 OpenAI 中的一个 API Key。',
+                action: '去配置',
+                actionType: 'navigate-settings'
+            },
+            {
+                title: '连接 Android 设备',
+                body: '私信发送依赖真实 Android 设备或云手机。请确保设备已通过 ADB 连接，并在“设备准备”页面完成录入和检测。',
+                action: '去添加',
+                actionType: 'navigate-devices'
+            },
+            {
+                title: '创建首个获客项目',
+                body: '项目是获客的基础单元。配置目标平台、关键词、对标账号和回复话术后，即可开始采集和发送任务。',
+                action: '去创建',
+                actionType: 'create-industry'
+            }
+        ];
+
+        let onboardingCurrentStep = 0;
+
+        function startOnboarding() {
+            if (localStorage.getItem('thunder_onboarding_seen') === 'true') return;
+            // Guard against navigation that happened while overview data was loading.
+            if (router.currentSubview !== 'overview') return;
+            onboardingCurrentStep = 0;
+            const modal = document.getElementById('modal-onboarding');
+            const panel = document.getElementById('onboarding-panel');
+            if (modal) {
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+                renderOnboardingStep();
+                if (panel) panel.focus();
+            }
+        }
+
+        function hideOnboarding() {
+            const modal = document.getElementById('modal-onboarding');
+            if (modal) {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }
+        }
+
+        function completeOnboarding() {
+            localStorage.setItem('thunder_onboarding_seen', 'true');
+            hideOnboarding();
+        }
+
+        function skipOnboarding() {
+            completeOnboarding();
+        }
+
+        document.addEventListener('keydown', (e) => {
+            const modal = document.getElementById('modal-onboarding');
+            if (modal && !modal.classList.contains('hidden') && e.key === 'Escape') {
+                e.preventDefault();
+                skipOnboarding();
+            }
+        });
+
+        function renderOnboardingStep() {
+            const step = ONBOARDING_STEPS[onboardingCurrentStep];
+            const title = document.getElementById('onboarding-title');
+            const counter = document.getElementById('onboarding-step-counter');
+            const content = document.getElementById('onboarding-content');
+            const dots = document.getElementById('onboarding-dots');
+            const nextBtn = document.getElementById('onboarding-next-btn');
+            const prevBtn = document.getElementById('onboarding-prev-btn');
+
+            if (!step || !title || !content || !nextBtn) return;
+
+            title.innerText = step.title;
+            counter.innerText = `${onboardingCurrentStep + 1}/${ONBOARDING_STEPS.length}`;
+            content.innerHTML = `<p>${escapeHtml(step.body)}</p>`;
+
+            if (dots) {
+                dots.innerHTML = ONBOARDING_STEPS.map((_, idx) =>
+                    `<span class="w-2 h-2 rounded-full transition-colors ${idx === onboardingCurrentStep ? 'bg-cyan-400' : 'bg-slate-600'}"></span>`
+                ).join('');
+            }
+
+            prevBtn.classList.toggle('hidden', onboardingCurrentStep === 0);
+            nextBtn.innerText = step.action;
+        }
+
+        function nextOnboardingStep() {
+            const step = ONBOARDING_STEPS[onboardingCurrentStep];
+            if (!step) return;
+
+            if (step.actionType === 'navigate-settings') {
+                completeOnboarding();
+                router.navigate('settings');
+                return;
+            } else if (step.actionType === 'navigate-devices') {
+                completeOnboarding();
+                router.navigate('devices');
+                return;
+            } else if (step.actionType === 'create-industry') {
+                completeOnboarding();
+                showCreateIndustryModal();
+                return;
+            }
+
+            if (onboardingCurrentStep < ONBOARDING_STEPS.length - 1) {
+                onboardingCurrentStep++;
+                renderOnboardingStep();
+            } else {
+                completeOnboarding();
+            }
+        }
+
+        function prevOnboardingStep() {
+            if (onboardingCurrentStep > 0) {
+                onboardingCurrentStep--;
+                renderOnboardingStep();
+            }
+        }
 
         // --- ENTRY POINT ---
         window.onload = () => {
