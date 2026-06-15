@@ -1,7 +1,9 @@
 """Industry management routes."""
 
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 
@@ -81,7 +83,6 @@ def _matrix_capacity(ind: Industry, db: Session, user_id: str) -> dict:
 
 
 import os
-import re
 import json_repair
 
 SYSTEM_PROMPT = """你是一个专业的互联网精准营销专家和获客配置专家。请根据用户输入的“业务描述”（比如他是做什么的、目标客户群是谁），自动分析并生成一套行业匹配的配置。
@@ -814,10 +815,22 @@ def get_industry_bloggers(
     return bloggers
 
 
+WEBHOOK_URL_RE = re.compile(r"^https?://\S+$")
+
+
 class ComplianceConfigUpdate(BaseModel):
     compliance_mode: bool | None = None
     webhook_url: str | None = None
     auto_export_enabled: bool | None = None
+
+    @field_validator("webhook_url")
+    @classmethod
+    def _validate_webhook_url(cls, value: str | None) -> str | None:
+        if value is None or value == "":
+            return value
+        if not WEBHOOK_URL_RE.match(value):
+            raise ValueError("Webhook URL 必须是 http 或 https 链接")
+        return value
 
 
 @router.put("/{industry_id}/compliance-config", response_model=IndustryOut)

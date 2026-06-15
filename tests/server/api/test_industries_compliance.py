@@ -56,9 +56,13 @@ def override_auth(monkeypatch):
 
 @pytest.fixture
 def fake_industry(monkeypatch):
+    instance = FakeIndustry()
+
     def _get_owned(industry_id, user, db):
-        return FakeIndustry()
+        return instance
+
     monkeypatch.setattr(industries_module, "_get_owned_industry", _get_owned)
+    return instance
 
 
 @pytest.fixture
@@ -107,6 +111,14 @@ def test_update_compliance_config(fake_industry, fake_db):
     assert data["auto_export_enabled"] is True
 
 
+def test_update_compliance_config_rejects_invalid_webhook_url(fake_industry, fake_db):
+    resp = client.put(
+        "/api/industries/ind-1/compliance-config",
+        json={"webhook_url": "not-a-url"},
+    )
+    assert resp.status_code == 422
+
+
 def test_webhook_test_without_url_returns_400(fake_industry, fake_db):
     resp = client.post("/api/industries/ind-1/webhook-test")
     assert resp.status_code == 400
@@ -114,7 +126,7 @@ def test_webhook_test_without_url_returns_400(fake_industry, fake_db):
 
 
 def test_webhook_test_with_url(fake_industry, fake_db, monkeypatch):
-    FakeIndustry.webhook_url = "https://example.com/hook"
+    monkeypatch.setattr(fake_industry, "webhook_url", "https://example.com/hook")
     calls = []
 
     def fake_push(*, webhook_url, industry_slug, industry_name, leads):
