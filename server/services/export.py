@@ -2,6 +2,7 @@
 
 import csv
 import io
+import json
 from typing import Iterable
 
 from openpyxl import Workbook
@@ -54,25 +55,30 @@ def normalize_export_row(row: dict, fields: list[str]) -> dict:
         value = row.get(field)
         if value is None:
             value = ""
-        result[field] = str(value)
+        elif isinstance(value, (list, tuple, set, dict)):
+            value = json.dumps(value, ensure_ascii=False, default=str)
+        else:
+            value = str(value)
+        result[field] = value
     return result
+
+
+def _write_csv_rows(rows: Iterable[dict], fields: list[str]) -> Iterable[str]:
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=fields)
+    writer.writerow({f: FIELD_TITLES.get(f, f) for f in fields})
+    yield output.getvalue()
+    for row in rows:
+        output.seek(0)
+        output.truncate(0)
+        writer.writerow(normalize_export_row(row, fields))
+        yield output.getvalue()
 
 
 def generate_csv(rows: Iterable[dict], fields: list[str] | None = None) -> Iterable[str]:
     """Yield CSV lines as strings (StreamingResponse compatible)."""
     fields = fields or DEFAULT_EXPORT_FIELDS
-    output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=fields)
-    writer.writerow({f: FIELD_TITLES.get(f, f) for f in fields})
-    yield output.getvalue()
-    output.close()
-
-    for row in rows:
-        output = io.StringIO()
-        writer = csv.DictWriter(output, fieldnames=fields)
-        writer.writerow(normalize_export_row(row, fields))
-        yield output.getvalue()
-        output.close()
+    return _write_csv_rows(rows, fields)
 
 
 def generate_xlsx(rows: Iterable[dict], fields: list[str] | None = None) -> io.BytesIO:
