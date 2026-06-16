@@ -350,6 +350,7 @@ data/ADBKeyboard.apk
 data/*.txt
 data/*.backup*
 data/backup/
+data/.thunder_secret_key
 logs/
 *.log
 

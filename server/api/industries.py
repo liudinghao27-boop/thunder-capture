@@ -398,7 +398,12 @@ def create_industry(
         Industry.user_id == current_user.id, Industry.slug == data.slug
     ).first():
         raise HTTPException(status_code=400, detail="Slug already exists")
-    industry = Industry(user_id=current_user.id, **data.model_dump())
+    payload = data.model_dump()
+    if payload.get("reply_variants") is not None:
+        payload["reply_variants"] = [
+            normalize_variant(v) for v in payload["reply_variants"] if isinstance(v, dict)
+        ]
+    industry = Industry(user_id=current_user.id, **payload)
     db.add(industry)
     db.commit()
     db.refresh(industry)
@@ -484,6 +489,8 @@ def update_industry(
 ):
     ind = _get_owned_industry(industry_id, current_user, db)
     for key, val in data.model_dump(exclude_unset=True).items():
+        if key == "reply_variants" and val is not None:
+            val = [normalize_variant(v) for v in val if isinstance(v, dict)]
         setattr(ind, key, val)
     db.commit()
     db.refresh(ind)

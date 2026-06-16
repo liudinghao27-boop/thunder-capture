@@ -212,3 +212,39 @@ def test_abtest_results_rejects_invalid_days(db_session):
         assert resp.status_code == 422
         resp = client.get("/api/industries/ind-1/abtest-results?days=366")
         assert resp.status_code == 422
+
+
+def test_create_industry_normalizes_reply_variants(db_session):
+    with _auth_client(db_session) as client:
+        resp = client.post(
+            "/api/industries",
+            json={
+                "name": "Variant at Create",
+                "slug": "variant-create",
+                "reply_variants": [{"name": "Create Variant", "weight": 2}],
+            },
+        )
+        assert resp.status_code == 201
+        data = resp.json()
+        assert len(data["reply_variants"]) == 1
+        variant = data["reply_variants"][0]
+        assert variant["name"] == "Create Variant"
+        assert variant["weight"] == 2
+        assert variant.get("id", "").startswith("v-")
+        assert variant.get("enabled") is True
+
+
+def test_update_industry_normalizes_reply_variants(db_session):
+    with _auth_client(db_session) as client:
+        resp = client.put(
+            "/api/industries/ind-1",
+            json={"reply_variants": [{"name": "Update Variant", "weight": 3}]},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["reply_variants"]) == 1
+        variant = data["reply_variants"][0]
+        assert variant["name"] == "Update Variant"
+        assert variant["weight"] == 3
+        assert variant.get("id", "").startswith("v-")
+        assert variant.get("enabled") is True
