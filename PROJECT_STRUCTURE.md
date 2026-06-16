@@ -155,6 +155,16 @@ shemeihuoke/
 - [x] `send_dm_task` 已接入 `DeviceWorker.run()`
 - [ ] 启动 Celery Worker: `celery -A adapters.celery.app worker -l info -Q collect,classify,send` (需 Docker 运行)
 
+### P3: 定时发送 + 效果追踪 ✅ COMPLETE
+- [x] 发送时段门控 (`core/strategy/policy.py`)
+- [x] 周末暂停 / 单日最大发送量
+- [x] Celery Beat 定时调度
+- [x] TaskQueue 效果状态扩展
+- [x] 手动标记已回复 / 已转化 API
+- [x] 效果统计 API
+- [x] 效果事件 Webhook
+- [x] 前端发送时段、线索效果列、指标卡片
+
 ### P4: Web 控制台 (已完整，非紧急)
 - [x] 6 页面 SPA (控制中心/项目/设备/线索/记录/设置)
 - [ ] 可选项: 分离前后端 → 独立 Vue/React 前端 + Vite
