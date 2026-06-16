@@ -90,29 +90,31 @@ python -m pytest tests/ -q
 
 ### 4.1 远程推送阻塞 🔴
 
-**原因**: GitHub 仓库 `https://github.com/liudinghao27-boop/thunder-capture.git` 存在，但远程仓库状态异常，推送时报 `remote: fatal: did not receive expected object af648e104fd9b26788a7c9a717bcc518a9b83559`。该对象不在本地历史中，可能是远程仓库缓存/索引损坏，或仓库初始化时包含未完整导入的对象。
+**根本原因**: 原 `feat/phase1-export-compliance` 分支基于 crawl4ai 的 `main` 历史，本地缺少 crawl4ai 的某个 parent 对象 `af648e104fd9b26788a7c9a717bcc518a9b83559`，导致无法推送完整历史。
 
 **已尝试**:
 - 修正 origin 为 `https://github.com/liudinghao27-boop/thunder-capture.git`
-- 普通 push / force-with-lease push / 推送到新分支名 → 均报同一对象缺失错误
-- `git gc --prune=now` 清理本地垃圾对象 → 问题依旧
-- `git ls-remote origin` 返回空（远程无可见 refs）
-- 已创建本地 git bundle 备份：`C:/Users/Administrator/thunder-capture-backup.bundle`（8.7 MB）
+- 普通 push / force push / 推送到新分支名 → 报对象缺失错误
+- `git gc --prune=now` 清理本地垃圾对象 → 无效
+- 重建 GitHub 空仓库后重试 → 仍因缺失 crawl4ai 对象失败
+- 重写历史：创建 `new-main` 分支，移除 crawl4ai parent，保留全部 Thunder Capture 提交 → 测试通过
+- 推送到 GitHub → 因 HTTPS 传输超时/中断失败（`RPC failed; curl 65 schannel: server closed abruptly` / `Command killed by timeout`）
+
+**当前备份**:
+- Git bundle（含完整历史）: `C:/Users/Administrator/thunder-capture-backup.bundle`（8.7 MB）
+- 源代码压缩包（排除 data/logs/deps/.git）: `C:/Users/Administrator/Desktop/shemeihuoke-source.tar.gz`（295 KB）
 
 **解决方案**:
-1. 在 GitHub 网页删除并重新创建空仓库 `thunder-capture`（不要初始化 README/License）。
-2. 然后推送：
+1. 在本地网络更稳定的环境（或你自己的电脑）执行：
    ```bash
    cd "C:/Users/Administrator/Desktop/shemeihuoke"
-   git push origin feat/phase1-export-compliance
+   git checkout new-main
+   git remote set-url origin https://github.com/liudinghao27-boop/thunder-capture.git
+   git push origin new-main:main
+   git push origin feat/phase1-export-compliance-new
    ```
-3. 如果仍失败，可从 bundle 恢复或联系 GitHub 支持。
-3. 如需合并到 main：
-   ```bash
-   git checkout main
-   git merge feat/phase1-export-compliance
-   git push origin main
-   ```
+2. 或配置 SSH key 后使用 SSH 协议重试。
+3. 如需手动上传，可直接使用 `shemeihuoke-source.tar.gz`。
 
 ### 4.2 下一步建议
 
