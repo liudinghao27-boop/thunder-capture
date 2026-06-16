@@ -61,7 +61,13 @@ class TaskQueue(Base):
     processed_at = Column(String(64))
     ai_reply = Column(Text, default="")
     error = Column(Text, default="")
-    
+
+    # Effect tracking
+    replied_at = Column(DateTime, nullable=True)
+    converted_at = Column(DateTime, nullable=True)
+    reply_text = Column(Text, default="")
+    conversion_value = Column(String(64), default="")
+
     # Douyin specific identifiers
     short_id = Column(String(128), default="")
     douyin_id = Column(String(128), default="")

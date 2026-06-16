@@ -162,3 +162,12 @@ def test_webhook_url_validator_accepts_empty_and_http():
 def test_webhook_url_validator_rejects_invalid():
     with pytest.raises(ValueError):
         IndustryCreate(name="测试", slug="test-ind", webhook_url="not-a-url")
+
+
+def test_task_queue_has_effect_columns():
+    from server.models.task import TaskQueue
+    t = TaskQueue(video_id="v1", comment_id="c1")
+    assert hasattr(t, "replied_at")
+    assert hasattr(t, "converted_at")
+    assert hasattr(t, "reply_text")
+    assert hasattr(t, "conversion_value")
