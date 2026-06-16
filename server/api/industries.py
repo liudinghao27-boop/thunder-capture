@@ -66,6 +66,7 @@ def _to_industry_config(industry: Industry):
         pause_weekends=bool(getattr(industry, "pause_weekends", False)),
         daily_send_max=int(getattr(industry, "daily_send_max", 0) or 0),
         effect_webhook_url=getattr(industry, "effect_webhook_url", "") or "",
+        reply_variants=list(getattr(industry, "reply_variants", []) or []),
     )
 
 

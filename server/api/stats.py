@@ -4,7 +4,7 @@ import os
 import shutil
 from datetime import datetime, timezone, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from server.auth import get_current_user
@@ -14,6 +14,7 @@ from server.models.job import Job
 from server.models.task import TaskQueue
 from server.models.user import User
 from server.secret_store import has_secret
+from server.services.analytics import aggregate_by_keyword, aggregate_by_device, query_task_rows
 from server.services.migrations import verify_matrix_schema
 from server.workers import (
     cancel_job,
@@ -71,6 +72,36 @@ def get_effect_stats(
         "converted": converted,
         "reply_rate": reply_rate,
         "conversion_rate": conversion_rate,
+    }
+
+
+@router.get("/stats/keywords")
+def get_keyword_stats(
+    industry_slug: str,
+    days: int = Query(7, ge=1, le=365),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    rows = query_task_rows(db, industry_slug, days, owner_user_id=current_user.id)
+    return {
+        "industry_slug": industry_slug,
+        "days": days,
+        "keywords": aggregate_by_keyword(industry_slug, rows),
+    }
+
+
+@router.get("/stats/devices")
+def get_device_stats(
+    industry_slug: str,
+    days: int = Query(7, ge=1, le=365),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    rows = query_task_rows(db, industry_slug, days, owner_user_id=current_user.id)
+    return {
+        "industry_slug": industry_slug,
+        "days": days,
+        "devices": aggregate_by_device(industry_slug, rows),
     }
 
 
