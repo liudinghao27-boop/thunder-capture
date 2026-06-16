@@ -81,6 +81,15 @@ shemeihuoke/
 │
 ├── logs/                         # 运行日志 (gitignored)
 │
+├── docs/                         # 项目文档中心
+│   ├── README.md                 #   文档索引与使用指南
+│   └── superpowers/              #   研发管理文档
+│       ├── specs/                #     设计规格说明书
+│       ├── plans/                #     实施计划
+│       ├── sops/                 #     标准操作流程/商业化路线图
+│       ├── audits/               #     代码审计报告
+│       └── archive/              #     归档文件（会话状态等）
+│
 ├── cli.py                        # CLI 入口 (collect/send/stats/run)
 ├── pyproject.toml                # 项目元数据 & 依赖声明
 ├── start_system.bat              # Windows 启动脚本

@@ -14,35 +14,54 @@ shemeihuoke/
 ├── config/                 # 系统与行业配置文件
 │   ├── system.yaml         # 全局系统配置 (API 密钥、注册设备、限流阀值)
 │   └── industries/         # 行业策略配置 (征兵咨询、高考志愿、装修获客等)
+├── docs/                   # 项目文档中心
+│   ├── README.md           #   文档索引与使用指南
+│   └── superpowers/        #   研发管理文档 (设计/计划/SOP/审计/归档)
 ├── server/                 # FastAPI 后台服务端 (设备管理、状态监控、安全过滤)
-│   ├── api/                # 路由接口 (设备心跳监控、行业管理、统计面板)
+│   ├── api/                # 路由接口 (auth/dashboard/agent/leads/industries/devices/jobs/stats)
 │   ├── models/             # SQLAlchemy 数据模型
 │   ├── schemas/            # Pydantic 请求/响应模型
-│   ├── services/           # 服务层组件 (LLM 客户端创建与缓存)
-│   ├── static/             # 后台单页控制台
+│   ├── services/           # 服务层组件 (LLM 客户端/任务统计/迁移/导出)
+│   ├── static/             # 后台单页控制台 (Vanilla JS + Tailwind)
 │   ├── middleware.py       # 安全控制中间件 (速率限制、安全头防护)
+│   ├── auth.py             # JWT 认证
 │   └── main.py             # 后端应用主启动入口
-├── engine/                 # 核心获客与发送控制引擎
-│   ├── collectors/         # 数据采集模块 (Playwright & Crawl4AI 采集器)
-│   │   ├── base.py         # 采集器基类与 Playwright 上下文初始化
-│   │   ├── douyin.py       # 抖音视频及评论并行安全抓取
-│   │   └── xiaohongshu.py  # 小红书博主增量与评论数据提取
-│   ├── queue.py            # 任务队列模块 (WAL 机制、指数退避冷却过滤)
-│   ├── sender.py           # 私信发送模块 (AutoGLM 手机模拟、智能话术生成)
-│   ├── checkpoint.py       # 断点续传管理器 (Windows 平台安全文件替换)
-│   ├── proxy.py            # 代理轮换模块 (线程安全代理切换)
-│   └── config.py           # 行业配置安全解析 (路径防穿越限制)
+├── core/                   # 核心获客与发送控制引擎
+│   ├── agent/              #   PhoneAgent 执行/感知/记忆/规划
+│   ├── classify.py         #   LLM 意图分类
+│   ├── collectors/         #   数据采集模块 (抖音/小红书)
+│   ├── device/             #   ADB 设备连接/心跳/监督
+│   ├── strategy/           #   风控/防封/波次/节流策略
+│   ├── task/               #   任务图编排/调度/Worker
+│   ├── vision/             #   截图/OCR/UI 树解析
+│   ├── proxy.py            #   代理轮换模块
+│   ├── discover.py         #   评论发现编排
+│   └── config.py           #   系统配置 & 行业配置解析
+├── adapters/               # 外部服务适配层
+│   ├── dify/               #   Dify AI 工作流客户端
+│   ├── postgres/           #   PostgreSQL 连接与 Alembic 迁移
+│   ├── celery/             #   Celery 任务队列 (采集/分类/发送)
+│   └── mediacrawler/       #   MediaCrawler 子进程封装
+├── deps/                   # 外部依赖源码 (统一管理)
+│   ├── MediaCrawler/       #   NanmiCoder/MediaCrawler
+│   ├── Open-AutoGLM/       #   THU/Open-AutoGLM
+│   └── crawl4ai/           #   Crawl4AI 网页抓取引擎
 ├── scripts/                # 系统运维辅助脚本
 │   ├── db/                 # 数据库维护、检查、迁移脚本
 │   ├── device/             # ADB/设备辅助脚本
 │   ├── diagnostics/        # 日志和运行状态诊断脚本
 │   └── smoke/              # API/LLM 快速验证脚本
-├── data/                   # 本地持久化数据与浏览器环境
+├── data/                   # 本地持久化数据与浏览器环境 (gitignored)
 │   ├── thunder.db          # 本地 SQLite WAL 数据库
 │   ├── checkpoints/        # 任务断点缓存
 │   └── ADBKeyboard.apk     # 自动化控制专用的 ADB 键盘服务
-├── Open-AutoGLM/           # UI 自动化组件 (提供 Android/iOS 设备连接支持)
-└── crawl4ai/               # 高效率 AI 网页抓取引擎 (本地扩展依赖)
+├── logs/                   # 运行日志 (gitignored)
+├── pyproject.toml          # 项目元数据 & 依赖声明
+├── start_system.bat        # Windows 启动脚本
+├── stop_system.bat         # Windows 停止脚本
+├── .env / .env.example     # 环境变量
+├── README.md
+└── PROJECT_STRUCTURE.md    # 详细项目结构说明
 ```
 
 ---
@@ -123,7 +142,22 @@ uvicorn server.main:app --host 0.0.0.0 --port 8000
 
 ## 🧪 自动化测试验证
 
-您可以运行以下测试脚本以验证异步心跳、冷却机制、代理池轮换及智能 Prompt 功能的正常工作：
+运行 pytest 验证核心业务逻辑、API 路由与适配器：
+
 ```bash
-python "C:/Users/Administrator/.gemini/antigravity/brain/1e844de7-6a73-467e-a9c2-c0a31c9ae1e4/scratch/verify_optimizations.py"
+python -m pytest tests/ -q
+```
+
+其他常用检查：
+
+```bash
+# 代码风格检查
+python -m ruff check server/ core/ tests/ adapters/ cli.py
+
+# 类型检查
+python -m mypy server/ core/ adapters/ cli.py --ignore-missing-imports
+
+# 数据库迁移验证
+THUNDER_DATABASE_URL=sqlite:///data/thunder.db alembic upgrade head
+THUNDER_DATABASE_URL=sqlite:///data/thunder.db alembic check
 ```
