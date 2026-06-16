@@ -1,19 +1,27 @@
 """Task queue statistics and funnel aggregations using SQLAlchemy."""
 
 import json
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from datetime import datetime, timezone
 
 from server.models import SessionLocal
 from server.models.task import TaskQueue, TargetBlogger
 
-def queue_stats(industry_slug: str = "") -> dict:
+def queue_stats(industry_slug: str = "", owner_user_id: str = "") -> dict:
     db = SessionLocal()
     try:
         query = db.query(TaskQueue.status, func.count(TaskQueue.id)).group_by(TaskQueue.status)
         if industry_slug:
             query = query.filter(TaskQueue.industry_slug == industry_slug)
-        
+        if owner_user_id:
+            query = query.filter(
+                or_(
+                    TaskQueue.owner_user_id == owner_user_id,
+                    TaskQueue.owner_user_id == "",
+                    TaskQueue.owner_user_id == None,
+                )
+            )
+
         stats = {status: count for status, count in query.all()}
         return {
             "total": sum(stats.values()),
@@ -25,20 +33,39 @@ def queue_stats(industry_slug: str = "") -> dict:
     finally:
         db.close()
 
-def funnel_stats(industry_slug: str = "") -> dict:
+
+def _owner_filter(model, owner_user_id: str):
+    """Build an OR filter for owner isolation (owner matches or unowned)."""
+    if not owner_user_id:
+        return None
+    column = getattr(model, "owner_user_id", None)
+    if column is None:
+        return None
+    return or_(
+        column == owner_user_id,
+        column == "",
+        column == None,
+    )
+
+
+def funnel_stats(industry_slug: str = "", owner_user_id: str = "") -> dict:
     db = SessionLocal()
     try:
         # 1. Monitored bloggers
         bloggers_query = db.query(func.count(TargetBlogger.sec_uid)).filter(TargetBlogger.status == "active")
         if industry_slug:
             bloggers_query = bloggers_query.filter(TargetBlogger.industry_slug == industry_slug)
+        if owner_user_id:
+            owner_filter = _owner_filter(TargetBlogger, owner_user_id)
+            if owner_filter is not None:
+                bloggers_query = bloggers_query.filter(owner_filter)
         monitored_bloggers = bloggers_query.scalar() or 0
 
         # 2. Total discovered/scraped videos (not strictly tracked in SQLAlchemy easily right now, mock or leave 0)
         discovered_videos = 0
 
         # 3. Queue stats for the rest
-        q_stats = queue_stats(industry_slug)
+        q_stats = queue_stats(industry_slug, owner_user_id=owner_user_id)
         total_leads = q_stats["total"]
         pending = q_stats["pending"]
         sent_success = q_stats["done"]
@@ -56,6 +83,7 @@ def funnel_stats(industry_slug: str = "") -> dict:
     finally:
         db.close()
 
+
 def replenishment_plan(
     industry_slug: str,
     *,
@@ -65,10 +93,12 @@ def replenishment_plan(
     global_daily_limit: int = 0,
     threshold_days: int = 1,
     source_limit: int = 5,
+    owner_user_id: str = "",
 ) -> dict:
     inv = inventory_stats(
         industry_slug, target_devices=target_devices, per_device_daily_limit=per_device_daily_limit,
-        inventory_days=inventory_days, global_daily_limit=global_daily_limit
+        inventory_days=inventory_days, global_daily_limit=global_daily_limit,
+        owner_user_id=owner_user_id,
     )
     daily_capacity = max(1, int(inv.get("daily_send_capacity") or 1))
     threshold_pending = daily_capacity * max(1, int(threshold_days or 1))
@@ -77,7 +107,7 @@ def replenishment_plan(
     pending_deficit = max(0, target_pending - available)
     threshold_deficit = max(0, threshold_pending - available)
     should_replenish = available < threshold_pending or pending_deficit > 0
-    recommended_sources = source_performance_stats(industry_slug, limit=source_limit)
+    recommended_sources = source_performance_stats(industry_slug, limit=source_limit, owner_user_id=owner_user_id)
     source_names = [
         item["source"] for item in recommended_sources
         if item.get("source") and item.get("source") != "unknown"
@@ -106,14 +136,16 @@ def replenishment_plan(
         ),
     }
 
+
 def inventory_stats(
     industry_slug: str,
     target_devices: int = 30,
     per_device_daily_limit: int = 15,
     inventory_days: int = 3,
     global_daily_limit: int = 0,
+    owner_user_id: str = "",
 ) -> dict:
-    stats = queue_stats(industry_slug)
+    stats = queue_stats(industry_slug, owner_user_id=owner_user_id)
     pending = int(stats.get("pending", 0))
     claimed = int(stats.get("claimed", 0))
     daily_capacity = max(0, int(target_devices)) * max(0, int(per_device_daily_limit))
@@ -134,6 +166,7 @@ def inventory_stats(
         "stock_days": stock_days,
         "ready": available >= target_pending,
     }
+
 
 def get_wave_state(consumer_id: str):
     from server.models.task import ConsumerState
@@ -158,7 +191,8 @@ def get_wave_state(consumer_id: str):
     finally:
         db.close()
 
-def get_bloggers(status: str = "active", industry_slug: str = "") -> list[dict]:
+
+def get_bloggers(status: str = "active", industry_slug: str = "", owner_user_id: str = "") -> list[dict]:
     db = SessionLocal()
     try:
         query = db.query(TargetBlogger)
@@ -166,7 +200,11 @@ def get_bloggers(status: str = "active", industry_slug: str = "") -> list[dict]:
             query = query.filter(TargetBlogger.status == status)
         if industry_slug:
             query = query.filter(TargetBlogger.industry_slug == industry_slug)
-        
+        if owner_user_id:
+            owner_filter = _owner_filter(TargetBlogger, owner_user_id)
+            if owner_filter is not None:
+                query = query.filter(owner_filter)
+
         return [
             {
                 "sec_uid": b.sec_uid,
@@ -183,11 +221,16 @@ def get_bloggers(status: str = "active", industry_slug: str = "") -> list[dict]:
         db.close()
 
 
-def keyword_funnel_stats(industry_slug: str, limit: int = 20) -> list[dict]:
+def keyword_funnel_stats(industry_slug: str, limit: int = 20, owner_user_id: str = "") -> list[dict]:
     db = SessionLocal()
     try:
-        rows = db.query(TaskQueue.source_keyword, TaskQueue.keyword, TaskQueue.status, TaskQueue.matched_categories)\
-            .filter(TaskQueue.industry_slug == industry_slug).all()
+        query = db.query(TaskQueue.source_keyword, TaskQueue.keyword, TaskQueue.status, TaskQueue.matched_categories)\
+            .filter(TaskQueue.industry_slug == industry_slug)
+        if owner_user_id:
+            owner_filter = _owner_filter(TaskQueue, owner_user_id)
+            if owner_filter is not None:
+                query = query.filter(owner_filter)
+        rows = query.all()
     finally:
         db.close()
 
@@ -234,11 +277,16 @@ def keyword_funnel_stats(industry_slug: str, limit: int = 20) -> list[dict]:
     return ranked[: max(1, int(limit))]
 
 
-def source_type_funnel_stats(industry_slug: str) -> list[dict]:
+def source_type_funnel_stats(industry_slug: str, owner_user_id: str = "") -> list[dict]:
     db = SessionLocal()
     try:
-        rows = db.query(TaskQueue.source_keyword, TaskQueue.status, TaskQueue.matched_categories)\
-            .filter(TaskQueue.industry_slug == industry_slug).all()
+        query = db.query(TaskQueue.source_keyword, TaskQueue.status, TaskQueue.matched_categories)\
+            .filter(TaskQueue.industry_slug == industry_slug)
+        if owner_user_id:
+            owner_filter = _owner_filter(TaskQueue, owner_user_id)
+            if owner_filter is not None:
+                query = query.filter(owner_filter)
+        rows = query.all()
     finally:
         db.close()
 
@@ -268,11 +316,16 @@ def source_type_funnel_stats(industry_slug: str) -> list[dict]:
     return [b for b in buckets.values() if b["total"] > 0]
 
 
-def blogger_source_stats(industry_slug: str) -> dict:
+def blogger_source_stats(industry_slug: str, owner_user_id: str = "") -> dict:
     db = SessionLocal()
     try:
-        rows = db.query(TargetBlogger.source_keyword, TargetBlogger.status)\
-            .filter(TargetBlogger.industry_slug == industry_slug).all()
+        query = db.query(TargetBlogger.source_keyword, TargetBlogger.status)\
+            .filter(TargetBlogger.industry_slug == industry_slug)
+        if owner_user_id:
+            owner_filter = _owner_filter(TargetBlogger, owner_user_id)
+            if owner_filter is not None:
+                query = query.filter(owner_filter)
+        rows = query.all()
     finally:
         db.close()
 
@@ -305,11 +358,16 @@ def _source_type(source: str) -> str:
     return "unknown"
 
 
-def source_performance_stats(industry_slug: str, limit: int = 20) -> list[dict]:
+def source_performance_stats(industry_slug: str, limit: int = 20, owner_user_id: str = "") -> list[dict]:
     db = SessionLocal()
     try:
-        rows = db.query(TaskQueue.source_keyword, TaskQueue.keyword, TaskQueue.status, TaskQueue.matched_categories)\
-            .filter(TaskQueue.industry_slug == industry_slug).all()
+        query = db.query(TaskQueue.source_keyword, TaskQueue.keyword, TaskQueue.status, TaskQueue.matched_categories)\
+            .filter(TaskQueue.industry_slug == industry_slug)
+        if owner_user_id:
+            owner_filter = _owner_filter(TaskQueue, owner_user_id)
+            if owner_filter is not None:
+                query = query.filter(owner_filter)
+        rows = query.all()
     finally:
         db.close()
 
@@ -378,20 +436,27 @@ def source_performance_stats(industry_slug: str, limit: int = 20) -> list[dict]:
     )
     return ranked[: max(1, int(limit))]
 
-def industry_daily_quota_state(industry_slug: str) -> dict:
+
+def industry_daily_quota_state(industry_slug: str, owner_user_id: str = "") -> dict:
     from server.models.task import IndustryDailyQuota
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     db = SessionLocal()
     try:
-        quota = db.query(IndustryDailyQuota).filter(
+        query = db.query(IndustryDailyQuota).filter(
             IndustryDailyQuota.industry_slug == industry_slug,
             IndustryDailyQuota.day == day
-        ).first()
+        )
+        if owner_user_id:
+            owner_filter = _owner_filter(IndustryDailyQuota, owner_user_id)
+            if owner_filter is not None:
+                query = query.filter(owner_filter)
+        quota = query.first()
         sent = quota.sent if quota else 0
         reserved = quota.reserved if quota else 0
         return {"industry_slug": industry_slug, "day": day, "sent": sent, "reserved": reserved}
     finally:
         db.close()
+
 
 def add_blogger(sec_uid: str, short_id: str, nickname: str, industry_slug: str, source_keyword: str = "", metadata: str = ""):
     from server.models import SessionLocal
@@ -402,48 +467,63 @@ def add_blogger(sec_uid: str, short_id: str, nickname: str, industry_slug: str, 
         b = db.query(TargetBlogger).filter(TargetBlogger.sec_uid == sec_uid, TargetBlogger.industry_slug == industry_slug).first()
         if not b:
             b = TargetBlogger(
-                sec_uid=sec_uid, short_id=short_id, nickname=nickname,
+                sec_uid=sec_uid, nickname=nickname,
                 industry_slug=industry_slug, source_keyword=source_keyword,
-                metadata_json=metadata, created_at=datetime.now(timezone.utc)
+                discovered_at=datetime.now(timezone.utc).isoformat()
             )
             db.add(b)
             db.commit()
     finally:
         db.close()
 
-def is_video_collected(video_id: str, sec_uid: str = "", within_hours: int = 48) -> bool:
+
+def _parse_dt(value) -> "datetime | None":
+    from datetime import datetime, timezone
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    try:
+        dt = datetime.fromisoformat(value)
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except Exception:
+        return None
+
+
+def is_video_collected(aweme_id: str, sec_uid: str = "", within_hours: int = 48) -> bool:
     from server.models import SessionLocal
     from server.models.task import CollectedVideo
     from datetime import datetime, timezone, timedelta
     db = SessionLocal()
     try:
-        query = db.query(CollectedVideo).filter(CollectedVideo.video_id == video_id)
+        query = db.query(CollectedVideo).filter(CollectedVideo.aweme_id == aweme_id)
         if sec_uid:
             query = query.filter(CollectedVideo.source_sec_uid == sec_uid)
         v = query.first()
-        if not v or not v.collected_at:
+        if not v:
             return False
-        if v.collected_at.tzinfo is None:
-            v_collected_at = v.collected_at.replace(tzinfo=timezone.utc)
-        else:
-            v_collected_at = v.collected_at
+        v_collected_at = _parse_dt(v.collected_at)
+        if v_collected_at is None:
+            return False
         return (datetime.now(timezone.utc) - v_collected_at) < timedelta(hours=within_hours)
     finally:
         db.close()
 
-def mark_video_collected(video_id: str, sec_uid: str):
+
+def mark_video_collected(aweme_id: str, sec_uid: str):
     from server.models import SessionLocal
     from server.models.task import CollectedVideo
     from datetime import datetime, timezone
     db = SessionLocal()
     try:
-        v = db.query(CollectedVideo).filter(CollectedVideo.video_id == video_id).first()
+        v = db.query(CollectedVideo).filter(CollectedVideo.aweme_id == aweme_id).first()
         if not v:
-            v = CollectedVideo(video_id=video_id, source_sec_uid=sec_uid, collected_at=datetime.now(timezone.utc))
+            v = CollectedVideo(aweme_id=aweme_id, source_sec_uid=sec_uid, collected_at=datetime.now(timezone.utc).isoformat())
             db.add(v)
             db.commit()
     finally:
         db.close()
+
 
 def get_collector_state(industry_slug: str, platform: str, key: str, default=None):
     import json
@@ -451,13 +531,20 @@ def get_collector_state(industry_slug: str, platform: str, key: str, default=Non
     from server.models.task import CollectorState
     db = SessionLocal()
     try:
-        state_key = f"{industry_slug}:{platform}:{key}"
-        s = db.query(CollectorState).filter(CollectorState.key == state_key).first()
-        if s and s.state_json:
-            return json.loads(s.state_json).get("value", default)
+        s = db.query(CollectorState).filter(
+            CollectorState.industry_slug == industry_slug,
+            CollectorState.platform == platform,
+            CollectorState.key == key,
+        ).first()
+        if s and s.value:
+            try:
+                return json.loads(s.value)
+            except Exception:
+                return default
         return default
     finally:
         db.close()
+
 
 def set_collector_state(industry_slug: str, platform: str, key: str, value):
     import json
@@ -466,17 +553,27 @@ def set_collector_state(industry_slug: str, platform: str, key: str, value):
     from datetime import datetime, timezone
     db = SessionLocal()
     try:
-        state_key = f"{industry_slug}:{platform}:{key}"
-        s = db.query(CollectorState).filter(CollectorState.key == state_key).first()
+        s = db.query(CollectorState).filter(
+            CollectorState.industry_slug == industry_slug,
+            CollectorState.platform == platform,
+            CollectorState.key == key,
+        ).first()
         if not s:
-            s = CollectorState(key=state_key, state_json=json.dumps({"value": value}), updated_at=datetime.now(timezone.utc))
+            s = CollectorState(
+                industry_slug=industry_slug,
+                platform=platform,
+                key=key,
+                value=json.dumps(value),
+                updated_at=datetime.now(timezone.utc).isoformat(),
+            )
             db.add(s)
         else:
-            s.state_json = json.dumps({"value": value})
-            s.updated_at = datetime.now(timezone.utc)
+            s.value = json.dumps(value)
+            s.updated_at = datetime.now(timezone.utc).isoformat()
         db.commit()
     finally:
         db.close()
+
 
 def enqueue_task(industry_slug: str, text: str, source_name: str, source_sec_uid: str, source_short_id: str, source_video_id: str, source_keyword: str = "", matched_categories: str = ""):
     from server.models import SessionLocal
@@ -510,16 +607,15 @@ def enqueue_task(industry_slug: str, text: str, source_name: str, source_sec_uid
     finally:
         db.close()
 
+
 def mark_target_active(sec_uid: str, industry_slug: str):
     from server.models import SessionLocal
     from server.models.task import TargetBlogger
-    from datetime import datetime, timezone
     db = SessionLocal()
     try:
         b = db.query(TargetBlogger).filter(TargetBlogger.sec_uid == sec_uid, TargetBlogger.industry_slug == industry_slug).first()
         if b:
             b.status = "active"
-            b.updated_at = datetime.now(timezone.utc)
             db.commit()
     finally:
         db.close()

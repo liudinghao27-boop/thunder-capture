@@ -83,21 +83,25 @@ def update_user_settings(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """Update user API keys.
+
+    Rules per key:
+    - None: leave unchanged.
+    - Empty string \"\": clear the key.
+    - Any non-empty string: encrypt and save.
+    """
     if data.deepseek_key is not None:
-        if "****" not in data.deepseek_key:
-            current_user.deepseek_key = encrypt_secret(data.deepseek_key)
-            
+        current_user.deepseek_key = encrypt_secret(data.deepseek_key)
+
     if data.zhipu_key is not None:
-        if "****" not in data.zhipu_key:
-            current_user.zhipu_key = encrypt_secret(data.zhipu_key)
-            
+        current_user.zhipu_key = encrypt_secret(data.zhipu_key)
+
     if data.openai_key is not None:
-        if "****" not in data.openai_key:
-            current_user.openai_key = encrypt_secret(data.openai_key)
+        current_user.openai_key = encrypt_secret(data.openai_key)
 
     db.commit()
     db.refresh(current_user)
-    
+
     return UserSettingsOut(
         deepseek_key=mask_secret(current_user.deepseek_key),
         zhipu_key=mask_secret(current_user.zhipu_key),

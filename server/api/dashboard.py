@@ -87,8 +87,8 @@ def dashboard_state(
     # ── Lead inventory ─────────────────────────────
     try:
         from server.services.task_stats import queue_stats, funnel_stats
-        queue = queue_stats(active_slug) if active_slug else {"total": 0, "pending": 0, "claimed": 0, "done": 0, "failed": 0}
-        funnel_raw = funnel_stats(active_slug) if active_slug else {}
+        queue = queue_stats(active_slug, owner_user_id=uid) if active_slug else {"total": 0, "pending": 0, "claimed": 0, "done": 0, "failed": 0}
+        funnel_raw = funnel_stats(active_slug, owner_user_id=uid) if active_slug else {}
     except Exception:
         queue = {"total": 0, "pending": 0, "claimed": 0, "done": 0, "failed": 0}
         funnel_raw = {}
@@ -297,8 +297,9 @@ def funnel_analytics(
     except Exception:
         return {"ok": False, "error": "Engine unavailable"}
 
-    stats = queue_stats(industry_slug) if industry_slug else queue_stats()
-    funnel_raw = funnel_stats(industry_slug) if industry_slug else {}
+    uid = current_user.id
+    stats = queue_stats(industry_slug, owner_user_id=uid) if industry_slug else queue_stats(owner_user_id=uid)
+    funnel_raw = funnel_stats(industry_slug, owner_user_id=uid) if industry_slug else funnel_stats(owner_user_id=uid)
 
     # Replenishment recommendation
     replenish = {}
@@ -309,6 +310,7 @@ def funnel_analytics(
                 per_device_daily_limit=10,
                 inventory_days=3,
                 threshold_days=1,
+                owner_user_id=uid,
             )
         except Exception:
             pass
@@ -317,11 +319,16 @@ def funnel_analytics(
     try:
         from server.models import SessionLocal
         from server.models.task import TaskQueue
-        from sqlalchemy import func
+        from sqlalchemy import func, or_
         db = SessionLocal()
         failures = db.query(TaskQueue.error, func.count(TaskQueue.id).label('cnt')).filter(
             TaskQueue.status == 'failed',
-            TaskQueue.industry_slug == industry_slug
+            TaskQueue.industry_slug == industry_slug,
+            or_(
+                TaskQueue.owner_user_id == uid,
+                TaskQueue.owner_user_id == "",
+                TaskQueue.owner_user_id == None,
+            ),
         ).group_by(TaskQueue.error).order_by(func.count(TaskQueue.id).desc()).limit(10).all()
         db.close()
         failure_dist = [

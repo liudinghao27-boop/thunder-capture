@@ -203,9 +203,9 @@ def system_health(
     try:
         from server.models.task import TaskQueue
         from server.models import SessionLocal
-        db = SessionLocal()
-        db.query(TaskQueue).first()
-        db.close()
+        health_db = SessionLocal()
+        health_db.query(TaskQueue).first()
+        health_db.close()
         add("engine_db", True, "PostgreSQL queue schema active")
     except Exception as e:
         add("engine_db", False, str(e)[:200])

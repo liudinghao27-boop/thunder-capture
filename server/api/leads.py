@@ -1,12 +1,14 @@
 """Lead pool management routes — CRUD, filter, retry."""
 
+import re
+import urllib.parse
 from datetime import datetime, timezone
 from io import BytesIO
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
@@ -45,6 +47,13 @@ class LeadExportRequest(BaseModel):
     format: Literal["csv", "xlsx"] = "xlsx"
     limit: int = Field(default=5000, ge=1, le=10000)
     fields: list[str] | None = None
+
+    @field_validator("industry_slug")
+    @classmethod
+    def validate_industry_slug(cls, value: str) -> str:
+        if value and re.search(r"[^a-z0-9_-]", value):
+            raise ValueError("industry_slug must contain only lowercase letters, numbers, underscores, and hyphens")
+        return value
 
 
 class MarkRepliedRequest(BaseModel):
@@ -92,6 +101,15 @@ def _lead_from_row(row: dict) -> dict:
     }
 
 
+def _owner_filter(current_user: User):
+    """Return an OR filter matching rows owned by the current user or unowned."""
+    return or_(
+        TaskQueue.owner_user_id == current_user.id,
+        TaskQueue.owner_user_id == "",
+        TaskQueue.owner_user_id == None,
+    )
+
+
 # ── Routes ────────────────────────────────────────
 
 @router.get("")
@@ -110,7 +128,7 @@ def list_leads(
         return {"leads": [], "total": 0}
 
     try:
-        query = db.query(TaskQueue)
+        query = db.query(TaskQueue).filter(_owner_filter(current_user))
         if industry_slug:
             query = query.filter(TaskQueue.industry_slug == industry_slug)
         if status:
@@ -134,7 +152,7 @@ def lead_stats(
     """Get lead pool statistics by status."""
     try:
         from server.services.task_stats import queue_stats
-        stats = queue_stats(industry_slug) if industry_slug else queue_stats()
+        stats = queue_stats(industry_slug, owner_user_id=current_user.id)
         return {
             "total": stats.get("total", 0),
             "pending": stats.get("pending", 0),
@@ -159,7 +177,10 @@ def retry_failed_leads(
         raise HTTPException(status_code=500, detail="Queue unavailable")
 
     try:
-        query = db.query(TaskQueue).filter(TaskQueue.status == 'failed')
+        query = db.query(TaskQueue).filter(
+            TaskQueue.status == 'failed',
+            _owner_filter(current_user),
+        )
         if industry_slug:
             query = query.filter(TaskQueue.industry_slug == industry_slug)
         n = query.update({
@@ -187,11 +208,7 @@ def export_leads(
     try:
         query = db.query(TaskQueue).filter(
             TaskQueue.industry_slug == req.industry_slug,
-            or_(
-                TaskQueue.owner_user_id == current_user.id,
-                TaskQueue.owner_user_id == "",
-                TaskQueue.owner_user_id == None,
-            ),
+            _owner_filter(current_user),
         )
         if req.status:
             query = query.filter(TaskQueue.status == req.status)
@@ -210,19 +227,20 @@ def export_leads(
 
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         filename = f"leads_{req.industry_slug}_{timestamp}"
+        quoted_filename = urllib.parse.quote(filename, safe='')
 
         if req.format == "csv":
             return StreamingResponse(
                 generate_csv(lead_rows, fields=fields),
                 media_type="text/csv; charset=utf-8-sig",
-                headers={"Content-Disposition": f"attachment; filename={filename}.csv"},
+                headers={"Content-Disposition": f"attachment; filename=\"{quoted_filename}.csv\""},
             )
         elif req.format == "xlsx":
             buffer = generate_xlsx(lead_rows, fields=fields)
             return StreamingResponse(
                 buffer,
                 media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                headers={"Content-Disposition": f"attachment; filename={filename}.xlsx"},
+                headers={"Content-Disposition": f"attachment; filename=\"{quoted_filename}.xlsx\""},
             )
         else:
             raise HTTPException(status_code=400, detail="format 必须是 csv 或 xlsx")
@@ -244,7 +262,7 @@ def mark_lead_replied(
     ).first()
     if not lead:
         raise HTTPException(status_code=404, detail="线索不存在")
-    if lead.status not in ("sent", "done"):
+    if lead.status not in ("done", "replied", "converted"):
         raise HTTPException(status_code=400, detail="只能标记已发送的线索")
 
     lead.status = "replied"
@@ -324,7 +342,7 @@ def unmark_lead_converted(
     if lead.status != "converted":
         raise HTTPException(status_code=400, detail="只能撤销已转化标记")
 
-    lead.status = "replied" if lead.replied_at else "sent"
+    lead.status = "replied" if lead.replied_at else "done"
     lead.converted_at = None
     lead.conversion_value = ""
     db.commit()

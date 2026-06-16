@@ -41,6 +41,7 @@ def db_session(monkeypatch):
         is_active=True,
     )
     db.add(user)
+    db.flush()
 
     industry = Industry(
         id="ind-1",
@@ -110,12 +111,24 @@ def _stats_client(db_session):
         finally:
             pass
 
+    def make_session():
+        return db_session
+
+    import server.models as models_module
+    import server.services.task_stats as task_stats_module
+
+    user = db_session.query(User).filter(User.id == FakeUser.id).first()
+
     app.dependency_overrides[get_db] = override_get_db
-    app.dependency_overrides[get_current_user] = lambda: FakeUser()
+    app.dependency_overrides[get_current_user] = lambda: user
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(models_module, "SessionLocal", make_session)
+    monkeypatch.setattr(task_stats_module, "SessionLocal", make_session)
     try:
         yield TestClient(app)
     finally:
         app.dependency_overrides.clear()
+        monkeypatch.undo()
 
 
 def test_effect_stats_requires_auth():
@@ -173,3 +186,16 @@ def test_keyword_stats_rejects_invalid_days(db_session):
         assert resp.status_code == 422
         resp = client.get("/api/stats/keywords?industry_slug=test-ind&days=366")
         assert resp.status_code == 422
+
+
+def test_system_health_does_not_shadow_injected_db(db_session):
+    """system_health must use the injected db for checks and not break after health_db usage."""
+    with _stats_client(db_session) as client:
+        resp = client.get("/api/system/health")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "checks" in data
+    check_names = {c["name"] for c in data["checks"]}
+    assert "server_db" in check_names
+    assert "engine_db" in check_names
+    assert data["ok"] is True or isinstance(data["ok"], bool)
