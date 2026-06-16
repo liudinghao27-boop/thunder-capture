@@ -71,6 +71,11 @@ def test_send_dm_task_runs_when_compliance_mode_disabled(db_session, monkeypatch
     retry_mock = MagicMock()
     monkeypatch.setattr(send_dm_task, "retry", retry_mock)
 
+    worker_summary = {"device_id": "d1", "sent": 1, "failed": 0, "status": "done"}
+    worker_mock = MagicMock()
+    worker_mock.return_value.run.return_value = worker_summary
+    monkeypatch.setattr("core.task.worker.DeviceWorker", worker_mock)
+
     result = send_dm_task.run(
         device_id="d1",
         adb_serial="serial1",
@@ -79,12 +84,13 @@ def test_send_dm_task_runs_when_compliance_mode_disabled(db_session, monkeypatch
         reply_msg="hello",
     )
 
-    assert result is None
+    assert result == worker_summary
+    worker_mock.assert_called_once()
     retry_mock.assert_not_called()
 
 
 def test_send_dm_task_skips_when_industry_missing(db_session, monkeypatch):
-    """If the industry row is missing, the task proceeds (no compliance block)."""
+    """If the industry row is missing, the task returns an error dict."""
     retry_mock = MagicMock()
     monkeypatch.setattr(send_dm_task, "retry", retry_mock)
 
@@ -96,5 +102,5 @@ def test_send_dm_task_skips_when_industry_missing(db_session, monkeypatch):
         reply_msg="hello",
     )
 
-    assert result is None
+    assert result == {"ok": False, "error": "Industry missing-ind not found"}
     retry_mock.assert_not_called()

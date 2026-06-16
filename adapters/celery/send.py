@@ -17,9 +17,9 @@ log = logging.getLogger("thunder.celery.send")
 
 @app.task(
     bind=True,
-    max_retries=5,
+    max_retries=3,
     default_retry_delay=90,  # 1.5 min base
-    soft_time_limit=300,  # 5 min per send
+    soft_time_limit=600,  # 10 min per device session
     rate_limit="15/h",  # Per-device daily limit via rate limiting
 )
 def send_dm_task(
@@ -30,47 +30,46 @@ def send_dm_task(
     task_data: dict,
     reply_msg: str,
 ):
-    """Send a single DM via AutoGLM PhoneAgent.
+    """Run one device sending session via DeviceWorker.
 
-    This replaces the inner loop of DeviceWorker.run().
-
-    Args:
-        device_id: Device identifier
-        adb_serial: ADB serial number
-        industry_slug: Target industry slug
-        task_data: Task dict with source_sec_uid, source_name, etc.
-        reply_msg: Generated reply message text
+    Replaces the per-device threading loop in core/task/worker.py.
+    Celery handles concurrency, retry and rate limiting.
     """
-    # Compliance check: skip DM sends when compliance mode is enabled.
+    from server.models import SessionLocal
+    from server.models.industry import Industry
+    from server.api.industries import _to_industry_config
+    from core.task.worker import DeviceWorker
+
+    db = SessionLocal()
     try:
-        from server.models import SessionLocal
-        from server.models.industry import Industry
+        industry = db.query(Industry).filter(Industry.slug == industry_slug).first()
+        if not industry:
+            return {"ok": False, "error": f"Industry {industry_slug} not found"}
+        if industry.compliance_mode:
+            log.info("Compliance mode enabled for %s; skipping Celery DM send.", industry_slug)
+            return {"ok": True, "skipped": True, "reason": "compliance_mode"}
+        cfg = _to_industry_config(industry)
+    finally:
+        db.close()
 
-        db = SessionLocal()
-        try:
-            industry = db.query(Industry).filter(Industry.slug == industry_slug).first()
-            if industry and industry.compliance_mode:
-                log.info("Compliance mode enabled for %s; skipping Celery DM send.", industry_slug)
-                return {"ok": True, "skipped": True, "reason": "compliance_mode"}
-        finally:
-            db.close()
-    except Exception:
-        pass
+    def should_stop():
+        # Celery best-effort abort signal
+        return self.is_aborted()
 
-    # TODO: Call core/agent/executor.py PhoneAgentExecutor
-    # Currently wraps DeviceWorker logic
-    log.info(
-        "Sending DM: device=%s, industry=%s, target=%s",
-        device_id, industry_slug, task_data.get("source_sec_uid", "")[:20],
+    worker = DeviceWorker(
+        device_id=device_id,
+        adb_serial=adb_serial,
+        industry=cfg,
+        daily_limit=task_data.get("daily_limit", cfg.daily_limit or 15),
+        min_interval=task_data.get("min_interval_sec", 90),
+        should_stop=should_stop,
+        job_id=task_data.get("job_id", ""),
     )
 
-    try:
-        # Stub: actual send logic from core/task/worker.py DeviceWorker
-        # In production, this imports and calls PhoneAgentExecutor
-        pass
-    except Exception as exc:
-        log.error("DM send failed: %s", exc)
-        raise self.retry(exc=exc)
+    log.info("DeviceWorker session started: device=%s industry=%s", device_id, industry_slug)
+    summary = worker.run()
+    log.info("DeviceWorker session finished: device=%s summary=%s", device_id, summary)
+    return summary
 
 
 @app.task(bind=True, max_retries=1)

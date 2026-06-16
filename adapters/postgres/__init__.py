@@ -12,9 +12,16 @@ Replaces SQLite for production deployments. Key changes:
 3. SQLAlchemy models use PostgreSQL-native types (UUID, JSONB, ARRAY)
    and skip_locked=True actually works for task claiming.
 
-Migration path:
-   pip install -r requirements/adapters.txt
-   alembic init adapters/postgres/migrations
-   alembic revision --autogenerate -m "init"
+Migration commands (from project root):
+   # Generate a new migration after model changes
+   alembic revision --autogenerate -m "describe change"
+
+   # Apply migrations
    alembic upgrade head
+
+   # Rollback one revision
+   alembic downgrade -1
+
+Development note: env.py reads THUNDER_DATABASE_URL from server.config, so
+migrations work against SQLite as well as PostgreSQL.
 """

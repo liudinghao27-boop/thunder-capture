@@ -135,6 +135,7 @@ shemeihuoke/
 - [x] 保留 `_BATCH_CLASSIFY_HEADER/_FOOTER` 在 DirectLLMBackend 内 (私有化)
 - [x] `classify_batch()` 签名保持向后兼容
 - [x] `.env.example` 新增 Dify 配置项
+- [x] adapters/dify/__init__.py 已更新部署说明
 - [ ] 部署 Dify 并导入 workflow-template.yml (需运维操作)
 
 ### P2: PostgreSQL 迁移 ✅ COMPLETE
@@ -143,16 +144,16 @@ shemeihuoke/
 - [x] `THUNDER_DATABASE_URL` → `.env` 指向 Docker PG
 - [x] `server/models/` → 16 张表自动创建于 PostgreSQL
 - [x] `skip_locked` 现在在 PG 上真正生效
-- [ ] Alembic 迁移 (可选，当前 SQLAlchemy create_all 自动处理)
+- [x] Alembic 初始化完成，初始迁移脚本已生成并测试
 
 ### P3: Celery + Redis ✅ 基础设施就绪
 - [x] Redis 7 运行中 (Docker, port 6379, healthcheck OK)
 - [x] `adapters/celery/app.py` — Celery 配置 & 路由 & 任务队列
 - [x] `adapters/celery/collect.py` — collect pipeline
-- [x] `adapters/celery/classify.py` — classify pipeline (含 Dify 回退)
+- [x] `adapters/celery/classify.py` — classify pipeline (含 Dify 回返)
 - [x] `adapters/celery/send.py` — send pipeline (rate_limit 15/h per device)
-- [ ] 启动 Celery Worker: `celery -A adapters.celery.app worker -l info -Q collect,classify,send`
-- [ ] `core/task/worker.py` DeviceWorker → `send_dm_task.delay()` (需真机测试)
+- [x] `send_dm_task` 已接入 `DeviceWorker.run()`
+- [ ] 启动 Celery Worker: `celery -A adapters.celery.app worker -l info -Q collect,classify,send` (需 Docker 运行)
 
 ### P4: Web 控制台 (已完整，非紧急)
 - [x] 6 页面 SPA (控制中心/项目/设备/线索/记录/设置)
