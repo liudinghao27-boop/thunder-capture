@@ -1,0 +1,32 @@
+# 雷霆捕获系统 — 全局配置模板
+# 复制为 system.yaml 并填入真实值
+# ===========================================
+
+# API 密钥（支持 ${ENV_VAR} 占位符）
+api_keys:
+  deepseek: "${THUNDER_DEEPSEEK_KEY}"
+  zhipu: "${THUNDER_ZHIPU_KEY}"
+
+# 智谱 AutoGLM
+autoglm:
+  base_url: "https://open.bigmodel.cn/api/paas/v4"
+  model: "autoglm-phone"
+
+# 数据库
+database:
+  path: "data/thunder.db"
+
+# 设备矩阵
+devices:
+  - id: "xiaomi-main"
+    adb_serial: "he896xaisooryth6"
+    daily_limit: 15
+    min_interval_sec: 90
+
+# 采集配置
+collector:
+  max_authors_per_run: 12
+  videos_per_keyword: 6
+  top_creator_videos: 8
+  min_comment_count: 1
+  username_min_length: 2

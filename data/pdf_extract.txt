@@ -1,0 +1,291 @@
+=== Page 1 ===
+🧠 雷霆捕获系统｜AI矩阵工程级重构方案（v2.0）
+1. 项目重构目标
+当前系统问题：
+AI能力仅用于“分类与话术生成”
+缺少统一 Agent 架构
+设备控制与业务逻辑耦合严重
+无视觉理解与状态建模
+缺少任务级“闭环决策系统”
+🎯 重构目标
+升级为：
+AI Agent驱动的多设备智能执行矩阵系统
+核心能力：
+多设备协同（Device Matrix）
+AI决策闭环（LLM Planner）
+屏幕视觉理解（Vision Perception）
+状态驱动执行（Stateful Execution）
+可扩展任务系统（Task Graph）
+2. 总体架构设计（重构后）
+                        ┌────────────────────┐
+                        │   AI Planner层     │
+                        │ GPT / Qwen / Claude│
+                        └─────────┬──────────┘
+                                  │
+┌─────────────────────────┼─────────────────────────┐
+        │                         │                         │
+┌───────▼────────┐     ┌──────────▼─────────┐    
+┌─────────▼─────────┐
+│  Task Scheduler │     │  Strategy Engine   │    │ Memory System     │
+│  任务调度中心   │     │ 风控 / 冷却 /分流  │    │ 长短期记忆        │
+└───────┬────────┘     └──────────┬─────────┘    
+└─────────┬─────────┘• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+1
+
+=== Page 2 ===
+        │                         │                         │
+└──────────────┬──────────┴──────────┬──────────────┘
+                       │                     │
+            ┌──────────▼──────────┐ 
+┌──────▼──────────┐
+            │ Device Agent Layer  │ │ Vision Layer     │
+            │ 设备执行抽象层      │ │ UI理解/OCR/截图  │
+            └──────────┬──────────┘ 
+└──────┬──────────┘
+                       │                     │
+               ┌───────▼────────┐   ┌──────▼────────┐
+               │ Android Devices│   │ Screen Data   │
+               │ (ADB/AutoGLM)  │   │ Structured UI │
+               └────────────────┘   └───────────────┘
+3. 模块重构说明
+3.1 engine/ → 拆分为 AI Agent 核心层
+❌ 当前问题
+sender.py = 直接执行发送逻辑
+queue.py = 简单任务队列
+collectors = 强耦合采集逻辑
+✅ 重构后结构
+engine/
+├── agent/
+│   ├── planner.py        # AI决策器（核心）
+│   ├── perception.py     # 屏幕/数据理解
+│   ├── executor.py       # 动作执行器
+│   ├── memory.py         # 任务记忆系统
+│   └── state.py         # 状态建模
+│
+├── task/
+│   ├── scheduler.py     # 任务调度器（升级queue）
+│   ├── graph.py         # 任务流定义
+│   └── router.py        # 任务分发
+│
+├── device/
+│   ├── manager.py       # 设备统一管理• 
+• 
+• 
+2
+
+=== Page 3 ===
+│   ├── adb_client.py    # ADB封装
+│   └── health.py        # 设备健康检测
+│
+├── vision/
+│   ├── ocr.py           # OCR模块
+│   ├── ui_parser.py     # UI结构解析
+│   └── screenshot.py    # 截图服务
+│
+├── strategy/
+│   ├── classifier.py    # LLM意图分类
+│   ├── policy.py        # 风控策略
+│   └── throttle.py      # 冷却机制
+3.2 sender.py → executor.py（核心重构点）
+❌ 当前模式
+LLM → 生成话术 → AutoGLM发送
+✅ 重构后模式
+LLM → 生成“行为指令” → Executor执行
+示例标准输出
+{
+"action" :"open_app" ,
+"target" :"wechat" ,
+"next" :"find_chat"
+}
+3.3 queue.py → task/scheduler.py（升级）
+新增能力：
+优先级调度
+失败重试策略
+设备负载均衡
+冷却策略• 
+• 
+• 
+• 
+3
+
+=== Page 4 ===
+4. AI Agent 核心设计（关键）
+4.1 Planner（AI大脑）
+职责：
+理解任务
+拆解步骤
+输出结构化动作
+输入：
+{
+"task" :"发送私信" ,
+"context" :{}
+}
+输出：
+{
+"steps" :[
+{"action" :"open_app" },
+{"action" :"find_user" },
+{"action" :"send_message" }
+]
+}
+4.2 Perception（感知层）
+输入：
+screenshot
+OCR结果
+UI结构
+输出：
+{
+"screen" :"wechat_chat" ,
+"elements" :["输入框" ,"发送按钮" ]
+}• 
+• 
+• 
+• 
+• 
+• 
+4
+
+=== Page 5 ===
+4.3 Executor（执行层）
+统一接口：
+device .click ("发送" )
+device .input ("hello" )
+device .swipe (...)
+禁止直接ADB调用
+4.4 Memory（记忆系统）
+记录：
+用户行为
+成功路径
+失败路径
+设备状态
+5. 数据流设计（重构核心）
+Task
+ ↓
+Scheduler
+ ↓
+Agent Planner (LLM)
+ ↓
+Perception (Vision/OCR)
+ ↓
+Executor (Device)
+ ↓
+Result Feedback
+ ↓
+Memory Update
+6. server/ 重构建议• • • • 
+5
+
+=== Page 6 ===
+API升级为三层结构
+1. Control API
+/task/create
+/task/status
+2. Agent API（新增）
+/agent/plan
+/agent/observe
+/agent/act
+3. Device API
+/device/list
+/device/health
+7. device/matrix 重构（关键）
+新增：
+device_state tracking
+heartbeat system
+auto recovery
+8. vision 层（新增关键能力）
+必须新增：
+OCR + UI解析
+用途：
+替代固定坐标点击
+提高泛化能力
+支持多APP适配
+9. 安全与风控层（必须保留但升级）
+升级为：
+strategy/• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+6
+
+=== Page 7 ===
+包含：
+请求频率控制
+行为随机化
+风险识别
+冷却机制
+10. 数据库重构
+新增表：
+device_state
+task_graph
+agent_memory
+screen_snapshot
+execution_log
+11. 推荐技术栈升级
+层 技术
+Agent GPT / Qwen / Claude
+Vision PaddleOCR / GPT Vision
+Backend FastAPI
+Queue Redis（建议升级）
+DB PostgreSQL
+Device ADB + AutoGLM
+Frontend Vue / Next.js
+12. 迁移路线（非常重要）
+Phase 1（不破坏现有系统）
+保留 engine/
+新增 agent/
+sender → executor wrapper• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+• 
+7
+
+=== Page 8 ===
+Phase 2
+queue → scheduler
+加入 vision 层
+Phase 3（核心升级）
+全面 Agent 化
+删除“固定流程逻辑”
+Phase 4（最终形态）
+系统不再写“流程”，只写“目标”
+13. 最终系统形态
+从：
+采集 → 分类 → 发送
+升级为：
+目标 → AI理解 → 规划 → 执行 → 反馈 → 自学习
+🚀 总结一句话
+你现在的系统：
+是“自动化营销引擎”
+重构后：
+会变成“多设备AI Agent执行矩阵”• 
+• 
+• 
+• 
+8
+

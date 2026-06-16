@@ -1,0 +1,25 @@
+# 征兵咨询行业
+name: "征兵咨询"
+slug: "recruitment"
+keywords:
+  - "征兵"
+  - "当兵"
+  - "入伍"
+  - "体检"
+  - "近视当兵"
+  - "大专当兵"
+  - "中专当兵"
+  - "兵检"
+  - "政审"
+reply_tone: "退伍老兵"
+reply_style: "称对方为兄弟/战友，语气亲切，15-30字，不要用加微信等敏感词"
+categories:
+  - "入伍条件"
+  - "体检咨询"
+  - "学历咨询"
+  - "政审相关"
+  - "退役规划"
+  - "其他"
+daily_limit: 15
+video_max_age_days: 14
+comment_max_age_hours: 48

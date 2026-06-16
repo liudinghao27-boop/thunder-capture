@@ -1,0 +1,19 @@
+# 行业配置模板
+# =============
+# 复制此文件为 <行业slug>.yaml 即可新建行业
+
+name: "行业名称"           # 显示名称
+slug: "industry-slug"      # URL/CLI 标识，英文小写+连字符
+keywords:                   # 抖音搜索关键词
+  - "关键词1"
+  - "关键词2"
+reply_tone: "业内人士"      # AI 回复的人设
+reply_style: "亲切专业"     # 回复风格描述
+categories:                 # 客户意图分类
+  - "咨询类"
+  - "比价类"
+platforms:                  # 目标平台
+  - douyin
+daily_limit: 15             # 每设备每日发送上限
+video_max_age_days: 14      # 视频时效(天)
+comment_max_age_hours: 48   # 评论时效(小时)
