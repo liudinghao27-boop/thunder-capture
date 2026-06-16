@@ -230,6 +230,9 @@
     <!-- SUBVIEW: OVERVIEW -->
     <template id="tpl-subview-overview">
         <div class="space-y-8">
+            <!-- Readiness next-step banner -->
+            <div id="overview-readiness-banner" class="hidden"></div>
+
             <!-- Operational command center -->
             <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
                 <div class="xl:col-span-2 p-6 rounded-2xl glass-panel flex flex-col gap-5">
@@ -1568,11 +1571,95 @@
                     </div>`;
                 }
 
+                await loadReadinessBanner();
             } catch (e) {
                 console.error('Dashboard load failed', e);
                 const warnList = document.getElementById('overview-warnings');
                 if (warnList) warnList.innerHTML = '<div class="text-xs text-red-400">✗ 加载失败，请刷新重试</div>';
             }
+        }
+
+        async function loadReadinessBanner() {
+            const banner = document.getElementById('overview-readiness-banner');
+            if (!banner) return;
+
+            // Debounce concurrent calls (e.g., from polling + manual refresh).
+            if (loadReadinessBanner.inFlight) {
+                return loadReadinessBanner.inFlight;
+            }
+
+            const activeIndustry = overviewState.active_industry
+                || overviewIndustries.find(i => i.slug === overviewSelectedIndustry)
+                || overviewIndustries[0]
+                || null;
+
+            if (!activeIndustry || !activeIndustry.id) {
+                banner.classList.add('hidden');
+                banner.innerHTML = '';
+                return;
+            }
+
+            const requestedId = activeIndustry.id;
+            const promise = (async () => {
+                try {
+                    const rs = await apiFetch(`/api/industries/${requestedId}/ready-state`);
+
+                    // If the user switched industries while the request was in flight,
+                    // drop this stale result; a newer request will render the correct banner.
+                    const currentIndustry = overviewState.active_industry
+                        || overviewIndustries.find(i => i.slug === overviewSelectedIndustry)
+                        || overviewIndustries[0]
+                        || null;
+                    if (!currentIndustry || currentIndustry.id !== requestedId) return;
+
+                    const nextStep = rs.next_step || '项目已就绪，可以开始采集';
+                    let actionHtml = '';
+
+                    if (!rs.ok) {
+                        let actionText = '';
+                        let actionCommand = '';
+
+                        if (nextStep === '请先配置 LLM API Key') {
+                            actionText = '去设置';
+                            actionCommand = "router.navigate('settings')";
+                        } else if (
+                            nextStep === '请至少添加一个搜索关键词' ||
+                            nextStep.startsWith('请添加意图词') ||
+                            nextStep.startsWith('请添加噪声词') ||
+                            nextStep === '请设置回复人设和风格' ||
+                            nextStep === '合规模式已开启，请配置 Webhook URL'
+                        ) {
+                            actionText = '去配置';
+                            actionCommand = "showCreateIndustryModal()";
+                        } else if (nextStep === '请至少添加一台活跃设备以执行发送') {
+                            actionText = '去添加设备';
+                            actionCommand = "router.navigate('devices')";
+                        }
+
+                        if (actionText && actionCommand) {
+                            actionHtml = `<button onclick="${actionCommand}" class="ml-auto px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 text-amber-300 text-xs font-semibold transition-colors whitespace-nowrap">${actionText}</button>`;
+                        }
+                    }
+
+                    banner.innerHTML = `
+                        <div class="flex items-center gap-3 px-4 py-3 rounded-xl border ${rs.ok ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-amber-500/10 border-amber-500/20 text-amber-400'}">
+                            <span class="text-lg shrink-0">${rs.ok ? '✅' : '⚠️'}</span>
+                            <span class="text-sm font-medium">${escapeHtml(nextStep)}</span>
+                            ${actionHtml}
+                        </div>
+                    `;
+                    banner.classList.remove('hidden');
+                } catch (e) {
+                    console.error('Readiness banner load failed', e);
+                    banner.classList.add('hidden');
+                    banner.innerHTML = '';
+                } finally {
+                    loadReadinessBanner.inFlight = null;
+                }
+            })();
+
+            loadReadinessBanner.inFlight = promise;
+            return promise;
         }
 
         let overviewSelectedIndustry = '';
@@ -1592,6 +1679,7 @@
                     if (ds.active_jobs.length === 0 && overviewSelectedIndustry) {
                         await refreshIndustryCard(overviewSelectedIndustry);
                     }
+                    await loadReadinessBanner();
                 } catch(e) {}
             }, 10000);
         }
@@ -1625,6 +1713,9 @@
             overviewSelectedIndustry = sel.value;
             updateOverviewButtons();
             updateReadinessDisplay(overviewState);
+            // Force a fresh readiness check for the newly selected industry.
+            loadReadinessBanner.inFlight = null;
+            await loadReadinessBanner();
             if (overviewSelectedIndustry) { await refreshIndustryCard(overviewSelectedIndustry); }
         }
 
