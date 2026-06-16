@@ -360,3 +360,4 @@ Open-AutoGLM/
 # Env files
 .env.txt
 .env
+.worktrees/
