@@ -1,4 +1,3 @@
-import pytest
 
 from server.services.abtest import (
     build_variant_result,

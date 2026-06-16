@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock
 from core.task.scheduler import MatrixTaskScheduler
 
 

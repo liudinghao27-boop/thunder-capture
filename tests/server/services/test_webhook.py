@@ -1,4 +1,4 @@
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch, MagicMock
 from server.services.webhook import push_leads_to_webhook, WebhookPayload
 
 

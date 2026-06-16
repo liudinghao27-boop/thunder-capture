@@ -85,7 +85,6 @@ def test_mark_target_inactive_sets_status_to_paused(db):
 
 def test_video_collected_uses_aweme_id(db):
     from server.services.task_stats import is_video_collected, mark_video_collected
-    from datetime import datetime, timezone
 
     mark_video_collected("aweme-123", "sec-3")
     video = db.query(CollectedVideo).filter(CollectedVideo.aweme_id == "aweme-123").first()

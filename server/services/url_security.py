@@ -1,7 +1,6 @@
 """URL security helpers to prevent SSRF."""
 
 import ipaddress
-import re
 import socket
 from urllib.parse import urlparse
 

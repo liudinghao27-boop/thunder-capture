@@ -3,7 +3,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from server.main import app
 from server.auth import get_current_user
-from server.api.leads import router as leads_router, export_leads, LeadExportRequest
+from server.api.leads import export_leads, LeadExportRequest
 
 client = TestClient(app)
 

@@ -1,6 +1,6 @@
 """Tests for adapters.celery.collect bug fixes."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from adapters.celery.collect import run_mediacrawler
 

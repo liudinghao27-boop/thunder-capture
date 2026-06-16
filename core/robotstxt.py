@@ -1,7 +1,6 @@
 """RobotsTxtManager — robots.txt 合规检查，参考 Scrapling 设计"""
 
 import logging
-from urllib.parse import urlparse
 
 log = logging.getLogger("thunder.robotstxt")
 

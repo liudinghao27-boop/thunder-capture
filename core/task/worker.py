@@ -3,20 +3,16 @@ import time
 import random
 import logging
 import threading
-from typing import Optional
 
 from openai import OpenAI
 
 from core.agent.executor import PhoneAgentExecutor
 from core.agent.memory import AgentMemoryStore
 from core.agent.planner import Planner
-from core.task.runner import TaskGraphRunner
 from core.task.scheduler import MatrixTaskScheduler
 from core.device.manager import load_active_devices
 from core.device.supervisor import DeviceSupervisor
-from core.strategy.risk import RiskManager
-from core.strategy.wave import WaveStrategy
-from core.strategy.policy import SendPolicyGate, is_send_window_open
+from core.strategy.policy import is_send_window_open
 from core.config import IndustryConfig, load_system
 from server.services.abtest import select_reply_variant
 
@@ -139,7 +135,7 @@ class DeviceWorker:
         except Exception:
             fallbacks = [
                 f"你好，我是{tone}，看到你的评论，需要帮忙吗？",
-                f"关于你问的，我比较了解，方便的话私聊。",
+                "关于你问的，我比较了解，方便的话私聊。",
             ]
             return random.choice(fallbacks), variant_id
 

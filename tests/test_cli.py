@@ -6,7 +6,6 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 # Import project-root cli.py explicitly to avoid collision with deps/crawl4ai/cli.py.
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent

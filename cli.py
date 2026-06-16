@@ -35,13 +35,13 @@ sys.path.insert(0, str(BASE_DIR))
 sys.path.insert(0, str(BASE_DIR / "deps" / "crawl4ai"))
 
 from core.config import (
-    IndustryConfig, load_system, load_industry,
+    load_system, load_industry,
     list_industries, create_industry,
 )
 from server.services.task_stats import (
     queue_stats, blogger_source_stats as blogger_stats,
     get_wave_state as get_consumer_state, get_bloggers, add_blogger,
-    mark_target_active, mark_target_inactive,
+    mark_target_inactive,
 )
 from core.classify import classify_batch, enqueue_classified
 from core.task.worker import run_senders

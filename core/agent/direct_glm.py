@@ -11,10 +11,10 @@ import json
 import logging
 import re
 import time
-from dataclasses import dataclass, field
-from typing import Any, Callable
+from dataclasses import dataclass
+from typing import Callable
 
-from core.agent.state import ExecutionResult, utc_now
+from core.agent.state import ExecutionResult
 from core.device.adb_client import ADBClient
 
 log = logging.getLogger("thunder.agent.direct_glm")

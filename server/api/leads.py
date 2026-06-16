@@ -3,7 +3,6 @@
 import re
 import urllib.parse
 from datetime import datetime, timezone
-from io import BytesIO
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -106,7 +105,7 @@ def _owner_filter(current_user: User):
     return or_(
         TaskQueue.owner_user_id == current_user.id,
         TaskQueue.owner_user_id == "",
-        TaskQueue.owner_user_id == None,
+        TaskQueue.owner_user_id.is_(None),
     )
 
 

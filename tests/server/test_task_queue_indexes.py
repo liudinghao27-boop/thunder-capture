@@ -1,6 +1,5 @@
 """Tests for server.models.task composite index fixes."""
 
-import pytest
 from sqlalchemy import Index
 
 from server.models.task import TaskQueue

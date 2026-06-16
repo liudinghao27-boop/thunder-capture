@@ -527,7 +527,6 @@ def classify_batch(
 
 def enqueue_classified(comments: list[dict]):
     """Write classified target comments into the sending queue."""
-    from server.services.task_stats import enqueue_task
     count = 0
     for comment in comments:
         matched = comment.get("matched_categories", {})

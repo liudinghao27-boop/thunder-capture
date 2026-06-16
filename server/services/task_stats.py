@@ -13,14 +13,9 @@ def queue_stats(industry_slug: str = "", owner_user_id: str = "") -> dict:
         query = db.query(TaskQueue.status, func.count(TaskQueue.id)).group_by(TaskQueue.status)
         if industry_slug:
             query = query.filter(TaskQueue.industry_slug == industry_slug)
-        if owner_user_id:
-            query = query.filter(
-                or_(
-                    TaskQueue.owner_user_id == owner_user_id,
-                    TaskQueue.owner_user_id == "",
-                    TaskQueue.owner_user_id == None,
-                )
-            )
+        owner_filter = _owner_filter(TaskQueue, owner_user_id)
+        if owner_filter is not None:
+            query = query.filter(owner_filter)
 
         stats = {status: count for status, count in query.all()}
         return {
@@ -44,7 +39,7 @@ def _owner_filter(model, owner_user_id: str):
     return or_(
         column == owner_user_id,
         column == "",
-        column == None,
+        column.is_(None),
     )
 
 

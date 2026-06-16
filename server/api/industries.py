@@ -425,7 +425,7 @@ def delete_industry(
         db.query(TargetBlogger).filter(TargetBlogger.industry_slug == slug).delete()
         # Note: collected_videos logic might need joining or simpler to ignore for now since it's just dedup memory.
         db.commit()
-    except Exception as e:
+    except Exception:
         db.rollback()
 
     ind.is_active = False
@@ -674,7 +674,7 @@ def retry_failed_task(
         task.error = None
         db.commit()
         return {"ok": True, "task_id": task_id, "status": "pending"}
-    except Exception as e:
+    except Exception:
         db.rollback()
         raise
 
@@ -704,7 +704,7 @@ def retry_all_failed_tasks(
             task.error = None
         db.commit()
         return {"ok": True, "count": count, "status": "pending"}
-    except Exception as e:
+    except Exception:
         db.rollback()
         raise
 

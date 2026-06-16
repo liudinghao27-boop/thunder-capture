@@ -1,9 +1,8 @@
 """Tests for core.classify bug fixes."""
 
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-import pytest
 
 from core.classify import enqueue_classified
 
@@ -15,7 +14,7 @@ def test_enqueue_classified_passes_string_matched_categories_without_double_enco
     def fake_enqueue_task(*, matched_categories, **kwargs):
         captured["matched_categories"] = matched_categories
 
-    with patch("server.services.task_stats.enqueue_task", fake_enqueue_task):
+    with patch("core.classify.enqueue_task", fake_enqueue_task):
         comment = {
             "industry_slug": "test-ind",
             "text": "hello",
@@ -41,7 +40,7 @@ def test_enqueue_classified_encodes_dict_matched_categories():
     def fake_enqueue_task(*, matched_categories, **kwargs):
         captured["matched_categories"] = matched_categories
 
-    with patch("server.services.task_stats.enqueue_task", fake_enqueue_task):
+    with patch("core.classify.enqueue_task", fake_enqueue_task):
         comment = {
             "industry_slug": "test-ind",
             "text": "hello",

@@ -1,12 +1,10 @@
 import asyncio
-import os
 import json
 import logging
 from pathlib import Path
 
 from core.config import IndustryConfig
 from core.browser_orchestrator import ShadowBrowser
-from server.services.task_stats import add_blogger, mark_video_collected, is_video_collected
 from core.classify import classify_batch, enqueue_classified
 
 log = logging.getLogger("thunder.discover")

@@ -1,6 +1,6 @@
 """SQLAlchemy models for matrix tasks and collector state."""
 
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, JSON, Text, UniqueConstraint, Index
+from sqlalchemy import Column, Integer, String, DateTime, Text, UniqueConstraint, Index
 from datetime import datetime, timezone
 from server.models import Base
 
