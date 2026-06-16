@@ -14,6 +14,7 @@ from server.auth import get_current_user
 from server.models import get_db
 from server.models.task import TaskQueue
 from server.models.user import User
+from server.services.effect_webhook import push_effect_event
 from server.services.export import DEFAULT_EXPORT_FIELDS, generate_csv, generate_xlsx
 
 router = APIRouter(prefix="/api/leads", tags=["leads"])
@@ -44,6 +45,14 @@ class LeadExportRequest(BaseModel):
     format: Literal["csv", "xlsx"] = "xlsx"
     limit: int = Field(default=5000, ge=1, le=10000)
     fields: list[str] | None = None
+
+
+class MarkRepliedRequest(BaseModel):
+    reply_text: str = ""
+
+
+class MarkConvertedRequest(BaseModel):
+    conversion_value: str = ""
 
 
 TASK_STATUS_LABELS = {
@@ -219,3 +228,104 @@ def export_leads(
             raise HTTPException(status_code=400, detail="format 必须是 csv 或 xlsx")
     finally:
         db.close()
+
+
+@router.post("/{lead_id}/mark-replied")
+def mark_lead_replied(
+    lead_id: int,
+    body: MarkRepliedRequest,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from server.models.task import TaskQueue
+    lead = db.query(TaskQueue).filter(
+        TaskQueue.id == lead_id,
+        TaskQueue.owner_user_id == current_user.id,
+    ).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="线索不存在")
+    if lead.status not in ("sent", "done"):
+        raise HTTPException(status_code=400, detail="只能标记已发送的线索")
+
+    lead.status = "replied"
+    lead.replied_at = datetime.now(timezone.utc)
+    lead.reply_text = body.reply_text
+    db.commit()
+
+    if lead.industry_slug:
+        from server.models.industry import Industry
+        industry = db.query(Industry).filter(
+            Industry.slug == lead.industry_slug,
+            Industry.user_id == current_user.id,
+        ).first()
+        if industry and industry.effect_webhook_url:
+            push_effect_event(
+                "lead.replied",
+                lead.industry_slug,
+                {"id": lead.id, "reply_text": lead.reply_text},
+                industry.effect_webhook_url,
+            )
+
+    return {"ok": True, "lead_id": lead_id, "status": "replied"}
+
+
+@router.post("/{lead_id}/mark-converted")
+def mark_lead_converted(
+    lead_id: int,
+    body: MarkConvertedRequest,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from server.models.task import TaskQueue
+    lead = db.query(TaskQueue).filter(
+        TaskQueue.id == lead_id,
+        TaskQueue.owner_user_id == current_user.id,
+    ).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="线索不存在")
+    if lead.status not in ("sent", "replied", "done"):
+        raise HTTPException(status_code=400, detail="只能标记已发送或已回复的线索")
+
+    lead.status = "converted"
+    lead.converted_at = datetime.now(timezone.utc)
+    lead.conversion_value = body.conversion_value
+    db.commit()
+
+    if lead.industry_slug:
+        from server.models.industry import Industry
+        industry = db.query(Industry).filter(
+            Industry.slug == lead.industry_slug,
+            Industry.user_id == current_user.id,
+        ).first()
+        if industry and industry.effect_webhook_url:
+            push_effect_event(
+                "lead.converted",
+                lead.industry_slug,
+                {"id": lead.id, "conversion_value": lead.conversion_value},
+                industry.effect_webhook_url,
+            )
+
+    return {"ok": True, "lead_id": lead_id, "status": "converted"}
+
+
+@router.post("/{lead_id}/unmark-converted")
+def unmark_lead_converted(
+    lead_id: int,
+    current_user = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    from server.models.task import TaskQueue
+    lead = db.query(TaskQueue).filter(
+        TaskQueue.id == lead_id,
+        TaskQueue.owner_user_id == current_user.id,
+    ).first()
+    if not lead:
+        raise HTTPException(status_code=404, detail="线索不存在")
+    if lead.status != "converted":
+        raise HTTPException(status_code=400, detail="只能撤销已转化标记")
+
+    lead.status = "replied" if lead.replied_at else "sent"
+    lead.converted_at = None
+    lead.conversion_value = ""
+    db.commit()
+    return {"ok": True, "lead_id": lead_id, "status": lead.status}
