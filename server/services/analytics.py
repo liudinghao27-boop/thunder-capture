@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
-from typing import Any, cast
+from typing import Any
 
 from sqlalchemy.orm import Session
 
@@ -106,14 +106,17 @@ def aggregate_by_device(_industry_slug: str, rows: list[dict[str, Any]]) -> list
 def query_task_rows(db: Session, industry_slug: str, days: int = 7, owner_user_id: str = "") -> list[dict[str, Any]]:
     """Query TaskQueue rows for analytics within the last N days.
 
-    ``fetched_at`` is stored as a string, so the SQL query filters by
-    ``industry_slug`` (and ``owner_user_id`` when provided), and the resulting
-    rows are filtered by parsed datetime in Python.
+    ``fetched_at`` is stored as an ISO-8601 string, which is lexicographically
+    comparable. The time-window filter is pushed to the database so we do not
+    pull the entire table into memory.
     """
     from server.models.task import TaskQueue
 
-    since = datetime.now(timezone.utc) - timedelta(days=days)
-    query = db.query(TaskQueue).filter(TaskQueue.industry_slug == industry_slug)
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    query = db.query(TaskQueue).filter(
+        TaskQueue.industry_slug == industry_slug,
+        TaskQueue.fetched_at >= since,
+    )
     if owner_user_id:
         query = query.filter(TaskQueue.owner_user_id == owner_user_id)
     rows = query.all()
@@ -125,5 +128,5 @@ def query_task_rows(db: Session, industry_slug: str, days: int = 7, owner_user_i
             "status": r.status or "pending",
             "reply_variant_id": r.reply_variant_id or "",
         }
-        for r in rows if _parse_fetched_at(cast(str, r.fetched_at)) >= since
+        for r in rows
     ]

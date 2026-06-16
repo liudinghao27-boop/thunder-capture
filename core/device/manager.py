@@ -51,7 +51,7 @@ class MatrixDevice:
         }
 
     def is_available(self) -> bool:
-        if self.runtime_status in {"offline", "keyboard_error", "cooldown", "isolated"}:
+        if self.runtime_status in {"offline", "keyboard_error", "cooldown", "isolated", "running"}:
             return False
         if self.consecutive_failures >= 5:
             return False
@@ -73,7 +73,7 @@ def _load_from_server_db(user_id: str, device_ids: list[str]) -> list[MatrixDevi
 
     db = SessionLocal()
     try:
-        query = db.query(Device).filter(Device.is_active == True)
+        query = db.query(Device).filter(Device.is_active.is_(True))
         if user_id:
             query = query.filter(Device.user_id == user_id)
         if device_ids:

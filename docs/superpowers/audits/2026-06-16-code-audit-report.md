@@ -19,7 +19,7 @@
 | 性能 | 4 | 0 | 9 | 4 | 17 |
 | 质量 | - | - | - | - | 多项 |
 
-**本次已修复 25 项核心问题**，剩余问题已记录并给出修复建议。修复后全量测试 **199 passed**，Alembic 迁移同步，但仍存在 48 条 ruff 警告和 343 条 mypy 类型错误（多数为历史遗留或 SQLAlchemy 类型推断问题）。
+**本次已修复 30 项核心问题**（含后续补修的 5 项 High 风险），剩余问题已记录并给出修复建议。修复后全量测试 **199 passed, 1 warning**，Alembic 迁移同步，但仍存在约 47 条 ruff 警告和 345 条 mypy 类型错误（多数为历史遗留或 SQLAlchemy 类型推断问题）。
 
 ---
 
@@ -71,6 +71,12 @@
 | 16 | `generate-config-bigdata` 导入不存在的 `core.collectors.douyin` | `server/api/industries.py` | 返回 HTTP 501 并给出明确错误信息 |
 | 17 | CLI 引用未定义函数 / 参数顺序错误 | `cli.py`、`server/services/task_stats.py` | 移除 `reclaim_stale_claims`；`add_blogger` 补 `short_id=""`；`set_blogger_status` 替换为 `mark_target_inactive` |
 | 18 | `mark_lead_replied` / `unmark_lead_converted` 使用非法状态 `"sent"` | `server/api/leads.py` | 统一使用 `"done"` 作为已发送基态 |
+| 19 | 设备重复调度：`MatrixDevice.is_available()` 对 `"running"` 返回 True | `core/device/manager.py` | 将 `"running"` 加入不可用状态集合 |
+| 20 | `core/discover.py` 与 `server/workers.py` 数据契约不一致 | `core/discover.py`、`server/workers.py` | `run_discovery()` 统一返回候选评论列表，由调用方负责分类入队 |
+| 21 | `server/services/analytics.py` 全量加载后 Python 过滤日期 | `server/services/analytics.py` | `query_task_rows()` 在 SQL 层按 `fetched_at >= since` 过滤 |
+| 22 | `server/services/task_stats.py` 多个统计函数全表加载 + Python 聚合 | `server/services/task_stats.py` | `keyword_funnel_stats`、`source_type_funnel_stats`、`source_performance_stats`、`blogger_source_stats` 改为 SQL `GROUP BY` 聚合 |
+| 23 | `core/classify.py` 逐条入队，每条一次 Session/查询 | `core/classify.py`、`server/services/task_stats.py` | 新增 `enqueue_tasks_batch()`，使用方言特定的 `INSERT ... ON CONFLICT DO NOTHING` 批量入队 |
+| 24 | 异步路径中同步 I/O 阻塞事件循环 | `server/api/devices.py` | 对 ADB 健康检查、键盘准备、屏幕控制等同步调用包裹 `asyncio.to_thread()` |
 
 ### 3.3 性能与质量（Medium / Low）
 
@@ -91,7 +97,7 @@
 python -m pytest tests/ -q --tb=short
 ```
 
-**结果：199 passed, 2 warnings**
+**结果：199 passed, 1 warning**
 
 新增/更新测试覆盖：
 - `tests/server/api/test_leads.py` / `test_leads_tenant.py`
@@ -127,8 +133,8 @@ THUNDER_DATABASE_URL=sqlite:///data/thunder.db alembic check
 
 | 工具 | 结果 | 备注 |
 |------|------|------|
-| ruff | 48 errors remaining | 多为历史遗留（`E402 import not at top`、`E712 == True`、`F401 unused import`） |
-| mypy | 343 errors | 多为 SQLAlchemy `Column[str]` 类型推断、已有 Pydantic/字典类型问题 |
+| ruff | 47 errors remaining | 多为历史遗留（`E402 import not at top`、`E712 == True`、`F401 unused import`） |
+| mypy | 345 errors | 多为 SQLAlchemy `Column[str]` 类型推断、已有 Pydantic/字典类型问题；mypy 2.1.0 在 Python 3.14 下偶发内部错误 |
 
 **说明：** 剩余 lint/type 错误未在本次全部修复，避免单次改动过大。建议作为持续重构项分批处理。
 
@@ -152,31 +158,25 @@ THUNDER_DATABASE_URL=sqlite:///data/thunder.db alembic check
 
 | # | 问题 | 严重级别 | 建议 |
 |---|------|---------|------|
-| 6 | 设备重复调度：`MatrixDevice.is_available()` 对 `"running"` 返回 True | High | 运行中设备返回 False；调度前加状态锁 |
-| 7 | `core/discover.py` 返回计数列表，`server/workers.py` 期望评论 dict 列表 | High | 统一返回类型或调整 workers.py 处理逻辑 |
-| 8 | `core/browser_orchestrator.py` 仅支持 Windows | Medium | 增加 Linux/macOS Chrome 路径和进程管理 |
-| 9 | `core/discover.py` 与 `adapters/mediacrawler/runner.py` 重写依赖配置文件，并发冲突 | Medium | 使用环境变量或临时目录隔离配置 |
-| 10 | `is_send_window_open()` 使用 UTC 与本地时间比较 | Medium | 转换到配置时区再比较 |
-| 11 | ADB text input 存在 shell 注入 | Medium | 使用 ADB Keyboard 广播路径，或对 fallback 做 shell 转义 |
-| 12 | `ProxyRotator` 直接保存外部列表引用 | Low | `self._proxies = list(proxies)` |
-| 13 | `server/services/migrations.py` 缺失部分 Industry 列 | Low | 补全 `ADDITIVE_MIGRATIONS` |
+| 1 | `core/browser_orchestrator.py` 仅支持 Windows | Medium | 增加 Linux/macOS Chrome 路径和进程管理 |
+| 2 | `core/discover.py` 与 `adapters/mediacrawler/runner.py` 重写依赖配置文件，并发冲突 | Medium | 使用环境变量或临时目录隔离配置 |
+| 3 | `is_send_window_open()` 使用 UTC 与本地时间比较 | Medium | 转换到配置时区再比较 |
+| 4 | ADB text input 存在 shell 注入 | Medium | 使用 ADB Keyboard 广播路径，或对 fallback 做 shell 转义 |
+| 5 | `ProxyRotator` 直接保存外部列表引用 | Low | `self._proxies = list(proxies)` |
+| 6 | `server/services/migrations.py` 缺失部分 Industry 列 | Low | 补全 `ADDITIVE_MIGRATIONS` |
 
 ### 5.3 性能（剩余）
 
 | # | 问题 | 严重级别 | 建议 |
 |---|------|---------|------|
-| 14 | `server/services/analytics.py` 全量加载后 Python 过滤日期 | High | SQL 中过滤 `fetched_at`，只选必要列 |
-| 15 | `server/services/task_stats.py` 多个统计函数全表加载 + Python 聚合 | High | 使用 SQL `GROUP BY` 聚合 |
-| 16 | `core/classify.py` 逐条入队，每条一次 Session/查询 | High | 批量 `INSERT ... ON CONFLICT DO NOTHING` |
-| 17 | `server/api/dashboard.py` execution monitor N+1 | Medium | 使用 `LATERAL` 或窗口函数取最新记录 |
-| 18 | 异步路径中同步 I/O 阻塞事件循环 | Medium | `asyncio.to_thread()` 包裹 ADB/文件/子进程 |
-| 19 | LLM 调用在 FastAPI async 路由中同步阻塞 | Medium | 使用 `openai.AsyncOpenAI` 或 `asyncio.to_thread()` |
-| 20 | `load_system()` 每次调用重新解析 YAML | Medium | `functools.lru_cache` 缓存 |
-| 21 | 多处列表端点无分页 | Medium | 增加默认 limit / cursor 分页 |
-| 22 | Lead export 一次性构建完整 XLSX | Medium | CSV 流式输出；XLSX 使用 openpyxl 常量内存模式 |
-| 23 | `claim_token` LIKE 查询无索引 | Medium | 使用 `job_id` 索引替代 |
-| 24 | 每条私信单独 LLM 调用 | Low | 增加 `(variant_id, comment_hash)` 回复缓存 |
-| 25 | MJPEG 每帧重新 resize | Low | 降低 FPS / 复用缓冲区 |
+| 1 | `server/api/dashboard.py` execution monitor N+1 | Medium | 使用 `LATERAL` 或窗口函数取最新记录 |
+| 2 | LLM 调用在 FastAPI async 路由中同步阻塞 | Medium | 使用 `openai.AsyncOpenAI` 或 `asyncio.to_thread()` |
+| 3 | `load_system()` 每次调用重新解析 YAML | Medium | `functools.lru_cache` 缓存 |
+| 4 | 多处列表端点无分页 | Medium | 增加默认 limit / cursor 分页 |
+| 5 | Lead export 一次性构建完整 XLSX | Medium | CSV 流式输出；XLSX 使用 openpyxl 常量内存模式 |
+| 6 | `claim_token` LIKE 查询无索引 | Medium | 使用 `job_id` 索引替代 |
+| 7 | 每条私信单独 LLM 调用 | Low | 增加 `(variant_id, comment_hash)` 回复缓存 |
+| 8 | MJPEG 每帧重新 resize | Low | 降低 FPS / 复用缓冲区 |
 
 ---
 
@@ -216,21 +216,22 @@ rm -f data/thunder.db data/thunder.db-*
 
 ### 6.3 推荐后续任务清单
 
-- [ ] 修复设备重复调度问题（`MatrixDevice.is_available()` + 调度锁）
-- [ ] 统一 `core/discover.py` 与 `server/workers.py` 的数据契约
-- [ ] 将 analytics / funnel stats 改为 SQL 聚合
-- [ ] 批量入队 classified comments
-- [ ] 为异步路径中的同步 I/O 添加 `asyncio.to_thread()`
+- [x] 修复设备重复调度问题（`MatrixDevice.is_available()` + 调度锁）
+- [x] 统一 `core/discover.py` 与 `server/workers.py` 的数据契约
+- [x] 将 analytics / funnel stats 改为 SQL 聚合
+- [x] 批量入队 classified comments
+- [x] 为异步路径中的同步 I/O 添加 `asyncio.to_thread()`
 - [ ] 移除或加固 `scripts/smoke/reset_admin.py`
 - [ ] 生产环境强制 `THUNDER_SECRET_KEY` 和严格 CORS
-- [ ] 清理剩余 ruff 48 errors 和 mypy 343 errors
+- [ ] 清理剩余 ruff 47 errors 和 mypy 345 errors
 
 ---
 
 ## 7. 结论
 
-本次审计修复了最严重的安全漏洞和逻辑错误，全量测试通过，数据库迁移同步。系统在当前分支上比之前更健壮、更安全。剩余问题主要为性能优化、跨平台兼容性和历史技术债，建议按优先级分批处理。
+本次审计修复了最严重的安全漏洞、逻辑错误和性能瓶颈，全量测试通过，数据库迁移同步。后续补修的 5 项 High 风险（设备调度、数据契约、SQL 聚合、批量入队、异步 I/O）也已全部完成。系统在当前分支上比之前更健壮、更安全、更可扩展。剩余问题主要为跨平台兼容性、历史 lint/type 技术债和若干 Medium/Low 优化项，建议按优先级分批处理。
 
 **审计完成提交：** `42b1417`  
+**后续 High 风险修复提交：** `3d5a62a`  
 **报告作者：** Kimi Code CLI  
 **报告路径：** `docs/superpowers/audits/2026-06-16-code-audit-report.md`

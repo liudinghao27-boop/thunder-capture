@@ -5,7 +5,6 @@ from pathlib import Path
 
 from core.config import IndustryConfig
 from core.browser_orchestrator import ShadowBrowser
-from core.classify import classify_batch, enqueue_classified
 
 log = logging.getLogger("thunder.discover")
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -51,7 +50,7 @@ async def run_discovery(industry: IndustryConfig, max_authors=None, video_age_da
         platforms_map = {"douyin": "dy", "xiaohongshu": "xhs"}
         configured_platforms = [str(p).strip() for p in (getattr(industry, "platforms", None) or ["douyin"]) if str(p).strip()]
         
-        all_enqueued = []
+        all_comments = []
     
         for p in configured_platforms:
             mc_platform = platforms_map.get(p, "dy")
@@ -135,7 +134,7 @@ async def run_discovery(industry: IndustryConfig, max_authors=None, video_age_da
                     log.error(f"Failed to read file {file}: {e}")
 
             if raw_comments:
-                log.info(f"Classifying {len(raw_comments)} comments from {p}...")
+                log.info(f"Deduplicating {len(raw_comments)} comments from {p}...")
                 # Dedup slightly
                 seen = set()
                 unique_comments = []
@@ -145,16 +144,14 @@ async def run_discovery(industry: IndustryConfig, max_authors=None, video_age_da
                         seen.add(hash_key)
                         unique_comments.append(c)
 
-                classified = classify_batch(unique_comments, industry)
-                enqueued = enqueue_classified(classified)
-                all_enqueued.append(enqueued)
-                log.info(f"Enqueued {enqueued} leads for {p}.")
-                
-                # Clean up the jsonl files so they don't get processed again
-                for file in data_dir.glob("*.jsonl"):
-                    file.unlink(missing_ok=True)
+                all_comments.extend(unique_comments)
+                log.info(f"Collected {len(unique_comments)} unique comments for {p}.")
+
+            # Clean up the jsonl files so they don't get processed again
+            for file in data_dir.glob("*.jsonl"):
+                file.unlink(missing_ok=True)
                     
     finally:
         shadow_browser.close()
 
-    return all_enqueued
+    return all_comments

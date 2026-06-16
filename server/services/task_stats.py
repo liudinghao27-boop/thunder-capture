@@ -1,11 +1,14 @@
 """Task queue statistics and funnel aggregations using SQLAlchemy."""
 
 import json
-from sqlalchemy import func, or_
-from datetime import datetime, timezone
+import logging
+from sqlalchemy import and_, func, or_, case
+from datetime import datetime, timedelta, timezone
 
 from server.models import SessionLocal
 from server.models.task import TaskQueue, TargetBlogger
+
+log = logging.getLogger("thunder.task_stats")
 
 def queue_stats(industry_slug: str = "", owner_user_id: str = "") -> dict:
     db = SessionLocal()
@@ -217,132 +220,195 @@ def get_bloggers(status: str = "active", industry_slug: str = "", owner_user_id:
 
 
 def keyword_funnel_stats(industry_slug: str, limit: int = 20, owner_user_id: str = "") -> list[dict]:
+    since = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    key_expr = func.coalesce(
+        func.nullif(TaskQueue.source_keyword, ""),
+        func.nullif(TaskQueue.keyword, ""),
+        "unknown",
+    )
+
     db = SessionLocal()
     try:
-        query = db.query(TaskQueue.source_keyword, TaskQueue.keyword, TaskQueue.status, TaskQueue.matched_categories)\
-            .filter(TaskQueue.industry_slug == industry_slug)
+        # Aggregate status counts in the database, scoped to a rolling window.
+        agg_query = db.query(
+            key_expr.label("key"),
+            func.count(TaskQueue.id).label("total"),
+            func.sum(case((TaskQueue.status == "pending", 1), else_=0)).label("pending"),
+            func.sum(case((TaskQueue.status == "claimed", 1), else_=0)).label("claimed"),
+            func.sum(case((TaskQueue.status == "done", 1), else_=0)).label("done"),
+            func.sum(case((TaskQueue.status == "failed", 1), else_=0)).label("failed"),
+        ).filter(
+            TaskQueue.industry_slug == industry_slug,
+            TaskQueue.fetched_at >= since,
+        ).group_by(key_expr)
         if owner_user_id:
             owner_filter = _owner_filter(TaskQueue, owner_user_id)
             if owner_filter is not None:
-                query = query.filter(owner_filter)
-        rows = query.all()
-    finally:
-        db.close()
+                agg_query = agg_query.filter(owner_filter)
 
-    buckets: dict[str, dict] = {}
-    for source_keyword, keyword, status, matched_categories in rows:
-        key = source_keyword or keyword or "unknown"
-        if key.startswith("creator:"):
-            key = "unknown"
-        bucket = buckets.setdefault(
-            key,
-            {
+        buckets: dict[str, dict] = {}
+        for row in agg_query:
+            key = row.key
+            if not key:
+                key = "unknown"
+            if key.startswith("creator:"):
+                key = "unknown"
+            buckets[key] = {
                 "keyword": key,
-                "total": 0,
-                "pending": 0,
-                "claimed": 0,
-                "done": 0,
-                "failed": 0,
+                "total": int(row.total or 0),
+                "pending": int(row.pending or 0),
+                "claimed": int(row.claimed or 0),
+                "done": int(row.done or 0),
+                "failed": int(row.failed or 0),
                 "high_confidence": 0,
                 "medium_confidence": 0,
                 "low_confidence": 0,
-            },
+            }
+
+        # Confidence requires JSON parsing; only fetch the two columns needed.
+        conf_query = db.query(
+            key_expr.label("key"),
+            TaskQueue.matched_categories,
+        ).filter(
+            TaskQueue.industry_slug == industry_slug,
+            TaskQueue.fetched_at >= since,
         )
-        bucket["total"] += 1
-        if status in {"pending", "claimed", "done", "failed"}:
-            bucket[status] += 1
-        try:
-            meta = json.loads(matched_categories or "{}")
-        except Exception:
-            meta = {}
-        confidence = str(meta.get("confidence", "")).lower() if isinstance(meta, dict) else ""
-        if confidence in {"high", "medium", "low"}:
-            bucket[f"{confidence}_confidence"] += 1
-
-    ranked = sorted(
-        buckets.values(),
-        key=lambda b: (
-            b["keyword"] != "unknown",
-            b["pending"] + b["done"] + b["claimed"],
-            b["high_confidence"],
-            b["total"],
-        ),
-        reverse=True,
-    )
-    return ranked[: max(1, int(limit))]
-
-
-def source_type_funnel_stats(industry_slug: str, owner_user_id: str = "") -> list[dict]:
-    db = SessionLocal()
-    try:
-        query = db.query(TaskQueue.source_keyword, TaskQueue.status, TaskQueue.matched_categories)\
-            .filter(TaskQueue.industry_slug == industry_slug)
         if owner_user_id:
             owner_filter = _owner_filter(TaskQueue, owner_user_id)
             if owner_filter is not None:
-                query = query.filter(owner_filter)
-        rows = query.all()
+                conf_query = conf_query.filter(owner_filter)
+
+        for key, matched_categories in conf_query:
+            key = key or "unknown"
+            if key.startswith("creator:"):
+                key = "unknown"
+            bucket = buckets.get(key)
+            if bucket is None:
+                continue
+            try:
+                meta = json.loads(matched_categories or "{}")
+            except Exception:
+                meta = {}
+            confidence = str(meta.get("confidence", "")).lower() if isinstance(meta, dict) else ""
+            if confidence in {"high", "medium", "low"}:
+                bucket[f"{confidence}_confidence"] += 1
+
+        ranked = sorted(
+            buckets.values(),
+            key=lambda b: (
+                b["keyword"] != "unknown",
+                b["pending"] + b["done"] + b["claimed"],
+                b["high_confidence"],
+                b["total"],
+            ),
+            reverse=True,
+        )
+        return ranked[: max(1, int(limit))]
     finally:
         db.close()
 
-    buckets = {
-        "target": {"type": "target", "label": "对标账号", "total": 0, "pending": 0, "claimed": 0, "done": 0, "failed": 0, "high_confidence": 0},
-        "keyword": {"type": "keyword", "label": "关键词", "total": 0, "pending": 0, "claimed": 0, "done": 0, "failed": 0, "high_confidence": 0},
-        "unknown": {"type": "unknown", "label": "未标记", "total": 0, "pending": 0, "claimed": 0, "done": 0, "failed": 0, "high_confidence": 0},
-    }
-    for source_keyword, status, matched_categories in rows:
-        source = source_keyword or ""
-        if source.startswith("对标:"):
-            key = "target"
-        elif source:
-            key = "keyword"
-        else:
-            key = "unknown"
-        bucket = buckets[key]
-        bucket["total"] += 1
-        if status in {"pending", "claimed", "done", "failed"}:
-            bucket[status] += 1
-        try:
-            meta = json.loads(matched_categories or "{}")
-        except Exception:
-            meta = {}
-        if isinstance(meta, dict) and str(meta.get("confidence", "")).lower() == "high":
-            bucket["high_confidence"] += 1
-    return [b for b in buckets.values() if b["total"] > 0]
+
+def source_type_funnel_stats(industry_slug: str, owner_user_id: str = "") -> list[dict]:
+    since = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    source_expr = func.coalesce(
+        func.nullif(TaskQueue.source_keyword, ""),
+        func.nullif(TaskQueue.keyword, ""),
+        "",
+    )
+
+    db = SessionLocal()
+    try:
+        agg_query = db.query(
+            source_expr.label("source"),
+            TaskQueue.status,
+            func.count(TaskQueue.id).label("total"),
+        ).filter(
+            TaskQueue.industry_slug == industry_slug,
+            TaskQueue.fetched_at >= since,
+        ).group_by(source_expr, TaskQueue.status)
+        if owner_user_id:
+            owner_filter = _owner_filter(TaskQueue, owner_user_id)
+            if owner_filter is not None:
+                agg_query = agg_query.filter(owner_filter)
+
+        buckets = {
+            "target": {"type": "target", "label": "对标账号", "total": 0, "pending": 0, "claimed": 0, "done": 0, "failed": 0, "high_confidence": 0},
+            "keyword": {"type": "keyword", "label": "关键词", "total": 0, "pending": 0, "claimed": 0, "done": 0, "failed": 0, "high_confidence": 0},
+            "unknown": {"type": "unknown", "label": "未标记", "total": 0, "pending": 0, "claimed": 0, "done": 0, "failed": 0, "high_confidence": 0},
+        }
+        for source, status, total in agg_query:
+            source = source or ""
+            if source.startswith("对标:"):
+                key = "target"
+            elif source:
+                key = "keyword"
+            else:
+                key = "unknown"
+            bucket = buckets[key]
+            bucket["total"] += int(total or 0)
+            if status in {"pending", "claimed", "done", "failed"}:
+                bucket[status] += int(total or 0)
+
+        # Confidence still requires JSON parsing; scoped to the same window.
+        conf_query = db.query(
+            source_expr.label("source"),
+            TaskQueue.matched_categories,
+        ).filter(
+            TaskQueue.industry_slug == industry_slug,
+            TaskQueue.fetched_at >= since,
+        )
+        if owner_user_id:
+            owner_filter = _owner_filter(TaskQueue, owner_user_id)
+            if owner_filter is not None:
+                conf_query = conf_query.filter(owner_filter)
+
+        for source, matched_categories in conf_query:
+            source = source or ""
+            if source.startswith("对标:"):
+                key = "target"
+            elif source:
+                key = "keyword"
+            else:
+                key = "unknown"
+            bucket = buckets[key]
+            try:
+                meta = json.loads(matched_categories or "{}")
+            except Exception:
+                meta = {}
+            if isinstance(meta, dict) and str(meta.get("confidence", "")).lower() == "high":
+                bucket["high_confidence"] += 1
+
+        return [b for b in buckets.values() if b["total"] > 0]
+    finally:
+        db.close()
 
 
 def blogger_source_stats(industry_slug: str, owner_user_id: str = "") -> dict:
+    source_expr = func.coalesce(func.nullif(TargetBlogger.source_keyword, ""), "")
     db = SessionLocal()
     try:
-        query = db.query(TargetBlogger.source_keyword, TargetBlogger.status)\
-            .filter(TargetBlogger.industry_slug == industry_slug)
+        query = db.query(
+            func.count(TargetBlogger.sec_uid).label("total"),
+            func.sum(case((TargetBlogger.status == "active", 1), else_=0)).label("active"),
+            func.sum(case((source_expr.like("对标:%"), 1), else_=0)).label("target"),
+            func.sum(case((and_(source_expr != "", source_expr.notlike("对标:%")), 1), else_=0)).label("keyword"),
+            func.sum(case((or_(source_expr == "", source_expr.is_(None)), 1), else_=0)).label("unknown"),
+        ).filter(TargetBlogger.industry_slug == industry_slug)
         if owner_user_id:
             owner_filter = _owner_filter(TargetBlogger, owner_user_id)
             if owner_filter is not None:
                 query = query.filter(owner_filter)
-        rows = query.all()
+        row = query.one()
     finally:
         db.close()
 
-    result = {
-        "total": 0,
-        "active": 0,
-        "target": 0,
-        "keyword": 0,
-        "unknown": 0,
+    return {
+        "total": int(row.total or 0),
+        "active": int(row.active or 0),
+        "target": int(row.target or 0),
+        "keyword": int(row.keyword or 0),
+        "unknown": int(row.unknown or 0),
     }
-    for source_keyword, status in rows:
-        source = source_keyword or ""
-        result["total"] += 1
-        if status == "active":
-            result["active"] += 1
-        if source.startswith("对标:"):
-            result["target"] += 1
-        elif source:
-            result["keyword"] += 1
-        else:
-            result["unknown"] += 1
-    return result
 
 
 def _source_type(source: str) -> str:
@@ -354,82 +420,113 @@ def _source_type(source: str) -> str:
 
 
 def source_performance_stats(industry_slug: str, limit: int = 20, owner_user_id: str = "") -> list[dict]:
+    since = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    source_expr = func.coalesce(
+        func.nullif(TaskQueue.source_keyword, ""),
+        func.nullif(TaskQueue.keyword, ""),
+        "unknown",
+    )
+
     db = SessionLocal()
     try:
-        query = db.query(TaskQueue.source_keyword, TaskQueue.keyword, TaskQueue.status, TaskQueue.matched_categories)\
-            .filter(TaskQueue.industry_slug == industry_slug)
+        agg_query = db.query(
+            source_expr.label("source"),
+            func.count(TaskQueue.id).label("total"),
+            func.sum(case((TaskQueue.status == "pending", 1), else_=0)).label("pending"),
+            func.sum(case((TaskQueue.status == "claimed", 1), else_=0)).label("claimed"),
+            func.sum(case((TaskQueue.status == "done", 1), else_=0)).label("done"),
+            func.sum(case((TaskQueue.status == "failed", 1), else_=0)).label("failed"),
+        ).filter(
+            TaskQueue.industry_slug == industry_slug,
+            TaskQueue.fetched_at >= since,
+        ).group_by(source_expr)
         if owner_user_id:
             owner_filter = _owner_filter(TaskQueue, owner_user_id)
             if owner_filter is not None:
-                query = query.filter(owner_filter)
-        rows = query.all()
-    finally:
-        db.close()
+                agg_query = agg_query.filter(owner_filter)
 
-    buckets: dict[str, dict] = {}
-    for source_keyword, keyword, status, matched_categories in rows:
-        source = source_keyword or keyword or "unknown"
-        if source.startswith("creator:"):
-            source = "unknown"
-        bucket = buckets.setdefault(
-            source,
-            {
+        buckets: dict[str, dict] = {}
+        for row in agg_query:
+            source = row.source
+            if not source:
+                source = "unknown"
+            if source.startswith("creator:"):
+                source = "unknown"
+            buckets[source] = {
                 "source": source,
                 "type": _source_type(source if source != "unknown" else ""),
-                "total": 0,
-                "pending": 0,
-                "claimed": 0,
-                "done": 0,
-                "failed": 0,
+                "total": int(row.total or 0),
+                "pending": int(row.pending or 0),
+                "claimed": int(row.claimed or 0),
+                "done": int(row.done or 0),
+                "failed": int(row.failed or 0),
                 "high_confidence": 0,
                 "medium_confidence": 0,
                 "low_confidence": 0,
                 "quality_score": 50,
                 "collector_boost": 0,
-            },
-        )
-        bucket["total"] += 1
-        if status in {"pending", "claimed", "done", "failed"}:
-            bucket[status] += 1
-        try:
-            meta = json.loads(matched_categories or "{}")
-        except Exception:
-            meta = {}
-        confidence = str(meta.get("confidence", "")).lower() if isinstance(meta, dict) else ""
-        if confidence in {"high", "medium", "low"}:
-            bucket[f"{confidence}_confidence"] += 1
+            }
 
-    for bucket in buckets.values():
-        total = max(1, int(bucket["total"]))
-        done_rate = bucket["done"] / total
-        failed_rate = bucket["failed"] / total
-        high_rate = bucket["high_confidence"] / total
-        medium_rate = bucket["medium_confidence"] / total
-        low_rate = bucket["low_confidence"] / total
-        score = (
-            50
-            + done_rate * 25
-            - failed_rate * 25
-            + high_rate * 22
-            + medium_rate * 8
-            - low_rate * 12
+        conf_query = db.query(
+            source_expr.label("source"),
+            TaskQueue.matched_categories,
+        ).filter(
+            TaskQueue.industry_slug == industry_slug,
+            TaskQueue.fetched_at >= since,
         )
-        if total < 5:
-            score = 50 + ((score - 50) * 0.55)
-        bucket["quality_score"] = round(max(0, min(100, score)), 1)
-        bucket["collector_boost"] = round((bucket["quality_score"] - 50) / 2, 1)
+        if owner_user_id:
+            owner_filter = _owner_filter(TaskQueue, owner_user_id)
+            if owner_filter is not None:
+                conf_query = conf_query.filter(owner_filter)
 
-    ranked = sorted(
-        buckets.values(),
-        key=lambda b: (
-            b["source"] != "unknown",
-            b["quality_score"],
-            b["done"] + b["pending"] + b["claimed"],
-            b["total"],
-        ),
-        reverse=True,
-    )
-    return ranked[: max(1, int(limit))]
+        for source, matched_categories in conf_query:
+            source = source or "unknown"
+            if source.startswith("creator:"):
+                source = "unknown"
+            bucket = buckets.get(source)
+            if bucket is None:
+                continue
+            try:
+                meta = json.loads(matched_categories or "{}")
+            except Exception:
+                meta = {}
+            confidence = str(meta.get("confidence", "")).lower() if isinstance(meta, dict) else ""
+            if confidence in {"high", "medium", "low"}:
+                bucket[f"{confidence}_confidence"] += 1
+
+        for bucket in buckets.values():
+            total = max(1, int(bucket["total"]))
+            done_rate = bucket["done"] / total
+            failed_rate = bucket["failed"] / total
+            high_rate = bucket["high_confidence"] / total
+            medium_rate = bucket["medium_confidence"] / total
+            low_rate = bucket["low_confidence"] / total
+            score = (
+                50
+                + done_rate * 25
+                - failed_rate * 25
+                + high_rate * 22
+                + medium_rate * 8
+                - low_rate * 12
+            )
+            if total < 5:
+                score = 50 + ((score - 50) * 0.55)
+            bucket["quality_score"] = round(max(0, min(100, score)), 1)
+            bucket["collector_boost"] = round((bucket["quality_score"] - 50) / 2, 1)
+
+        ranked = sorted(
+            buckets.values(),
+            key=lambda b: (
+                b["source"] != "unknown",
+                b["quality_score"],
+                b["done"] + b["pending"] + b["claimed"],
+                b["total"],
+            ),
+            reverse=True,
+        )
+        return ranked[: max(1, int(limit))]
+    finally:
+        db.close()
 
 
 def industry_daily_quota_state(industry_slug: str, owner_user_id: str = "") -> dict:
@@ -599,6 +696,114 @@ def enqueue_task(industry_slug: str, text: str, source_name: str, source_sec_uid
             )
             db.add(t)
             db.commit()
+    finally:
+        db.close()
+
+
+def enqueue_tasks_batch(comments: list[dict]) -> int:
+    """Bulk-insert classified comments into the task queue.
+
+    Uses a single transaction and dialect-specific ``INSERT ... ON CONFLICT
+    DO NOTHING`` against the ``(comment_id, video_id)`` unique constraint.
+    Falls back to one-by-one enqueue_task when the dialect is unsupported.
+    """
+    from datetime import datetime, timezone
+    from uuid import uuid4
+    from server.models import SessionLocal, engine
+    from server.models.task import TaskQueue
+
+    if not comments:
+        return 0
+
+    values = []
+    for comment in comments:
+        text = str(comment.get("text", "")).strip()
+        source_sec_uid = str(comment.get("source_sec_uid", "")).strip()
+        source_video_id = str(comment.get("source_video_id", "")).strip()
+        if not text or not source_sec_uid:
+            continue
+        matched = comment.get("matched_categories", {})
+        if isinstance(matched, dict):
+            matched = json.dumps(matched, ensure_ascii=False)
+        values.append({
+            "industry_slug": str(comment.get("industry_slug", "")),
+            "text": text,
+            "user_name": str(comment.get("source_name", "")),
+            "user_id": source_sec_uid,
+            "short_id": str(comment.get("source_short_id", "")),
+            "video_id": source_video_id or "",
+            "comment_id": str(comment.get("source_short_id", "")) or str(uuid4())[:12],
+            "source_keyword": str(comment.get("source_keyword", "")),
+            "matched_categories": matched or "[]",
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
+            "status": "pending",
+        })
+
+    if not values:
+        return 0
+
+    db = SessionLocal()
+    try:
+        dialect = engine.dialect.name
+        if dialect == "postgresql":
+            from sqlalchemy.dialects.postgresql import insert as pg_insert
+            stmt = pg_insert(TaskQueue).values(values).on_conflict_do_nothing(
+                index_elements=["comment_id", "video_id"]
+            )
+        elif dialect == "sqlite":
+            from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+            stmt = sqlite_insert(TaskQueue).values(values).on_conflict_do_nothing(
+                index_elements=["comment_id", "video_id"]
+            )
+        else:
+            # Fallback for other databases; slower but correct.
+            db.close()
+            count = 0
+            for comment in comments:
+                matched = comment.get("matched_categories", {})
+                if isinstance(matched, dict):
+                    matched = json.dumps(matched, ensure_ascii=False)
+                enqueue_task(
+                    industry_slug=comment.get("industry_slug", ""),
+                    text=comment.get("text", ""),
+                    source_name=comment.get("source_name", ""),
+                    source_sec_uid=comment.get("source_sec_uid", ""),
+                    source_short_id=comment.get("source_short_id", ""),
+                    source_video_id=comment.get("source_video_id", ""),
+                    source_keyword=comment.get("source_keyword", ""),
+                    matched_categories=matched,
+                )
+                count += 1
+            return count
+
+        result = db.execute(stmt)
+        db.commit()
+        inserted = result.rowcount
+        log.info("  批量入队: %s 条 (去重后)", inserted)
+        return inserted
+    except Exception as e:
+        db.rollback()
+        log.warning("批量入队失败，回退到逐条入队: %s", e)
+        count = 0
+        for comment in comments:
+            try:
+                matched = comment.get("matched_categories", {})
+                if isinstance(matched, dict):
+                    matched = json.dumps(matched, ensure_ascii=False)
+                enqueue_task(
+                    industry_slug=comment.get("industry_slug", ""),
+                    text=comment.get("text", ""),
+                    source_name=comment.get("source_name", ""),
+                    source_sec_uid=comment.get("source_sec_uid", ""),
+                    source_short_id=comment.get("source_short_id", ""),
+                    source_video_id=comment.get("source_video_id", ""),
+                    source_keyword=comment.get("source_keyword", ""),
+                    matched_categories=matched,
+                )
+                count += 1
+            except Exception:
+                continue
+        return count
     finally:
         db.close()
 

@@ -22,7 +22,7 @@ from functools import lru_cache
 import json_repair
 
 from .config import IndustryConfig
-from server.services.task_stats import enqueue_task
+from server.services.task_stats import enqueue_tasks_batch
 
 log = logging.getLogger("thunder.classify")
 
@@ -527,21 +527,13 @@ def classify_batch(
 
 def enqueue_classified(comments: list[dict]):
     """Write classified target comments into the sending queue."""
-    count = 0
+    normalized = []
     for comment in comments:
         matched = comment.get("matched_categories", {})
         if isinstance(matched, dict):
-            matched = json.dumps(matched, ensure_ascii=False)
-        enqueue_task(
-            industry_slug=comment.get("industry_slug", ""),
-            text=comment.get("text", ""),
-            source_name=comment.get("source_name", ""),
-            source_sec_uid=comment.get("source_sec_uid", ""),
-            source_short_id=comment.get("source_short_id", ""),
-            source_video_id=comment.get("source_video_id", ""),
-            source_keyword=comment.get("source_keyword", ""),
-            matched_categories=matched,
-        )
-        count += 1
+            comment = dict(comment)
+            comment["matched_categories"] = json.dumps(matched, ensure_ascii=False)
+        normalized.append(comment)
+    count = enqueue_tasks_batch(normalized)
     log.info("  入队: %s 条", count)
     return count

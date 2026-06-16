@@ -150,7 +150,7 @@ async def device_heartbeat(
     except ADBError:
         return {"online": False, "serial": device.adb_serial, "error": "Invalid serial format"}
 
-    health = adb_device_health(device.adb_serial)
+    health = await asyncio.to_thread(adb_device_health, device.adb_serial)
     online = bool(health.get("online"))
 
     if online:
@@ -282,7 +282,9 @@ async def scan_and_register_devices(
             Device.user_id == current_user.id,
             Device.adb_serial == s
         ).first()
-        keyboard_status_by_serial[s] = prepare_adb_keyboard(s, install_if_missing=True)
+        keyboard_status_by_serial[s] = await asyncio.to_thread(
+            prepare_adb_keyboard, s, True
+        )
         if existing:
             existing.last_heartbeat = datetime.now(timezone.utc)
             _apply_keyboard_status(existing, keyboard_status_by_serial[s])
@@ -398,11 +400,11 @@ async def device_control_click(
     except ADBError:
         raise HTTPException(status_code=400, detail="Invalid ADB serial format")
 
-    w, h = get_device_resolution(device.adb_serial)
+    w, h = await asyncio.to_thread(get_device_resolution, device.adb_serial)
     real_x = int(body.x_pct * w)
     real_y = int(body.y_pct * h)
 
-    ADBClient(device.adb_serial).tap(real_x, real_y)
+    await asyncio.to_thread(ADBClient(device.adb_serial).tap, real_x, real_y)
     return {"ok": True, "x": real_x, "y": real_y}
 
 
@@ -431,13 +433,16 @@ async def device_control_swipe(
     except ADBError:
         raise HTTPException(status_code=400, detail="Invalid ADB serial format")
 
-    w, h = get_device_resolution(device.adb_serial)
+    w, h = await asyncio.to_thread(get_device_resolution, device.adb_serial)
     real_x1 = int(body.x1_pct * w)
     real_y1 = int(body.y1_pct * h)
     real_x2 = int(body.x2_pct * w)
     real_y2 = int(body.y2_pct * h)
 
-    ADBClient(device.adb_serial).swipe(real_x1, real_y1, real_x2, real_y2, body.duration_ms)
+    await asyncio.to_thread(
+        ADBClient(device.adb_serial).swipe,
+        real_x1, real_y1, real_x2, real_y2, body.duration_ms
+    )
     return {"ok": True}
 
 
@@ -464,7 +469,7 @@ async def device_control_key(
     if not body.key_code.isdigit():
         raise HTTPException(status_code=400, detail="Keycode must be a positive integer")
 
-    ADBClient(device.adb_serial).keyevent(body.key_code)
+    await asyncio.to_thread(ADBClient(device.adb_serial).keyevent, body.key_code)
     return {"ok": True}
 
 
@@ -489,5 +494,5 @@ async def device_control_text(
     except ADBError:
         raise HTTPException(status_code=400, detail="Invalid ADB serial format")
 
-    ADBClient(device.adb_serial).input_text(body.text)
+    await asyncio.to_thread(ADBClient(device.adb_serial).input_text, body.text)
     return {"ok": True}
