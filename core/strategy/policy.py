@@ -8,9 +8,40 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any
 
+from core.config import IndustryConfig
+
 log = logging.getLogger("thunder.strategy.policy")
+
+
+def _parse_time(value: str):
+    """Parse HH:MM string into (hour, minute) tuple."""
+    try:
+        h, m = value.split(":")
+        return int(h), int(m)
+    except Exception:
+        return 0, 0
+
+
+def is_send_window_open(industry: IndustryConfig) -> bool:
+    """Return True if current UTC time is inside the industry's send window."""
+    now = datetime.now(timezone.utc)
+
+    if getattr(industry, "pause_weekends", False) and now.weekday() >= 5:
+        return False
+
+    start_h, start_m = _parse_time(getattr(industry, "send_start_time", "00:00"))
+    end_h, end_m = _parse_time(getattr(industry, "send_end_time", "23:59"))
+
+    current_minutes = now.hour * 60 + now.minute
+    start_minutes = start_h * 60 + start_m
+    end_minutes = end_h * 60 + end_m
+
+    if start_minutes <= end_minutes:
+        return start_minutes <= current_minutes <= end_minutes
+    return current_minutes >= start_minutes or current_minutes <= end_minutes
 
 
 @dataclass

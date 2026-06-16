@@ -12,6 +12,8 @@ def _make_industry(compliance_mode: bool = False) -> IndustryConfig:
         categories=["c"],
         reply_tone="测试",
         reply_style="测试",
+        send_start_time="00:00",
+        send_end_time="23:59",
         compliance_mode=compliance_mode,
     )
 

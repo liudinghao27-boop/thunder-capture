@@ -16,7 +16,7 @@ from core.device.manager import load_active_devices
 from core.device.supervisor import DeviceSupervisor
 from core.strategy.risk import RiskManager
 from core.strategy.wave import WaveStrategy
-from core.strategy.policy import SendPolicyGate
+from core.strategy.policy import SendPolicyGate, is_send_window_open
 from core.config import IndustryConfig, load_system
 
 log = logging.getLogger("thunder.worker")
@@ -269,6 +269,15 @@ def run_senders(industry: IndustryConfig, device_ids: list[str] = None, should_s
             "reason": "compliance_mode",
             "industry_slug": getattr(industry, "slug", ""),
             "message": "合规模式已开启，仅采集不发送。",
+        }
+    if not is_send_window_open(industry):
+        log.info("Send window closed for %s; skipping dispatch.", getattr(industry, "slug", ""))
+        return {
+            "ok": True,
+            "skipped": True,
+            "reason": "outside_send_window",
+            "industry_slug": getattr(industry, "slug", ""),
+            "message": "当前不在允许的发送时段内。",
         }
     user_id = getattr(industry, "user_id", "") or ""
     requested_device_ids = [str(d).strip() for d in (device_ids or []) if str(d).strip()]
