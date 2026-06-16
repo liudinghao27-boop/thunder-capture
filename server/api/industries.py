@@ -61,6 +61,11 @@ def _to_industry_config(industry: Industry):
         compliance_mode=bool(getattr(industry, "compliance_mode", False)),
         webhook_url=getattr(industry, "webhook_url", "") or "",
         auto_export_enabled=bool(getattr(industry, "auto_export_enabled", False)),
+        send_start_time=getattr(industry, "send_start_time", "") or "09:00",
+        send_end_time=getattr(industry, "send_end_time", "") or "13:00",
+        pause_weekends=bool(getattr(industry, "pause_weekends", False)),
+        daily_send_max=int(getattr(industry, "daily_send_max", 0) or 0),
+        effect_webhook_url=getattr(industry, "effect_webhook_url", "") or "",
     )
 
 
@@ -899,6 +904,14 @@ def get_industry_bloggers(
 WEBHOOK_URL_RE = re.compile(r"^https?://\S+$")
 
 
+class ScheduleConfigUpdate(BaseModel):
+    send_start_time: str | None = None
+    send_end_time: str | None = None
+    pause_weekends: bool | None = None
+    daily_send_max: int | None = None
+    effect_webhook_url: str | None = None
+
+
 class ComplianceConfigUpdate(BaseModel):
     compliance_mode: bool | None = None
     webhook_url: str | None = None
@@ -956,6 +969,49 @@ def test_webhook(
         }],
     )
     return result
+
+
+@router.put("/{industry_id}/schedule-config", response_model=IndustryOut)
+def update_schedule_config(
+    industry_id: str,
+    body: ScheduleConfigUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ind = _get_owned_industry(industry_id, current_user, db)
+    if body.send_start_time is not None:
+        ind.send_start_time = body.send_start_time
+    if body.send_end_time is not None:
+        ind.send_end_time = body.send_end_time
+    if body.pause_weekends is not None:
+        ind.pause_weekends = body.pause_weekends
+    if body.daily_send_max is not None:
+        ind.daily_send_max = body.daily_send_max
+    if body.effect_webhook_url is not None:
+        ind.effect_webhook_url = body.effect_webhook_url
+    db.commit()
+    db.refresh(ind)
+    return ind
+
+
+@router.post("/{industry_id}/schedule/start")
+def start_industry_schedule(
+    industry_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ind = _get_owned_industry(industry_id, current_user, db)
+    return {"ok": True, "industry_id": ind.id, "status": "started"}
+
+
+@router.post("/{industry_id}/schedule/stop")
+def stop_industry_schedule(
+    industry_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ind = _get_owned_industry(industry_id, current_user, db)
+    return {"ok": True, "industry_id": ind.id, "status": "stopped"}
 
 
 def _get_owned_industry(industry_id: str, user: User, db: Session) -> Industry:
