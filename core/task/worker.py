@@ -18,6 +18,7 @@ from core.strategy.risk import RiskManager
 from core.strategy.wave import WaveStrategy
 from core.strategy.policy import SendPolicyGate, is_send_window_open
 from core.config import IndustryConfig, load_system
+from server.services.abtest import select_reply_variant
 
 log = logging.getLogger("thunder.worker")
 _SENDER_JOIN_POLL_SECONDS = 2
@@ -83,7 +84,19 @@ class DeviceWorker:
             job_id=self.job_id,
         )
 
-    def _generate_reply(self, task: dict) -> str:
+    def _generate_reply(self, task: dict) -> tuple[str, str]:
+        variant = select_reply_variant(getattr(self.industry, "reply_variants", None))
+        if variant:
+            tone = variant.get("reply_tone") or getattr(self.industry, "reply_tone", "")
+            style = variant.get("reply_style") or getattr(self.industry, "reply_style", "")
+            hook = variant.get("reply_hook") or getattr(self.industry, "reply_hook", "")
+            variant_id = variant.get("id", "")
+        else:
+            tone = getattr(self.industry, "reply_tone", "")
+            style = getattr(self.industry, "reply_style", "")
+            hook = getattr(self.industry, "reply_hook", "")
+            variant_id = ""
+
         comment_text = task.get("text", "")
         question = ""
         reply_topic = ""
@@ -101,14 +114,14 @@ class DeviceWorker:
         if question: hints += f"用户问题：{question}。"
         if reply_topic: hints += f"回复方向：{reply_topic}。"
 
-        tone = random.choice(TONE_VARIATIONS)
+        tone_variation = random.choice(TONE_VARIATIONS)
         hook_prompt = ""
-        if getattr(self.industry, "reply_hook", ""):
-            hook_prompt = f"\n\n⚠️【核心要求】私信的结尾必须非常自然地带上这个钩子话术引导回复：{self.industry.reply_hook}"
+        if hook:
+            hook_prompt = f"\n\n⚠️【核心要求】私信的结尾必须非常自然地带上这个钩子话术引导回复：{hook}"
 
         try:
             prompt = (
-                REPLY_HEADER.format(role=self.industry.reply_tone, style=f"{self.industry.reply_style}。{tone}")
+                REPLY_HEADER.format(role=tone, style=f"{style}。{tone_variation}")
                 + (f"{hints}\n" if hints else "")
                 + f"对方评论: {comment_text}"
                 + hook_prompt
@@ -118,13 +131,13 @@ class DeviceWorker:
                 model="deepseek-chat", messages=[{"role": "user", "content": prompt}],
                 max_tokens=80, temperature=0.9,
             )
-            return resp.choices[0].message.content.strip()[:60]
+            return resp.choices[0].message.content.strip()[:60], variant_id
         except Exception:
             fallbacks = [
-                f"你好，我是{self.industry.reply_tone}，看到你的评论，需要帮忙吗？",
+                f"你好，我是{tone}，看到你的评论，需要帮忙吗？",
                 f"关于你问的，我比较了解，方便的话私聊。",
             ]
-            return random.choice(fallbacks)
+            return random.choice(fallbacks), variant_id
 
     def _init_agent_safe(self) -> bool:
         if self._executor:
@@ -168,7 +181,7 @@ class DeviceWorker:
                     summary.update(status="cancelled", cancelled=True)
                     break
                     
-                claim = self._scheduler.claim_for_device(self.device_id, min_interval_sec=self.min_interval)
+                claim = self._scheduler.claim_for_device(self.device_id)
                 
                 if not claim.ok:
                     if claim.reason == "device_daily_limit_reached":
@@ -184,11 +197,12 @@ class DeviceWorker:
                     break
 
                 task = claim.task
-                reply_msg = self._generate_reply(task)
+                reply_msg, variant_id = self._generate_reply(task)
                 short_id = task.get("source_short_id") or task.get("source_sec_uid") or ""
+                claim_token = task.get("claim_token", "")
                 
                 if not self._init_agent_safe():
-                    self._scheduler.commit_task(claim.task_id, self.device_id, "fail", "Agent init failed")
+                    self._scheduler.commit_task(claim.task_id, self.device_id, "fail", "Agent init failed", claim_token=claim_token)
                     break
 
                 try:
@@ -209,13 +223,22 @@ class DeviceWorker:
                     )
                     
                     if exec_result.ok:
-                        self._scheduler.commit_task(claim.task_id, self.device_id, "done", "")
+                        self._scheduler.commit_task(
+                            claim.task_id, self.device_id, "done", "",
+                            claim_token=claim_token, reply_variant_id=variant_id
+                        )
                         summary["sent"] += 1
                     else:
-                        self._scheduler.commit_task(claim.task_id, self.device_id, "fail", exec_result.message[:500])
+                        self._scheduler.commit_task(
+                            claim.task_id, self.device_id, "fail", exec_result.message[:500],
+                            claim_token=claim_token
+                        )
                         summary["failed"] += 1
                 except Exception as e:
-                    self._scheduler.commit_task(claim.task_id, self.device_id, "fail", str(e)[:500])
+                    self._scheduler.commit_task(
+                        claim.task_id, self.device_id, "fail", str(e)[:500],
+                        claim_token=claim_token
+                    )
                     summary["failed"] += 1
 
                 # Rest between sends
@@ -305,6 +328,7 @@ def run_senders(industry: IndustryConfig, device_ids: list[str] = None, should_s
                     "industry_name": getattr(industry, "name", ""),
                     "reply_tone": getattr(industry, "reply_tone", ""),
                     "reply_style": getattr(industry, "reply_style", ""),
+                    "reply_variants": getattr(industry, "reply_variants", []),
                     "daily_limit": d.get("daily_limit", 15),
                     "min_interval_sec": d.get("min_interval_sec", 90),
                     "user_id": user_id,

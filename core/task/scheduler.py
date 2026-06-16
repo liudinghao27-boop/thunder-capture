@@ -18,6 +18,14 @@ class ClaimedTask:
     reserved: bool = False
     reason: str = ""
 
+    @property
+    def ok(self) -> bool:
+        return self.task is not None and self.reserved
+
+    @property
+    def task_id(self) -> int:
+        return self.task["id"] if self.task else 0
+
 def _now():
     return datetime.now(timezone.utc).isoformat()
 
@@ -168,7 +176,7 @@ class MatrixTaskScheduler:
         except Exception:
             db.rollback()
 
-    def mark_task_done(self, task_id: int, consumer_id: str, ai_reply: str = "", claim_token: str = ""):
+    def mark_task_done(self, task_id: int, consumer_id: str, ai_reply: str = "", claim_token: str = "", reply_variant_id: str = ""):
         db = self._get_db()
         try:
             task = db.query(TaskQueue).filter(
@@ -181,12 +189,23 @@ class MatrixTaskScheduler:
                 task.status = "done"
                 task.processed_at = _now()
                 task.ai_reply = ai_reply
+                if reply_variant_id:
+                    task.reply_variant_id = reply_variant_id
                 db.commit()
                 return True
             return False
         except Exception:
             db.rollback()
             return False
+
+    def commit_task(self, task_id: int, consumer_id: str, status: str, message: str = "", claim_token: str = "", reply_variant_id: str = ""):
+        if status == "done":
+            return self.mark_task_done(
+                task_id, consumer_id, ai_reply=message, claim_token=claim_token, reply_variant_id=reply_variant_id
+            )
+        if status == "fail":
+            return self.mark_task_failed(task_id, consumer_id, error=message, claim_token=claim_token)
+        return False
 
     def mark_task_failed(self, task_id: int, consumer_id: str, error: str = "", claim_token: str = ""):
         db = self._get_db()
@@ -253,6 +272,24 @@ class MatrixTaskScheduler:
                 task.claimed_at = None
                 task.job_id = ""
                 task.error = error[:200]
+                db.commit()
+                return True
+            return False
+        except Exception:
+            db.rollback()
+            return False
+
+    def mark_reply_variant(self, task_id: int, variant_id: str, consumer_id: str, claim_token: str):
+        db = self._get_db()
+        try:
+            task = db.query(TaskQueue).filter(
+                TaskQueue.id == task_id,
+                TaskQueue.status == "claimed",
+                TaskQueue.consumer_id == consumer_id,
+                TaskQueue.claim_token == claim_token,
+            ).first()
+            if task:
+                task.reply_variant_id = variant_id
                 db.commit()
                 return True
             return False

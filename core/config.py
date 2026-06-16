@@ -143,6 +143,7 @@ def _load_industry_from_db(slug: str) -> IndustryConfig | None:
                 compliance_mode=bool(getattr(industry, "compliance_mode", False)),
                 webhook_url=getattr(industry, "webhook_url", "") or "",
                 auto_export_enabled=bool(getattr(industry, "auto_export_enabled", False)),
+                reply_variants=list(getattr(industry, "reply_variants", []) or []),
             )
     except SQLAlchemyError as e:
         logging.getLogger("thunder.config").warning("Failed to load industry %s from DB: %s", slug, e)
