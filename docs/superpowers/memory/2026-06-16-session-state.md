@@ -32,26 +32,47 @@
 - SOP 更新
 - 测试总数：53 个全部通过
 
+### Phase 3：定时发送 + 效果追踪 ✅
+
+- 行业模型新增 `send_start_time`、`send_end_time`、`pause_weekends`、`daily_send_max`、`effect_webhook_url`
+- `TaskQueue` 新增 `replied_at`、`converted_at`、`reply_text`、`conversion_value`
+- 发送时段门控 `core/strategy/policy.py`
+- 行业日发送上限检查
+- Celery Beat 每 15 分钟调度 `run_send_batch("__all_active__")`
+- 效果标记 API：已回复 / 已转化 / 撤销
+- 效果统计 API：`GET /api/stats/effects`
+- 效果事件 Webhook 推送
+- 前端：发送时段面板、线索效果列、控制中心转化指标
+- Alembic 迁移脚本已生成
+- SOP 与 PROJECT_STRUCTURE.md 已更新
+- 测试总数：67 个全部通过
+
+### P1/P2/P3 遗留项补齐 ✅
+
+- Alembic 初始化完成，初始迁移与 Phase 3 字段迁移已生成
+- `adapters/dify/__init__.py` 更新部署说明
+- `adapters/celery/send.py` 中 `send_dm_task` 已接入 `DeviceWorker.run()`
+
 ---
 
 ## 2. 当前分支提交历史（最近 15 条）
 
 ```text
+5fab565 feat(phase3): complete scheduling and effect tracking
+1799c1d feat(phase3): add schedule panel, lead effect actions, and stats UI
+99f5651 feat(phase3): configure Celery Beat schedule and all-active send batch
+2bfa7fc feat(phase3): add effect stats API
+583ce12 feat(phase3): add lead effect mark/unmark APIs and webhook push
+d0a5a44 feat(phase3): add schedule config and start/stop APIs
+bdc83de feat(phase3): add industry daily send max to scheduler
+8907922 feat(phase3): add send window gate and integrate into run_senders
+f13dc5a feat(phase3): add effect tracking columns to TaskQueue and alembic migration
+bf8a3a4 feat(phase3): add scheduling config fields to Industry model, config and schemas
+254338e feat(p1p2p3-cleanup): init Alembic, wire DeviceWorker to Celery, update adapter docs
+e903194 docs: save session state memory for Phase 1 & 2
 44d5df6 docs(phase2): mark Phase 2 complete in SOP
 d3ca087 docs(phase2): include Phase 1 implementation plan in tracked docs
 18451a4 feat(phase2): show readiness next-step banner in control center
-efdba60 feat(phase2): add first-time onboarding wizard
-7b08cff feat(phase2): group industry form, translate labels, wire tag inputs
-c3add68 feat(phase2): add reusable tag input component for keywords
-ea2efef feat(phase2): load industry config from DB with YAML fallback
-9c101ba feat(phase2): add industry ready-state API
-dcded45 feat(phase2): normalize list fields in IndustryUpdate schema
-6bc080d docs(phase2): add web config + onboarding design spec and implementation plan
-0b94fbd feat(phase1): migrate to Thunder Capture and add export compliance
-364c6c6 fix(phase1): wire auto-export, add openpyxl dep, Celery compliance check
-fd3ac95 fix(phase1): fix migrations DDL and test DB setup
-2a05218 test(phase1): add integration tests and regression verification
-a32417c fix(phase1): polish export modal UX and reuse apiFetch helper
 ```
 
 ---
@@ -60,7 +81,7 @@ a32417c fix(phase1): polish export modal UX and reuse apiFetch helper
 
 ```bash
 python -m pytest tests/ -q
-# 结果：53 passed
+# 结果：67 passed
 ```
 
 ---
@@ -69,29 +90,33 @@ python -m pytest tests/ -q
 
 ### 4.1 远程推送阻塞 🔴
 
-**原因**: 当前 remote 为 `https://github.com/unclecode/crawl4ai.git`，本地 Git Credential Manager 需要交互式登录，非交互环境无法完成认证。
+**原因**: GitHub 上不存在仓库 `https://github.com/liudinghao27-boop/shemeihuoke.git` 或 `https://github.com/liudinghao27-boop/thunder-capture.git`。当前环境无法创建 GitHub 仓库（无 `gh` CLI，且 HTTPS SSL 证书撤销检查失败）。
 
 **已尝试**:
-- `git push origin feat/phase1-export-compliance` → `fatal: User cancelled dialog.`
-- 用户账户 `liudinghao27-boop` 无原始仓库写权限。
+- 修正 origin 为 `https://github.com/liudinghao27-boop/shemeihuoke.git` → `remote: Repository not found.`
+- 尝试 `https://github.com/liudinghao27-boop/thunder-capture.git` → `remote: Repository not found.`
+- curl 访问 GitHub 因 `CRYPT_E_REVOCATION_OFFLINE` 失败；Docker 未运行。
 
 **解决方案**:
-1. 在 GitHub 上 fork `unclecode/crawl4ai`。
-2. 添加 fork 为 remote 并推送：
+1. 在 GitHub 网页上创建仓库 `shemeihuoke` 或 `thunder-capture`。
+2. 设置正确的 origin：
    ```bash
    cd "C:/Users/Administrator/Desktop/shemeihuoke"
-   git remote add myfork https://github.com/liudinghao27-boop/crawl4ai.git
-   git push myfork feat/phase1-export-compliance
+   git remote set-url origin https://github.com/liudinghao27-boop/<正确仓库名>.git
+   git push origin feat/phase1-export-compliance
    ```
-3. 创建 PR：
-   ```text
-   https://github.com/unclecode/crawl4ai/compare/main...liudinghao27-boop:crawl4ai:feat/phase1-export-compliance
+3. 如需合并到 main：
+   ```bash
+   git checkout main
+   git merge feat/phase1-export-compliance
+   git push origin main
    ```
 
 ### 4.2 下一步建议
 
-- **方案 A**: 继续 Phase 3 — 定时发送 + 效果追踪
-- **方案 B**: 先处理 PR / 推送阻塞，再启动 Phase 3
+- **方案 A**: 用户创建 GitHub 仓库后，我协助推送当前分支。
+- **方案 B**: 继续 Phase 4 — 关键词报表 + A/B Test（依赖 Phase 3 效果数据）。
+- **方案 C**: 处理云端 SaaS 基础设施（Phase 6 前期准备）。
 
 ---
 
@@ -104,13 +129,15 @@ python -m pytest tests/ -q
 | 阶段 1 计划 | `docs/superpowers/plans/2026-06-15-phase1-export-compliance-plan.md` |
 | 阶段 2 设计 | `docs/superpowers/specs/2026-06-15-phase2-web-config-onboarding-design.md` |
 | 阶段 2 计划 | `docs/superpowers/plans/2026-06-15-phase2-web-config-onboarding-plan.md` |
+| 阶段 3 设计 | `docs/superpowers/specs/2026-06-16-phase3-scheduling-effect-tracking-design.md` |
+| 阶段 3 计划 | `docs/superpowers/plans/2026-06-16-phase3-scheduling-effect-tracking-plan.md` |
 | 商业化 SOP | `docs/superpowers/sops/2026-06-15-commercialization-roadmap-sop.md` |
 | 后端 Industry API | `server/api/industries.py` |
-| 后端 Schema | `server/schemas/industry.py` |
-| 核心配置 | `core/config.py` |
+| 后端 Leads API | `server/api/leads.py` |
+| 后端 Stats API | `server/api/stats.py` |
+| 发送时段门控 | `core/strategy/policy.py` |
+| Celery 任务 | `adapters/celery/send.py` / `app.py` |
 | 前端 SPA | `server/static/index.html` |
-| 行业测试 | `tests/server/test_industries.py` |
-| CLI 配置测试 | `tests/test_cli_config.py` |
 
 ---
 
