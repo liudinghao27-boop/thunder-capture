@@ -93,7 +93,7 @@ def test_variant_id_passed_to_scheduler_on_success():
         task={
             "id": 1,
             "text": "我想当兵",
-            "source_short_id": "123",
+            "short_id": "123",
             "source_name": "用户",
             "claim_token": "token-1",
         },
@@ -120,3 +120,65 @@ def test_variant_id_passed_to_scheduler_on_success():
         1, "d1", "done", "",
         claim_token="token-1", reply_variant_id="v1"
     )
+
+
+def test_worker_reads_short_id_from_multiple_keys():
+    cfg = _make_industry()
+    worker = DeviceWorker(device_id="d1", adb_serial="", industry=cfg)
+    worker._init_agent_safe = MagicMock(return_value=True)
+
+    captured = {}
+
+    def _capture_run_douyin_dm(*, search_target, **kwargs):
+        captured["search_target"] = search_target
+        return MagicMock(ok=True, message="")
+
+    claim = ClaimedTask(
+        task={
+            "id": 1,
+            "text": "hello",
+            "douyin_id": "douyin-123",
+            "source_name": "用户",
+            "claim_token": "token-1",
+        },
+        reserved=True,
+    )
+    no_claim = ClaimedTask(None, reserved=False, reason="no_task")
+    worker._scheduler.claim_for_device = MagicMock(side_effect=[claim, no_claim])
+    worker._scheduler.commit_task = MagicMock(return_value=True)
+
+    with patch("core.task.worker._get_reply_client", return_value=_mock_reply_client()), \
+         patch("core.task.worker.DeviceSupervisor.preflight", return_value=MagicMock(ok=True)), \
+         patch("core.task.worker.DeviceSupervisor.mark_finished"), \
+         patch("core.task.runner.TaskGraphRunner") as mock_runner_class, \
+         patch("core.task.worker.time.sleep"):
+        mock_runner = MagicMock()
+        mock_runner.run_douyin_dm.side_effect = _capture_run_douyin_dm
+        mock_runner_class.return_value = mock_runner
+
+        worker.run()
+
+    assert captured["search_target"] == "douyin-123"
+
+
+def test_worker_passes_daily_send_max_to_scheduler():
+    cfg = _make_industry(daily_send_max=42, global_daily_limit=100)
+    worker = DeviceWorker(device_id="d1", adb_serial="", industry=cfg)
+    assert worker._scheduler.daily_send_max == 42
+    assert worker._scheduler.global_daily_limit == 100
+
+
+def test_generate_reply_handles_none_content():
+    cfg = _make_industry(reply_tone="助手")
+    worker = DeviceWorker(device_id="d1", adb_serial="", industry=cfg)
+
+    mock_client = MagicMock()
+    mock_resp = MagicMock()
+    mock_resp.choices = [MagicMock(message=MagicMock(content=None))]
+    mock_client.chat.completions.create.return_value = mock_resp
+
+    with patch("core.task.worker._get_reply_client", return_value=mock_client):
+        reply, variant_id = worker._generate_reply({"text": "hello"})
+
+    assert reply != ""
+    assert isinstance(reply, str)

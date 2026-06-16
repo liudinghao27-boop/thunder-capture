@@ -81,6 +81,7 @@ class DeviceWorker:
             industry_slug=self.industry_slug,
             owner_user_id=self.owner_user_id,
             global_daily_limit=int(getattr(self.industry, "global_daily_limit", 0) or 0),
+            daily_send_max=int(getattr(self.industry, "daily_send_max", 0) or 0),
             job_id=self.job_id,
         )
 
@@ -131,7 +132,10 @@ class DeviceWorker:
                 model="deepseek-chat", messages=[{"role": "user", "content": prompt}],
                 max_tokens=80, temperature=0.9,
             )
-            return resp.choices[0].message.content.strip()[:60], variant_id
+            content = resp.choices[0].message.content
+            if not content:
+                raise ValueError("LLM returned empty content")
+            return content.strip()[:60], variant_id
         except Exception:
             fallbacks = [
                 f"你好，我是{tone}，看到你的评论，需要帮忙吗？",
@@ -198,7 +202,10 @@ class DeviceWorker:
 
                 task = claim.task
                 reply_msg, variant_id = self._generate_reply(task)
-                short_id = task.get("source_short_id") or task.get("source_sec_uid") or ""
+                short_id = (
+                    task.get("short_id") or task.get("douyin_id") or task.get("unique_id")
+                    or task.get("user_id") or task.get("sec_uid") or ""
+                )
                 claim_token = task.get("claim_token", "")
                 
                 if not self._init_agent_safe():
@@ -332,6 +339,8 @@ def run_senders(industry: IndustryConfig, device_ids: list[str] = None, should_s
                     "daily_limit": d.get("daily_limit", 15),
                     "min_interval_sec": d.get("min_interval_sec", 90),
                     "user_id": user_id,
+                    "daily_send_max": int(getattr(industry, "daily_send_max", 0) or 0),
+                    "global_daily_limit": int(getattr(industry, "global_daily_limit", 0) or 0),
                 },
                 reply_msg="",  # Celery task generates reply itself
             )

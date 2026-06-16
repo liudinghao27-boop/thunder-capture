@@ -72,11 +72,11 @@ class MatrixTaskScheduler:
                     IndustryDailyQuota.industry_slug == self.industry_slug,
                     IndustryDailyQuota.day == day
                 ).with_for_update().first()
-                
+
                 if quota and (quota.sent + quota.reserved >= self.global_daily_limit):
                     db.rollback()
                     return ClaimedTask(None, reserved=False, reason="global_daily_limit")
-                
+
                 if not quota:
                     quota = IndustryDailyQuota(industry_slug=self.industry_slug, day=day, sent=0, reserved=1)
                     db.add(quota)
@@ -94,6 +94,13 @@ class MatrixTaskScheduler:
                 if quota and (quota.sent + quota.reserved >= self.daily_send_max):
                     db.rollback()
                     return ClaimedTask(None, reserved=False, reason="industry_daily_limit_reached")
+
+                if not quota:
+                    quota = IndustryDailyQuota(industry_slug=self.industry_slug, day=day, sent=0, reserved=1)
+                    db.add(quota)
+                else:
+                    quota.reserved += 1
+                db.flush()
 
             # 3. Claim Task
             query = db.query(TaskQueue).filter(
@@ -144,7 +151,7 @@ class MatrixTaskScheduler:
             return ClaimedTask(None, reserved=False, reason=f"error: {str(e)}")
 
     def commit(self):
-        if self.global_daily_limit <= 0:
+        if self.global_daily_limit <= 0 and self.daily_send_max <= 0:
             return
         db = self._get_db()
         try:
@@ -161,7 +168,7 @@ class MatrixTaskScheduler:
             db.rollback()
 
     def release(self):
-        if self.global_daily_limit <= 0:
+        if self.global_daily_limit <= 0 and self.daily_send_max <= 0:
             return
         db = self._get_db()
         try:
@@ -192,6 +199,7 @@ class MatrixTaskScheduler:
                 if reply_variant_id:
                     task.reply_variant_id = reply_variant_id
                 db.commit()
+                self.commit()
                 return True
             return False
         except Exception:
@@ -221,6 +229,7 @@ class MatrixTaskScheduler:
                 task.processed_at = _now()
                 task.error = error[:500]
                 db.commit()
+                self.release()
                 return True
             return False
         except Exception:
@@ -250,12 +259,13 @@ class MatrixTaskScheduler:
                 task.retry_count = current_retries + 1
                 task.retry_after = retry_after
                 db.commit()
+                self.release()
                 return True
             return False
         except Exception:
             db.rollback()
             return False
-            
+
     def release_task_claim(self, task_id: int, consumer_id: str, error: str = "", claim_token: str = ""):
         db = self._get_db()
         try:
@@ -273,6 +283,7 @@ class MatrixTaskScheduler:
                 task.job_id = ""
                 task.error = error[:200]
                 db.commit()
+                self.release()
                 return True
             return False
         except Exception:
