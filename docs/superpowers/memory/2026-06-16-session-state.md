@@ -90,21 +90,23 @@ python -m pytest tests/ -q
 
 ### 4.1 远程推送阻塞 🔴
 
-**原因**: GitHub 上不存在仓库 `https://github.com/liudinghao27-boop/shemeihuoke.git` 或 `https://github.com/liudinghao27-boop/thunder-capture.git`。当前环境无法创建 GitHub 仓库（无 `gh` CLI，且 HTTPS SSL 证书撤销检查失败）。
+**原因**: GitHub 仓库 `https://github.com/liudinghao27-boop/thunder-capture.git` 存在，但远程仓库状态异常，推送时报 `remote: fatal: did not receive expected object af648e104fd9b26788a7c9a717bcc518a9b83559`。该对象不在本地历史中，可能是远程仓库缓存/索引损坏，或仓库初始化时包含未完整导入的对象。
 
 **已尝试**:
-- 修正 origin 为 `https://github.com/liudinghao27-boop/shemeihuoke.git` → `remote: Repository not found.`
-- 尝试 `https://github.com/liudinghao27-boop/thunder-capture.git` → `remote: Repository not found.`
-- curl 访问 GitHub 因 `CRYPT_E_REVOCATION_OFFLINE` 失败；Docker 未运行。
+- 修正 origin 为 `https://github.com/liudinghao27-boop/thunder-capture.git`
+- 普通 push / force-with-lease push / 推送到新分支名 → 均报同一对象缺失错误
+- `git gc --prune=now` 清理本地垃圾对象 → 问题依旧
+- `git ls-remote origin` 返回空（远程无可见 refs）
+- 已创建本地 git bundle 备份：`C:/Users/Administrator/thunder-capture-backup.bundle`（8.7 MB）
 
 **解决方案**:
-1. 在 GitHub 网页上创建仓库 `shemeihuoke` 或 `thunder-capture`。
-2. 设置正确的 origin：
+1. 在 GitHub 网页删除并重新创建空仓库 `thunder-capture`（不要初始化 README/License）。
+2. 然后推送：
    ```bash
    cd "C:/Users/Administrator/Desktop/shemeihuoke"
-   git remote set-url origin https://github.com/liudinghao27-boop/<正确仓库名>.git
    git push origin feat/phase1-export-compliance
    ```
+3. 如果仍失败，可从 bundle 恢复或联系 GitHub 支持。
 3. 如需合并到 main：
    ```bash
    git checkout main
