@@ -2,6 +2,7 @@
 
 import os
 import shutil
+from datetime import datetime, timezone, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -10,6 +11,7 @@ from server.auth import get_current_user
 from server.models import engine as server_engine, get_db
 from server.models.industry import Industry
 from server.models.job import Job
+from server.models.task import TaskQueue
 from server.models.user import User
 from server.secret_store import has_secret
 from server.services.migrations import verify_matrix_schema
@@ -39,6 +41,36 @@ def overview(
             {"id": i.id, "name": i.name, "slug": i.slug, "platforms": i.platforms}
             for i in industries
         ],
+    }
+
+
+@router.get("/stats/effects")
+def get_effect_stats(
+    industry_slug: str,
+    days: int = 7,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    base_query = db.query(TaskQueue).filter(
+        TaskQueue.industry_slug == industry_slug,
+        TaskQueue.owner_user_id == current_user.id,
+    )
+    sent = base_query.filter(TaskQueue.status.in_(["sent", "done", "replied", "converted"])).count()
+    replied = base_query.filter(TaskQueue.status.in_(["replied", "converted"])).count()
+    converted = base_query.filter(TaskQueue.status == "converted").count()
+
+    reply_rate = round(replied / sent, 4) if sent else 0.0
+    conversion_rate = round(converted / sent, 4) if sent else 0.0
+
+    return {
+        "industry_slug": industry_slug,
+        "days": days,
+        "sent": sent,
+        "replied": replied,
+        "converted": converted,
+        "reply_rate": reply_rate,
+        "conversion_rate": conversion_rate,
     }
 
 
