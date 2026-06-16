@@ -40,6 +40,11 @@ class FakeIndustry:
     compliance_mode = False
     webhook_url = ""
     auto_export_enabled = False
+    send_start_time = "09:00"
+    send_end_time = "13:00"
+    pause_weekends = False
+    daily_send_max = 0
+    effect_webhook_url = ""
     is_active = True
     created_at = "2026-06-15T10:00:00"
 

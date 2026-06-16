@@ -58,6 +58,11 @@ class IndustryConfig:
     compliance_mode: bool = False
     webhook_url: str = ""
     auto_export_enabled: bool = False
+    send_start_time: str = "09:00"
+    send_end_time: str = "13:00"
+    pause_weekends: bool = False
+    daily_send_max: int = 0
+    effect_webhook_url: str = ""
 
 
 def load_system() -> dict:

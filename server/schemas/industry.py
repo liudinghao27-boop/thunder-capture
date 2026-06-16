@@ -76,6 +76,11 @@ class IndustryCreate(BaseModel):
     compliance_mode: bool = False
     webhook_url: str = ""
     auto_export_enabled: bool = False
+    send_start_time: str = "09:00"
+    send_end_time: str = "13:00"
+    pause_weekends: bool = False
+    daily_send_max: int = 0
+    effect_webhook_url: str = ""
 
     @field_validator("platforms")
     @classmethod
@@ -122,6 +127,11 @@ class IndustryUpdate(BaseModel):
     compliance_mode: Optional[bool] = None
     webhook_url: Optional[str] = None
     auto_export_enabled: Optional[bool] = None
+    send_start_time: str | None = None
+    send_end_time: str | None = None
+    pause_weekends: bool | None = None
+    daily_send_max: int | None = None
+    effect_webhook_url: str | None = None
     is_active: Optional[bool] = None
 
     @field_validator("platforms")
@@ -172,6 +182,11 @@ class IndustryOut(BaseModel):
     compliance_mode: bool = False
     webhook_url: str = ""
     auto_export_enabled: bool = False
+    send_start_time: str = "09:00"
+    send_end_time: str = "13:00"
+    pause_weekends: bool = False
+    daily_send_max: int = 0
+    effect_webhook_url: str = ""
     is_active: bool
     created_at: datetime
 

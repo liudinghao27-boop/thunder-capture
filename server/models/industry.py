@@ -45,6 +45,11 @@ class Industry(Base):
     compliance_mode = Column(Boolean, default=False)
     webhook_url = Column(String(512), default="")
     auto_export_enabled = Column(Boolean, default=False)
+    send_start_time = Column(String(8), default="09:00")
+    send_end_time = Column(String(8), default="13:00")
+    pause_weekends = Column(Boolean, default=False)
+    daily_send_max = Column(Integer, default=0)
+    effect_webhook_url = Column(String(512), default="")
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=_utcnow)
 

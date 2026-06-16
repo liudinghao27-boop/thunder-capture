@@ -37,6 +37,38 @@ def test_industry_config_has_compliance_fields():
     assert cfg.auto_export_enabled is True
 
 
+def test_industry_create_has_schedule_fields():
+    data = IndustryCreate(
+        name="测试", slug="test-schedule",
+        send_start_time="09:00", send_end_time="21:00",
+        pause_weekends=True, daily_send_max=100,
+        effect_webhook_url="https://example.com/events",
+    )
+    assert data.send_start_time == "09:00"
+    assert data.pause_weekends is True
+    assert data.daily_send_max == 100
+
+
+def test_industry_model_has_schedule_columns():
+    ind = Industry(name="测试", slug="test-schedule")
+    assert hasattr(ind, "send_start_time")
+    assert hasattr(ind, "pause_weekends")
+    assert hasattr(ind, "daily_send_max")
+
+
+def test_industry_config_has_schedule_fields():
+    cfg = IndustryConfig(
+        name="测试", slug="test-schedule", keywords=["a"], reply_tone="测试",
+        reply_style="测试", categories=["c"],
+        send_start_time="10:00", send_end_time="22:00",
+        pause_weekends=True, daily_send_max=200,
+        effect_webhook_url="https://example.com/events",
+    )
+    assert cfg.send_start_time == "10:00"
+    assert cfg.pause_weekends is True
+    assert cfg.daily_send_max == 200
+
+
 def test_industry_create_defaults():
     data = IndustryCreate(name="测试", slug="test-ind")
     assert data.compliance_mode is False
@@ -95,6 +127,11 @@ def test_industry_out_model_validate():
     ind.compliance_mode = False
     ind.webhook_url = ""
     ind.auto_export_enabled = False
+    ind.send_start_time = "09:00"
+    ind.send_end_time = "13:00"
+    ind.pause_weekends = False
+    ind.daily_send_max = 0
+    ind.effect_webhook_url = ""
     ind.is_active = True
     from datetime import datetime, timezone
     ind.created_at = datetime(2026, 6, 15, 10, 0, 0, tzinfo=timezone.utc)
@@ -102,6 +139,9 @@ def test_industry_out_model_validate():
     assert out.compliance_mode is False
     assert out.webhook_url == ""
     assert out.auto_export_enabled is False
+    assert out.send_start_time == "09:00"
+    assert out.pause_weekends is False
+    assert out.daily_send_max == 0
 
 
 def test_target_users_normalization():
