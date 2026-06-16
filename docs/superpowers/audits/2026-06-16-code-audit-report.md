@@ -232,6 +232,6 @@ rm -f data/thunder.db data/thunder.db-*
 本次审计修复了最严重的安全漏洞、逻辑错误和性能瓶颈，全量测试通过，数据库迁移同步。后续补修的 5 项 High 风险（设备调度、数据契约、SQL 聚合、批量入队、异步 I/O）也已全部完成。系统在当前分支上比之前更健壮、更安全、更可扩展。剩余问题主要为跨平台兼容性、历史 lint/type 技术债和若干 Medium/Low 优化项，建议按优先级分批处理。
 
 **审计完成提交：** `42b1417`  
-**后续 High 风险修复提交：** `3d5a62a`  
+**后续 High 风险修复提交：** 见当前分支最新提交（`feat/phase1-export-compliance-new`）  
 **报告作者：** Kimi Code CLI  
 **报告路径：** `docs/superpowers/audits/2026-06-16-code-audit-report.md`
