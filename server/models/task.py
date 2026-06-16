@@ -67,6 +67,7 @@ class TaskQueue(Base):
     converted_at = Column(DateTime, nullable=True)
     reply_text = Column(Text, default="")
     conversion_value = Column(String(64), default="")
+    reply_variant_id = Column(String(64), default="", index=True)
 
     # Douyin specific identifiers
     short_id = Column(String(128), default="")

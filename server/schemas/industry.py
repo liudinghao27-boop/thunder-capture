@@ -81,6 +81,7 @@ class IndustryCreate(BaseModel):
     pause_weekends: bool = False
     daily_send_max: int = 0
     effect_webhook_url: str = ""
+    reply_variants: list[dict] = []
 
     @field_validator("platforms")
     @classmethod
@@ -132,6 +133,7 @@ class IndustryUpdate(BaseModel):
     pause_weekends: bool | None = None
     daily_send_max: int | None = None
     effect_webhook_url: str | None = None
+    reply_variants: list[dict] | None = None
     is_active: Optional[bool] = None
 
     @field_validator("platforms")
@@ -187,6 +189,7 @@ class IndustryOut(BaseModel):
     pause_weekends: bool = False
     daily_send_max: int = 0
     effect_webhook_url: str = ""
+    reply_variants: list[dict] = []
     is_active: bool
     created_at: datetime
 

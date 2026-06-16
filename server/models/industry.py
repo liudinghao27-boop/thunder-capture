@@ -50,6 +50,7 @@ class Industry(Base):
     pause_weekends = Column(Boolean, default=False)
     daily_send_max = Column(Integer, default=0)
     effect_webhook_url = Column(String(512), default="")
+    reply_variants = Column(JSON, default=list)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=_utcnow)
 

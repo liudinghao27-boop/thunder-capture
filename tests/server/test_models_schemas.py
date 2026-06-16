@@ -1,6 +1,7 @@
 import pytest
 from server.schemas.industry import IndustryCreate, IndustryUpdate, IndustryOut
 from server.models.industry import Industry
+from server.models.task import TaskQueue
 from core.config import IndustryConfig
 
 
@@ -132,6 +133,7 @@ def test_industry_out_model_validate():
     ind.pause_weekends = False
     ind.daily_send_max = 0
     ind.effect_webhook_url = ""
+    ind.reply_variants = []
     ind.is_active = True
     from datetime import datetime, timezone
     ind.created_at = datetime(2026, 6, 15, 10, 0, 0, tzinfo=timezone.utc)
@@ -171,3 +173,30 @@ def test_task_queue_has_effect_columns():
     assert hasattr(t, "converted_at")
     assert hasattr(t, "reply_text")
     assert hasattr(t, "conversion_value")
+
+
+def test_industry_create_has_reply_variants():
+    data = IndustryCreate(
+        name="测试", slug="test-ab",
+        reply_variants=[{"id": "v1", "name": "默认", "weight": 1}],
+    )
+    assert len(data.reply_variants) == 1
+
+
+def test_industry_model_has_reply_variants_column():
+    ind = Industry(name="测试", slug="test-ab")
+    assert hasattr(ind, "reply_variants")
+
+
+def test_industry_config_has_reply_variants():
+    cfg = IndustryConfig(
+        name="测试", slug="test-ab", keywords=["a"], reply_tone="测试",
+        reply_style="测试", categories=["c"],
+        reply_variants=[{"id": "v1", "name": "默认"}],
+    )
+    assert cfg.reply_variants[0]["id"] == "v1"
+
+
+def test_task_queue_has_reply_variant_id():
+    t = TaskQueue(video_id="v1", comment_id="c1")
+    assert hasattr(t, "reply_variant_id")

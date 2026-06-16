@@ -45,6 +45,7 @@ class FakeIndustry:
     pause_weekends = False
     daily_send_max = 0
     effect_webhook_url = ""
+    reply_variants = []
     is_active = True
     created_at = "2026-06-15T10:00:00"
 

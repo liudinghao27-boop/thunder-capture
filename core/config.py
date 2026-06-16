@@ -63,6 +63,7 @@ class IndustryConfig:
     pause_weekends: bool = False
     daily_send_max: int = 0
     effect_webhook_url: str = ""
+    reply_variants: list[dict] = field(default_factory=list)
 
 
 def load_system() -> dict:
