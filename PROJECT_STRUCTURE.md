@@ -169,3 +169,13 @@ shemeihuoke/
 - [x] 6 页面 SPA (控制中心/项目/设备/线索/记录/设置)
 - [ ] 可选项: 分离前后端 → 独立 Vue/React 前端 + Vite
 
+### P4: 关键词报表 + A/B Test ✅ COMPLETE
+- [x] `server/services/analytics.py` — 关键词/设备效果聚合
+- [x] `server/services/abtest.py` — A/B 变体选择 + 结果统计
+- [x] `Industry.reply_variants` + `TaskQueue.reply_variant_id`
+- [x] `GET /api/stats/keywords` 关键词效果 API
+- [x] `GET /api/stats/devices` 设备效果 API
+- [x] A/B 变体 CRUD + 结果 API
+- [x] `DeviceWorker` 发送时自动选择变体并记录
+- [x] 前端"关键词效果"和"A/B 实验"页面
+
