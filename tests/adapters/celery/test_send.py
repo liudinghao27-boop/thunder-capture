@@ -1,13 +1,13 @@
 """Tests for adapters/celery/send.py compliance check."""
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from adapters.celery.send import send_dm_task
+from adapters.celery.send import run_send_batch, send_dm_task
 from server.models import Base
 from server.models.industry import Industry
 from server.models.user import User
@@ -87,6 +87,16 @@ def test_send_dm_task_runs_when_compliance_mode_disabled(db_session, monkeypatch
     assert result == worker_summary
     worker_mock.assert_called_once()
     retry_mock.assert_not_called()
+
+
+def test_run_send_batch_all_active(db_session, monkeypatch):
+    _seed_industry(db_session, compliance_mode=False)
+    with patch("core.task.worker.run_senders") as mock_run:
+        mock_run.return_value = {"ok": True, "sent_total": 1}
+        result = run_send_batch.run("__all_active__", "")
+        assert result["ok"] is True
+        assert result["mode"] == "all_active"
+        assert mock_run.called
 
 
 def test_send_dm_task_skips_when_industry_missing(db_session, monkeypatch):

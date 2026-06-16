@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 from celery import Celery
+from celery.schedules import crontab
 
 # Redis URL — default for local dev
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -49,3 +50,12 @@ app.conf.update(
     task_retry_backoff=True,  # Exponential: 1m, 2m, 4m, 8m, 16m
     task_retry_backoff_max=1800,  # Cap at 30 min
 )
+
+# ── Periodic tasks ──
+app.conf.beat_schedule = {
+    "thunder-send-every-15min": {
+        "task": "adapters.celery.send.run_send_batch",
+        "schedule": crontab(minute="*/15"),
+        "args": ("__all_active__", ""),
+    },
+}

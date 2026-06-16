@@ -82,6 +82,14 @@ def run_send_batch(self, industry_slug: str, user_id: str = "", device_ids: list
 
     db = SessionLocal()
     try:
+        if industry_slug == "__all_active__":
+            industries = db.query(Industry).filter(Industry.is_active == True).all()
+            results = []
+            for ind in industries:
+                cfg = _to_industry_config(ind)
+                results.append(run_senders(cfg, device_ids))
+            return {"ok": True, "mode": "all_active", "industries": len(industries), "results": results}
+
         industry = db.query(Industry).filter(
             Industry.slug == industry_slug,
             Industry.user_id == user_id,
