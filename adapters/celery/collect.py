@@ -8,6 +8,7 @@ Migration path from core/discover.py run_discovery():
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from celery import chain, group
 
@@ -31,11 +32,17 @@ def run_mediacrawler(self, platform: str, keywords: list[str], industry_slug: st
         keywords: Search keywords
         industry_slug: Industry identifier for output routing
     """
-    # TODO: Replace subprocess call with MediaCrawler Python API
-    # Currently calls core/discover.py logic
+    from adapters.mediacrawler.runner import run_platform
+
     log.info("Collecting %s for %s with keywords=%s", platform, industry_slug, keywords)
-    # Stub: actual implementation imports from core/discover.py
-    return {"platform": platform, "industry_slug": industry_slug, "status": "collected"}
+    comments = asyncio.run(run_platform(platform, keywords))
+    log.info("Collected %d comments for %s/%s", len(comments), platform, industry_slug)
+    return {
+        "platform": platform,
+        "industry_slug": industry_slug,
+        "status": "collected",
+        "count": len(comments),
+    }
 
 
 @app.task(bind=True, max_retries=2)

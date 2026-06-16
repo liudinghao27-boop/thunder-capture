@@ -114,3 +114,8 @@ def test_send_dm_task_skips_when_industry_missing(db_session, monkeypatch):
 
     assert result == {"ok": False, "error": "Industry missing-ind not found"}
     retry_mock.assert_not_called()
+
+
+def test_send_dm_task_has_no_global_rate_limit():
+    """Global Celery rate_limit was removed; per-device limiting is handled by DeviceWorker."""
+    assert send_dm_task.rate_limit is None

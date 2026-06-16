@@ -1,6 +1,6 @@
 """SQLAlchemy models for matrix tasks and collector state."""
 
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, JSON, Text, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, JSON, Text, UniqueConstraint, Index
 from datetime import datetime, timezone
 from server.models import Base
 
@@ -89,6 +89,9 @@ class TaskQueue(Base):
 
     __table_args__ = (
         UniqueConstraint("comment_id", "video_id", name="uix_comment_video"),
+        Index("ix_task_queue_industry_status", "industry_slug", "status"),
+        Index("ix_task_queue_industry_status_owner", "industry_slug", "status", "owner_user_id"),
+        Index("ix_task_queue_fetched_at", "fetched_at"),
     )
 
 

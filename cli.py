@@ -39,8 +39,9 @@ from core.config import (
     list_industries, create_industry,
 )
 from server.services.task_stats import (
-    queue_stats, blogger_source_stats as blogger_stats, 
-    get_wave_state as get_consumer_state, get_bloggers, add_blogger
+    queue_stats, blogger_source_stats as blogger_stats,
+    get_wave_state as get_consumer_state, get_bloggers, add_blogger,
+    mark_target_active, mark_target_inactive,
 )
 from core.classify import classify_batch, enqueue_classified
 from core.task.worker import run_senders
@@ -138,7 +139,6 @@ def cmd_send(args):
     """发送: AutoGLM DM 拦截"""
     industry = load_industry(args.industry)
     init()
-    reclaim_stale_claims(1)
 
     devices = [d.strip() for d in args.devices.split(",")] if args.devices else None
     s = queue_stats(industry.slug)
@@ -189,11 +189,11 @@ def cmd_bloggers(args):
                   f"via:{b['source_keyword']}")
     elif args.add:
         sec_uid, nickname = args.add
-        ok = add_blogger(sec_uid, nickname, industry_slug=args.industry or "")
+        ok = add_blogger(sec_uid, "", nickname, industry_slug=args.industry or "")
         print(f"{'OK' if ok else '已存在'}: {nickname}")
     elif args.pause:
-        ok = set_blogger_status(args.pause, "paused", args.industry or "")
-        print(f"{'OK' if ok else '失败'}: pause {args.pause}")
+        mark_target_inactive(args.pause, args.industry or "")
+        print(f"OK: pause {args.pause}")
 
 
 if __name__ == "__main__":

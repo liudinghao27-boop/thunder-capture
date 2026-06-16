@@ -20,7 +20,9 @@ log = logging.getLogger("thunder.celery.send")
     max_retries=3,
     default_retry_delay=90,  # 1.5 min base
     soft_time_limit=600,  # 10 min per device session
-    rate_limit="15/h",  # Per-device daily limit via rate limiting
+    # Per-device rate limiting is enforced inside DeviceWorker via min_interval
+    # and daily_limit. A global Celery rate_limit would throttle the whole
+    # cluster, so we intentionally do not set it here.
 )
 def send_dm_task(
     self,

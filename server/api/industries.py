@@ -274,104 +274,15 @@ async def generate_industry_config_bigdata(
     req: IndustryGenerateBigDataConfigReq,
     current_user: User = Depends(get_current_user),
 ):
-    provider, model = select_available_llm(current_user)
-    
-    user_key = None
-    if provider == "deepseek" and current_user.deepseek_key:
-        user_key = decrypt_secret(current_user.deepseek_key)
-    elif provider == "zhipu" and current_user.zhipu_key:
-        user_key = decrypt_secret(current_user.zhipu_key)
-    elif provider == "openai" and current_user.openai_key:
-        user_key = decrypt_secret(current_user.openai_key)
+    """Big-data config generation is not implemented yet.
 
-    from server.services.llm import get_llm_client
-    try:
-        client = get_llm_client(provider=provider, model=model, api_key=user_key)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"无法初始化 LLM 客户端: {str(e)}")
-
-    comments_pool = []
-    collector = None
-    try:
-        from core.collectors.douyin import DouyinCollector
-        collector = DouyinCollector()
-        session_ok = await collector._ensure_session()
-        if session_ok:
-            comments_pool = await collector.collect_hot_comments(req.seed_keyword, max_videos=5)
-    except Exception as e:
-        # Fallback to standard generation if crawler fails, but with warning logged
-        pass
-    finally:
-        if collector:
-            try:
-                await collector._cleanup()
-            except Exception:
-                pass
-
-    prompt = f"业务描述：{req.description}\n\n"
-    if comments_pool:
-        prompt += "【抓取到的社媒热门大数据（视频描述与用户评论）】:\n"
-        prompt += "\n".join(comments_pool[:120])
-    else:
-        prompt += "【说明】未成功抓取到社媒大数据评论，请直接根据业务描述进行推理生成行业匹配词库。"
-
-    try:
-        resp = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": BIGDATA_SYSTEM_PROMPT},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,
-            max_tokens=1500,
-        )
-        result = resp.choices[0].message.content.strip()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"LLM 接口调用异常: {str(e)}")
-
-    try:
-        config_data = json_repair.loads(result)
-        if not config_data or not isinstance(config_data, dict):
-            raise ValueError("Parsed result is not a dictionary")
-    except Exception as e:
-        raise HTTPException(
-            status_code=520,
-            detail=f"解析 LLM 返回的 JSON 失败，原始输出: {result[:200]}... 错误: {str(e)}"
-        )
-
-    name = config_data.get("name", "未命名项目")
-    slug = config_data.get("slug", "industry-project")
-    keywords = config_data.get("keywords", [])
-    reply_tone = config_data.get("reply_tone", "业内人士")
-    reply_style = config_data.get("reply_style", "亲切专业")
-    categories = config_data.get("categories", [])
-
-    slug = re.sub(r'[^a-z0-9_-]', '', slug.lower())
-    if not slug or not slug[0].isalpha():
-        slug = "ind-" + slug if slug else "industry"
-    slug = slug[:32]
-
-    if not isinstance(keywords, list):
-        keywords = [str(keywords)] if keywords else []
-    else:
-        keywords = [str(k).strip() for k in keywords if k]
-
-    if not isinstance(categories, list):
-        categories = [str(categories)] if categories else []
-    else:
-        categories = [str(c).strip() for c in categories if c]
-
-    return {
-        "name": name,
-        "slug": slug,
-        "keywords": keywords,
-        "reply_tone": reply_tone,
-        "reply_style": reply_style,
-        "categories": categories,
-        "llm_provider": provider,
-        "llm_model": model,
-        "bigdata_used": len(comments_pool) > 0
-    }
+    The previous implementation depended on ``core.collectors.douyin.DouyinCollector``,
+    which no longer exists. Returning 501 until a replacement collector is available.
+    """
+    raise HTTPException(
+        status_code=501,
+        detail="Big-data config generation is not implemented yet",
+    )
 
 
 

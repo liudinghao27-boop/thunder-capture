@@ -37,7 +37,11 @@ def classify_batch_task(self, comments: list[dict], industry_name: str, categori
         client = DifyClient()
         if client.available:
             log.info("Using Dify for classification (%d comments)", len(comments))
-            return client.classify_batch(comments, industry_name, categories)
+            return client.classify(
+                comments=comments,
+                industry_name=industry_name,
+                categories=categories,
+            )
     except Exception as exc:
         log.warning("Dify unavailable, falling back to direct LLM: %s", exc)
 
@@ -51,6 +55,9 @@ def classify_batch_task(self, comments: list[dict], industry_name: str, categori
         slug=industry_name.lower().replace(" ", "_"),
         keywords=[],
         categories=categories,
+        reply_tone="业内人士",
+        reply_style="亲切专业",
+        reply_hook="",
     )
 
     return _classify_batch(comments, industry)

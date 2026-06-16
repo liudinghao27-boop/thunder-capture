@@ -619,3 +619,16 @@ def mark_target_active(sec_uid: str, industry_slug: str):
             db.commit()
     finally:
         db.close()
+
+
+def mark_target_inactive(sec_uid: str, industry_slug: str):
+    from server.models import SessionLocal
+    from server.models.task import TargetBlogger
+    db = SessionLocal()
+    try:
+        b = db.query(TargetBlogger).filter(TargetBlogger.sec_uid == sec_uid, TargetBlogger.industry_slug == industry_slug).first()
+        if b:
+            b.status = "paused"
+            db.commit()
+    finally:
+        db.close()

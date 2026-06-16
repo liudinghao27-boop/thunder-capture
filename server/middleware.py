@@ -2,10 +2,10 @@
 
 import time
 import threading
-from collections import defaultdict
+from collections import defaultdict, deque
 from typing import Callable
 
-from fastapi import Request, HTTPException, status
+from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
@@ -21,7 +21,7 @@ class InMemoryRateLimiter:
     def __init__(self, max_requests: int = 60, window_seconds: int = 60):
         self.max_requests = max_requests
         self.window_seconds = window_seconds
-        self._buckets: dict[str, list[float]] = defaultdict(list)
+        self._buckets: dict[str, deque[float]] = defaultdict(deque)
         self._lock = threading.Lock()
         self._last_cleanup = time.monotonic()
 
@@ -49,7 +49,7 @@ class InMemoryRateLimiter:
             bucket = self._buckets[key]
             # Remove expired timestamps
             while bucket and bucket[0] < cutoff:
-                bucket.pop(0)
+                bucket.popleft()
             if len(bucket) >= self.max_requests:
                 return False
             bucket.append(now)
@@ -62,7 +62,7 @@ class InMemoryRateLimiter:
         with self._lock:
             bucket = self._buckets[key]
             while bucket and bucket[0] < cutoff:
-                bucket.pop(0)
+                bucket.popleft()
             return max(0, self.max_requests - len(bucket))
 
 

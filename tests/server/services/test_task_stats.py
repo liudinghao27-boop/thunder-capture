@@ -65,6 +65,24 @@ def test_mark_target_active_does_not_use_missing_updated_at(db):
     assert blogger.status == "active"
 
 
+def test_mark_target_inactive_sets_status_to_paused(db):
+    from server.services.task_stats import mark_target_inactive
+    from datetime import datetime, timezone
+
+    db.add(TargetBlogger(
+        sec_uid="sec-inactive",
+        industry_slug="test-ind",
+        nickname="nick",
+        discovered_at=datetime.now(timezone.utc).isoformat(),
+        status="active",
+    ))
+    db.commit()
+    mark_target_inactive("sec-inactive", "test-ind")
+    db.expire_all()
+    blogger = db.query(TargetBlogger).filter(TargetBlogger.sec_uid == "sec-inactive").first()
+    assert blogger.status == "paused"
+
+
 def test_video_collected_uses_aweme_id(db):
     from server.services.task_stats import is_video_collected, mark_video_collected
     from datetime import datetime, timezone

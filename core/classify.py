@@ -1,4 +1,4 @@
-﻿"""Intent classification for collected social comments.
+"""Intent classification for collected social comments.
 
 Architecture (v0.2 — Dify-ready):
     classify_batch()
@@ -530,6 +530,9 @@ def enqueue_classified(comments: list[dict]):
     from server.services.task_stats import enqueue_task
     count = 0
     for comment in comments:
+        matched = comment.get("matched_categories", {})
+        if isinstance(matched, dict):
+            matched = json.dumps(matched, ensure_ascii=False)
         enqueue_task(
             industry_slug=comment.get("industry_slug", ""),
             text=comment.get("text", ""),
@@ -538,7 +541,7 @@ def enqueue_classified(comments: list[dict]):
             source_short_id=comment.get("source_short_id", ""),
             source_video_id=comment.get("source_video_id", ""),
             source_keyword=comment.get("source_keyword", ""),
-            matched_categories=json.dumps(comment.get("matched_categories", {})),
+            matched_categories=matched,
         )
         count += 1
     log.info("  入队: %s 条", count)
