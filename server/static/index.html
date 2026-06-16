@@ -271,6 +271,22 @@
                 </div>
             </div>
 
+            <!-- Effect Stats Card Grid -->
+            <div class="grid grid-cols-3 gap-4 mb-6">
+                <div class="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+                    <p class="text-[10px] text-slate-400 uppercase">今日发送</p>
+                    <p id="stat-sent" class="text-xl font-bold text-slate-100">0</p>
+                </div>
+                <div class="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+                    <p class="text-[10px] text-slate-400 uppercase">回复率</p>
+                    <p id="stat-reply-rate" class="text-xl font-bold text-cyan-400">0%</p>
+                </div>
+                <div class="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+                    <p class="text-[10px] text-slate-400 uppercase">转化率</p>
+                    <p id="stat-conversion-rate" class="text-xl font-bold text-emerald-400">0%</p>
+                </div>
+            </div>
+
             <!-- Summary Stats Card Grid -->
             <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div class="p-6 rounded-xl glass-card relative overflow-hidden">
@@ -433,6 +449,7 @@
                             <th class="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wide">线索来源</th>
                             <th class="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wide">评论文本</th>
                             <th class="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wide text-center">状态</th>
+                            <th class="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wide text-center">效果状态</th>
                             <th class="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wide text-center">失败重试数</th>
                             <th class="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wide text-center">冷却到期</th>
                             <th id="task-time-header" class="px-6 py-4 text-xs font-semibold text-slate-400 uppercase tracking-wide text-center">采集时间</th>
@@ -748,6 +765,44 @@
                             </div>
                         </div>
                     </details>
+
+                    <!-- 发送时段设置 -->
+                    <div class="mt-4 border border-slate-700/50 rounded-lg overflow-hidden">
+                        <button type="button" onclick="toggleSchedulePanel()" class="w-full px-4 py-2 bg-slate-800/50 flex items-center justify-between text-xs font-semibold text-slate-300 hover:bg-slate-800">
+                            <span>⏰ 发送时段控制</span>
+                            <span id="schedule-panel-chevron">▼</span>
+                        </button>
+                        <div id="schedule-panel" class="hidden p-4 space-y-4 bg-slate-900/30">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="space-y-1">
+                                    <label class="block text-xs font-semibold text-slate-300">开始时间 (UTC)</label>
+                                    <input type="time" id="industry-send-start" value="09:00" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200">
+                                </div>
+                                <div class="space-y-1">
+                                    <label class="block text-xs font-semibold text-slate-300">结束时间 (UTC)</label>
+                                    <input type="time" id="industry-send-end" value="13:00" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200">
+                                </div>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <div>
+                                    <p class="text-xs font-semibold text-slate-200">周末暂停</p>
+                                    <p class="text-[10px] text-slate-500">周六、周日不自动发送</p>
+                                </div>
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input type="checkbox" id="industry-pause-weekends" class="sr-only peer">
+                                    <div class="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-cyan-600"></div>
+                                </label>
+                            </div>
+                            <div class="space-y-1">
+                                <label class="block text-xs font-semibold text-slate-300">单日最大发送量（0=不限制）</label>
+                                <input type="number" id="industry-daily-send-max" min="0" value="0" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200">
+                            </div>
+                            <div class="space-y-1">
+                                <label class="block text-xs font-semibold text-slate-300">效果事件 Webhook</label>
+                                <input type="url" id="industry-effect-webhook-url" placeholder="https://your-crm.com/webhook/thunder-events" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200">
+                            </div>
+                        </div>
+                    </div>
 
                 </div>
 
@@ -1454,6 +1509,14 @@
                 document.getElementById('stat-industries').innerText = ds.project.industry_count;
                 document.getElementById('stat-devices').innerText = ds.device_matrix.total;
 
+                // Effect stats cards
+                try {
+                    const stats = await apiFetch(`/api/stats/effects?industry_slug=${overviewSelectedIndustry}&days=7`);
+                    document.getElementById('stat-sent').textContent = stats.sent || 0;
+                    document.getElementById('stat-reply-rate').textContent = ((stats.reply_rate || 0) * 100).toFixed(1) + '%';
+                    document.getElementById('stat-conversion-rate').textContent = ((stats.conversion_rate || 0) * 100).toFixed(1) + '%';
+                } catch (e) {}
+
                 // Command center — 今日运营总控
                 const cmdTitle = document.getElementById('overview-command-title');
                 const cmdDesc = document.getElementById('overview-command-desc');
@@ -1722,6 +1785,12 @@
         async function refreshIndustryCard(slug) {
             try {
                 const stats = await apiFetch('/api/leads/stats?industry_slug=' + slug);
+                try {
+                    const effectStats = await apiFetch(`/api/stats/effects?industry_slug=${slug}&days=7`);
+                    document.getElementById('stat-sent').textContent = effectStats.sent || 0;
+                    document.getElementById('stat-reply-rate').textContent = ((effectStats.reply_rate || 0) * 100).toFixed(1) + '%';
+                    document.getElementById('stat-conversion-rate').textContent = ((effectStats.conversion_rate || 0) * 100).toFixed(1) + '%';
+                } catch (e) {}
                 const inds = await apiFetch('/api/industries');
                 const ind = inds.find(i => i.slug === slug);
                 const indNameEl = document.getElementById('overview-industry-title');
@@ -2130,6 +2199,11 @@
                 document.getElementById('industry-compliance-mode').checked = Boolean(ind.compliance_mode);
                 document.getElementById('industry-webhook-url').value = ind.webhook_url || '';
                 document.getElementById('industry-auto-export').checked = Boolean(ind.auto_export_enabled);
+                document.getElementById('industry-send-start').value = ind.send_start_time || '09:00';
+                document.getElementById('industry-send-end').value = ind.send_end_time || '13:00';
+                document.getElementById('industry-pause-weekends').checked = ind.pause_weekends || false;
+                document.getElementById('industry-daily-send-max').value = ind.daily_send_max || 0;
+                document.getElementById('industry-effect-webhook-url').value = ind.effect_webhook_url || '';
 
                 initIndustryTagInputs(ind);
                 onComplianceModeChange();
@@ -2224,6 +2298,13 @@
             if (switchDiv && switchDiv.getAttribute('role') === 'switch') {
                 switchDiv.setAttribute('aria-checked', enabled ? 'true' : 'false');
             }
+        }
+
+        function toggleSchedulePanel() {
+            const panel = document.getElementById('schedule-panel');
+            const chevron = document.getElementById('schedule-panel-chevron');
+            panel.classList.toggle('hidden');
+            chevron.textContent = panel.classList.contains('hidden') ? '▼' : '▲';
         }
 
         async function testIndustryWebhook() {
@@ -2428,6 +2509,11 @@
                 compliance_mode: document.getElementById('industry-compliance-mode').checked,
                 webhook_url: document.getElementById('industry-webhook-url').value.trim(),
                 auto_export_enabled: document.getElementById('industry-auto-export').checked,
+                send_start_time: document.getElementById('industry-send-start').value,
+                send_end_time: document.getElementById('industry-send-end').value,
+                pause_weekends: document.getElementById('industry-pause-weekends').checked,
+                daily_send_max: parseInt(document.getElementById('industry-daily-send-max').value || '0', 10),
+                effect_webhook_url: document.getElementById('industry-effect-webhook-url').value,
             };
 
             try {
@@ -2728,6 +2814,42 @@
             } catch (e) {}
         }
 
+        function renderLeadStatus(lead) {
+            const map = { sent: '已发送', replied: '已回复', converted: '已转化', failed: '失败', done: '已发送' };
+            return `<span class="text-[10px] text-slate-300">${escapeHtml(map[lead.status] || lead.status || '待处理')}</span>`;
+        }
+
+        function renderLeadActions(lead) {
+            if (lead.status === 'sent' || lead.status === 'done') {
+                return `<button onclick="markReplied(${lead.id})" class="text-cyan-300 hover:text-cyan-100 text-xs">标记回复</button>`;
+            }
+            if (lead.status === 'replied') {
+                return `<button onclick="markConverted(${lead.id})" class="text-cyan-300 hover:text-cyan-100 text-xs">标记转化</button>`;
+            }
+            if (lead.status === 'converted') {
+                return `<button onclick="unmarkConverted(${lead.id})" class="text-amber-300 hover:text-amber-100 text-xs">撤销转化</button>`;
+            }
+            return '<span class="text-[10px] text-slate-600">-</span>';
+        }
+
+        async function markReplied(leadId) {
+            const text = prompt('请输入对方回复内容（可选）') || '';
+            await apiFetch(`/api/leads/${leadId}/mark-replied`, { method: 'POST', body: JSON.stringify({ reply_text: text }) });
+            loadTasksView();
+        }
+
+        async function markConverted(leadId) {
+            const value = prompt('请输入转化价值（可选）') || '';
+            await apiFetch(`/api/leads/${leadId}/mark-converted`, { method: 'POST', body: JSON.stringify({ conversion_value: value }) });
+            loadTasksView();
+        }
+
+        async function unmarkConverted(leadId) {
+            if (!confirm('确定撤销转化标记？')) return;
+            await apiFetch(`/api/leads/${leadId}/unmark-converted`, { method: 'POST' });
+            loadTasksView();
+        }
+
         async function loadTasksView() {
             const industryId = document.getElementById('task-filter-industry').value;
             const status = document.getElementById('task-filter-status').value;
@@ -2739,7 +2861,7 @@
             tbody.innerHTML = '';
 
             if (!industryId) {
-                tbody.innerHTML = `<tr><td colspan="7" class="px-6 py-8 text-center text-slate-500">请先在项目配置中创建您的第一个获客项目。</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="8" class="px-6 py-8 text-center text-slate-500">请先在项目配置中创建您的第一个获客项目。</td></tr>`;
                 return;
             }
 
@@ -2750,7 +2872,7 @@
                 const resp = await apiFetch(url);
                 const list = resp.leads || [];
                 if (list.length === 0) {
-                    tbody.innerHTML = `<tr><td colspan="7" class="px-6 py-8 text-center text-slate-500">该项目当前条件下未录入任何意向线索。</td></tr>`;
+                    tbody.innerHTML = `<tr><td colspan="8" class="px-6 py-8 text-center text-slate-500">该项目当前条件下未录入任何意向线索。</td></tr>`;
                     return;
                 }
                 // Update retry button to use new endpoint
@@ -2797,7 +2919,7 @@
                         : '';
                     const retryButton = t.status === 'failed'
                         ? `<button onclick="retryTask('${escapeHtml(industryId)}', ${Number(t.id)})" class="px-2.5 py-1 rounded border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/10 text-[10px] font-semibold">重新发送</button>`
-                        : `<span class="text-[10px] text-slate-600">-</span>`;
+                        : renderLeadActions(t);
 
                     tr.innerHTML = `
                         <td class="px-6 py-4">
@@ -2811,6 +2933,7 @@
                             ${metaHtml}
                         </td>
                         <td class="px-6 py-4 text-center">${statusBadge}</td>
+                        <td class="px-6 py-4 text-center">${renderLeadStatus(t)}</td>
                         <td class="px-6 py-4 text-center font-bold text-slate-300">${Number(t.retry_count || 0)} 次</td>
                         <td class="px-6 py-4 text-center text-slate-400 font-mono text-[10px]">${retryAfter}</td>
                         <td class="px-6 py-4 text-center text-slate-500 font-mono text-[10px]">${dateStr}</td>
