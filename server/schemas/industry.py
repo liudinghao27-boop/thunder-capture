@@ -6,6 +6,8 @@ from typing import Optional
 
 from pydantic import BaseModel, field_validator
 
+from server.services.url_security import is_safe_webhook_url
+
 
 SUPPORTED_PLATFORMS = {
     "douyin",
@@ -96,8 +98,15 @@ class IndustryCreate(BaseModel):
     @field_validator("webhook_url")
     @classmethod
     def _validate_webhook_url(cls, value: str) -> str:
-        if value and not re.match(r"^https?://\S+$", value):
-            raise ValueError("webhook_url must be a valid HTTP/HTTPS URL")
+        if value and not is_safe_webhook_url(value):
+            raise ValueError("Webhook URL 必须是安全的 HTTPS 地址，且不能指向私有/本地网络")
+        return value
+
+    @field_validator("effect_webhook_url")
+    @classmethod
+    def _validate_effect_webhook_url(cls, value: str) -> str:
+        if value and not is_safe_webhook_url(value):
+            raise ValueError("Effect Webhook URL 必须是安全的 HTTPS 地址，且不能指向私有/本地网络")
         return value
 
 
@@ -149,8 +158,15 @@ class IndustryUpdate(BaseModel):
     @field_validator("webhook_url")
     @classmethod
     def _validate_webhook_url(cls, value: Optional[str]) -> Optional[str]:
-        if value and not re.match(r"^https?://\S+$", value):
-            raise ValueError("webhook_url must be a valid HTTP/HTTPS URL")
+        if value and not is_safe_webhook_url(value):
+            raise ValueError("Webhook URL 必须是安全的 HTTPS 地址，且不能指向私有/本地网络")
+        return value
+
+    @field_validator("effect_webhook_url")
+    @classmethod
+    def _validate_effect_webhook_url(cls, value: Optional[str]) -> Optional[str]:
+        if value and not is_safe_webhook_url(value):
+            raise ValueError("Effect Webhook URL 必须是安全的 HTTPS 地址，且不能指向私有/本地网络")
         return value
 
 

@@ -8,6 +8,8 @@ from typing import Any
 
 import httpx
 
+from server.services.url_security import is_safe_webhook_url
+
 log = logging.getLogger("thunder.webhook")
 
 
@@ -45,6 +47,9 @@ def push_leads_to_webhook(
     """
     if not webhook_url:
         return {"ok": False, "status_code": None, "response_preview": "", "error": "webhook_url empty"}
+
+    if not is_safe_webhook_url(webhook_url):
+        return {"ok": False, "status_code": None, "response_preview": "", "error": "Webhook URL 不安全，禁止访问私有/本地网络地址"}
 
     payload = WebhookPayload(
         industry_slug=industry_slug,

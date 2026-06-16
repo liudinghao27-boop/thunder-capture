@@ -83,6 +83,22 @@ def test_push_leads_network_failure(mock_post):
     assert "connection error" in result["error"]
 
 
+@patch("server.services.webhook.httpx.post")
+@patch("server.services.webhook.is_safe_webhook_url")
+def test_push_leads_rejects_unsafe_url(mock_safe, mock_post):
+    mock_safe.return_value = False
+    result = push_leads_to_webhook(
+        webhook_url="https://10.0.0.1/hook",
+        industry_slug="recruitment",
+        industry_name="征兵咨询",
+        leads=[{"id": 1}],
+    )
+    assert result["ok"] is False
+    assert result["status_code"] is None
+    assert "不安全" in result["error"]
+    mock_post.assert_not_called()
+
+
 def test_push_leads_response_preview_truncation():
     long_text = "x" * 1000
     with patch("server.services.webhook.httpx.post") as mock_post:

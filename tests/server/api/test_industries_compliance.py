@@ -3,6 +3,7 @@ from server.main import app
 from server.auth import get_current_user
 from server.api import industries as industries_module
 import pytest
+from unittest.mock import patch
 
 client = TestClient(app)
 
@@ -135,14 +136,61 @@ def test_webhook_test_with_url(fake_industry, fake_db, monkeypatch):
     monkeypatch.setattr(fake_industry, "webhook_url", "https://example.com/hook")
     calls = []
 
-    def fake_push(*, webhook_url, industry_slug, industry_name, leads):
-        calls.append({"webhook_url": webhook_url, "industry_slug": industry_slug, "industry_name": industry_name, "leads": leads})
+    def fake_push(*, webhook_url, industry_slug, industry_name, leads, timeout=10.0):
+        calls.append({"webhook_url": webhook_url, "industry_slug": industry_slug, "industry_name": industry_name, "leads": leads, "timeout": timeout})
         return {"ok": True, "status_code": 200, "response_preview": "ok", "error": ""}
 
     monkeypatch.setattr("server.services.webhook.push_leads_to_webhook", fake_push)
     resp = client.post("/api/industries/ind-1/webhook-test")
     assert resp.status_code == 200
-    assert resp.json()["ok"] is True
+    data = resp.json()
+    assert data["ok"] is True
+    assert data["status_code"] == 200
+    assert "response_preview" not in data
+    assert "error" not in data
     assert len(calls) == 1
     assert calls[0]["webhook_url"] == "https://example.com/hook"
     assert calls[0]["industry_slug"] == "test-industry"
+
+
+@patch("server.services.url_security.socket.gethostbyname")
+def test_update_compliance_config_rejects_http_webhook_url(mock_gethost, fake_industry, fake_db):
+    mock_gethost.return_value = "8.8.8.8"
+    resp = client.put(
+        "/api/industries/ind-1/compliance-config",
+        json={"webhook_url": "http://example.com/hook"},
+    )
+    assert resp.status_code == 422
+
+
+@patch("server.services.url_security.socket.gethostbyname")
+def test_update_compliance_config_rejects_private_ip_webhook_url(mock_gethost, fake_industry, fake_db):
+    mock_gethost.return_value = "8.8.8.8"
+    resp = client.put(
+        "/api/industries/ind-1/compliance-config",
+        json={"webhook_url": "https://192.168.1.1/hook"},
+    )
+    assert resp.status_code == 422
+
+
+@patch("server.services.url_security.socket.gethostbyname")
+def test_update_schedule_config_rejects_localhost_effect_webhook_url(mock_gethost, fake_industry, fake_db):
+    mock_gethost.return_value = "127.0.0.1"
+    resp = client.put(
+        "/api/industries/ind-1/schedule-config",
+        json={"effect_webhook_url": "https://localhost/hook"},
+    )
+    assert resp.status_code == 422
+
+
+def test_webhook_test_sanitizes_response(fake_industry, fake_db, monkeypatch):
+    monkeypatch.setattr(fake_industry, "webhook_url", "https://example.com/hook")
+
+    def fake_push(*, webhook_url, industry_slug, industry_name, leads, timeout=10.0):
+        return {"ok": True, "status_code": 200, "response_preview": "sensitive-body", "error": ""}
+
+    monkeypatch.setattr("server.services.webhook.push_leads_to_webhook", fake_push)
+    resp = client.post("/api/industries/ind-1/webhook-test")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data == {"ok": True, "status_code": 200}

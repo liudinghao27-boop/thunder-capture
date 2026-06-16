@@ -6,6 +6,8 @@ from typing import Any
 
 import httpx
 
+from server.services.url_security import is_safe_webhook_url
+
 log = logging.getLogger("thunder.effect_webhook")
 
 
@@ -19,6 +21,9 @@ def push_effect_event(
     """Push lead.replied / lead.converted event to external webhook."""
     if not webhook_url:
         return {"ok": False, "error": "webhook_url empty"}
+
+    if not is_safe_webhook_url(webhook_url):
+        return {"ok": False, "error": "Webhook URL 不安全，禁止访问私有/本地网络地址"}
 
     payload = {
         "event": event,

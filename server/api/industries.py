@@ -15,6 +15,7 @@ from server.schemas.industry import (
     IndustryCreate, IndustryOut, IndustryStats, IndustryUpdate,
 )
 from server.secret_store import decrypt_secret, has_secret
+from server.services.url_security import is_safe_webhook_url
 from server.services.abtest import normalize_variant, build_variant_result, pick_winner
 from server.services.analytics import query_task_rows
 from server.workers import run_collect_job, run_send_job
@@ -911,15 +912,21 @@ def get_industry_bloggers(
     return bloggers
 
 
-WEBHOOK_URL_RE = re.compile(r"^https?://\S+$")
-
-
 class ScheduleConfigUpdate(BaseModel):
     send_start_time: str | None = None
     send_end_time: str | None = None
     pause_weekends: bool | None = None
     daily_send_max: int | None = None
     effect_webhook_url: str | None = None
+
+    @field_validator("effect_webhook_url")
+    @classmethod
+    def _validate_effect_webhook_url(cls, value: str | None) -> str | None:
+        if value is None or value == "":
+            return value
+        if not is_safe_webhook_url(value):
+            raise ValueError("Effect Webhook URL 必须是安全的 HTTPS 地址，且不能指向私有/本地网络")
+        return value
 
 
 class ComplianceConfigUpdate(BaseModel):
@@ -932,8 +939,8 @@ class ComplianceConfigUpdate(BaseModel):
     def _validate_webhook_url(cls, value: str | None) -> str | None:
         if value is None or value == "":
             return value
-        if not WEBHOOK_URL_RE.match(value):
-            raise ValueError("Webhook URL 必须是 http 或 https 链接")
+        if not is_safe_webhook_url(value):
+            raise ValueError("Webhook URL 必须是安全的 HTTPS 地址，且不能指向私有/本地网络")
         return value
 
 
@@ -1028,8 +1035,9 @@ def test_webhook(
             "text": "这是一条测试线索",
             "status": "pending",
         }],
+        timeout=5.0,
     )
-    return result
+    return {"ok": result.get("ok", False), "status_code": result.get("status_code")}
 
 
 @router.put("/{industry_id}/schedule-config", response_model=IndustryOut)

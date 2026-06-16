@@ -156,9 +156,26 @@ def test_single_platform_validation():
         IndustryCreate(name="测试", slug="test-ind", platforms=["douyin", "kuaishou"])
 
 
-def test_webhook_url_validator_accepts_empty_and_http():
+from unittest.mock import patch
+
+
+@patch("server.services.url_security.socket.gethostbyname")
+def test_webhook_url_validator_accepts_empty_and_https(mock_gethost):
+    mock_gethost.return_value = "8.8.8.8"
     assert IndustryCreate(name="测试", slug="test-ind", webhook_url="").webhook_url == ""
     assert IndustryCreate(name="测试", slug="test-ind", webhook_url="https://x.com").webhook_url == "https://x.com"
+
+
+@patch("server.services.url_security.socket.gethostbyname")
+def test_webhook_url_validator_rejects_http(mock_gethost):
+    mock_gethost.return_value = "8.8.8.8"
+    with pytest.raises(ValueError):
+        IndustryCreate(name="测试", slug="test-ind", webhook_url="http://x.com")
+
+
+def test_webhook_url_validator_rejects_private_ip():
+    with pytest.raises(ValueError):
+        IndustryCreate(name="测试", slug="test-ind", webhook_url="https://192.168.1.1/hook")
 
 
 def test_webhook_url_validator_rejects_invalid():
