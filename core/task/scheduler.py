@@ -28,11 +28,13 @@ class MatrixTaskScheduler:
         industry_slug: str,
         owner_user_id: str = "",
         global_daily_limit: int = 0,
+        daily_send_max: int = 0,
         job_id: str = "",
     ):
         self.industry_slug = industry_slug
         self.owner_user_id = owner_user_id
         self.global_daily_limit = int(global_daily_limit or 0)
+        self.daily_send_max = int(daily_send_max or 0)
         self.job_id = job_id
         self._db = None
 
@@ -74,7 +76,18 @@ class MatrixTaskScheduler:
                     quota.reserved += 1
                 db.flush()
 
-            # 2. Claim Task
+            # 2. Check industry daily max
+            if self.daily_send_max > 0:
+                day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                quota = db.query(IndustryDailyQuota).filter(
+                    IndustryDailyQuota.industry_slug == self.industry_slug,
+                    IndustryDailyQuota.day == day
+                ).with_for_update().first()
+                if quota and (quota.sent + quota.reserved >= self.daily_send_max):
+                    db.rollback()
+                    return ClaimedTask(None, reserved=False, reason="industry_daily_limit_reached")
+
+            # 3. Claim Task
             query = db.query(TaskQueue).filter(
                 TaskQueue.status == "pending",
                 TaskQueue.industry_slug == self.industry_slug
