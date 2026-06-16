@@ -15,6 +15,8 @@ from server.schemas.industry import (
     IndustryCreate, IndustryOut, IndustryStats, IndustryUpdate,
 )
 from server.secret_store import decrypt_secret, has_secret
+from server.services.abtest import normalize_variant, build_variant_result, pick_winner
+from server.services.analytics import query_task_rows
 from server.workers import run_collect_job, run_send_job
 
 router = APIRouter(prefix="/api/industries", tags=["industries"])
@@ -928,6 +930,57 @@ class ComplianceConfigUpdate(BaseModel):
         return value
 
 
+class ReplyVariantCreate(BaseModel):
+    name: str
+    reply_tone: str = ""
+    reply_style: str = ""
+    reply_hook: str = ""
+    weight: int = 1
+
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Variant name cannot be empty")
+        return value
+
+    @field_validator("weight")
+    @classmethod
+    def _validate_weight(cls, value: int) -> int:
+        if value < 0:
+            raise ValueError("Weight must be >= 0")
+        return value
+
+
+class ReplyVariantUpdate(BaseModel):
+    name: str | None = None
+    reply_tone: str | None = None
+    reply_style: str | None = None
+    reply_hook: str | None = None
+    weight: int | None = None
+    enabled: bool | None = None
+
+    @field_validator("name")
+    @classmethod
+    def _validate_name(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        value = value.strip()
+        if not value:
+            raise ValueError("Variant name cannot be empty")
+        return value
+
+    @field_validator("weight")
+    @classmethod
+    def _validate_weight(cls, value: int | None) -> int | None:
+        if value is None:
+            return value
+        if value < 0:
+            raise ValueError("Weight must be >= 0")
+        return value
+
+
 @router.put("/{industry_id}/compliance-config", response_model=IndustryOut)
 def update_compliance_config(
     industry_id: str,
@@ -1020,3 +1073,118 @@ def _get_owned_industry(industry_id: str, user: User, db: Session) -> Industry:
     if not ind or ind.user_id != user.id:
         raise HTTPException(status_code=404, detail="Industry not found")
     return ind
+
+
+@router.post("/{industry_id}/variants", response_model=IndustryOut)
+def add_reply_variant(
+    industry_id: str,
+    body: ReplyVariantCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ind = _get_owned_industry(industry_id, current_user, db)
+    variants = list(getattr(ind, "reply_variants", []) or [])
+    new_variant = normalize_variant({
+        "name": body.name,
+        "reply_tone": body.reply_tone,
+        "reply_style": body.reply_style,
+        "reply_hook": body.reply_hook,
+        "weight": body.weight,
+    })
+    variants.append(new_variant)
+    ind.reply_variants = variants
+    db.commit()
+    db.refresh(ind)
+    return ind
+
+
+@router.get("/{industry_id}/variants")
+def list_reply_variants(
+    industry_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ind = _get_owned_industry(industry_id, current_user, db)
+    return {"industry_id": ind.id, "variants": list(getattr(ind, "reply_variants", []) or [])}
+
+
+@router.put("/{industry_id}/variants/{variant_id}", response_model=IndustryOut)
+def update_reply_variant(
+    industry_id: str,
+    variant_id: str,
+    body: ReplyVariantUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ind = _get_owned_industry(industry_id, current_user, db)
+    variants = [dict(v) for v in (getattr(ind, "reply_variants", []) or [])]
+    found = False
+    for v in variants:
+        if v.get("id") == variant_id:
+            found = True
+            if body.name is not None:
+                v["name"] = body.name
+            if body.reply_tone is not None:
+                v["reply_tone"] = body.reply_tone
+            if body.reply_style is not None:
+                v["reply_style"] = body.reply_style
+            if body.reply_hook is not None:
+                v["reply_hook"] = body.reply_hook
+            if body.weight is not None:
+                v["weight"] = body.weight
+            if body.enabled is not None:
+                v["enabled"] = body.enabled
+            break
+    if not found:
+        raise HTTPException(status_code=404, detail="Variant not found")
+    ind.reply_variants = variants
+    db.commit()
+    db.refresh(ind)
+    return ind
+
+
+@router.delete("/{industry_id}/variants/{variant_id}", response_model=IndustryOut)
+def delete_reply_variant(
+    industry_id: str,
+    variant_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ind = _get_owned_industry(industry_id, current_user, db)
+    variants = [dict(v) for v in (getattr(ind, "reply_variants", []) or []) if v.get("id") != variant_id]
+    ind.reply_variants = variants
+    db.commit()
+    db.refresh(ind)
+    return ind
+
+
+@router.get("/{industry_id}/abtest-results")
+def get_abtest_results(
+    industry_id: str,
+    days: int = Query(7, ge=1, le=365),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    ind = _get_owned_industry(industry_id, current_user, db)
+    rows = query_task_rows(db, ind.slug, days, owner_user_id=current_user.id)
+    variants = list(getattr(ind, "reply_variants", []) or [])
+    results = []
+    for v in variants:
+        vid = v.get("id", "")
+        variant_rows = [r for r in rows if r.get("reply_variant_id") == vid]
+        result = build_variant_result(vid, variant_rows)
+        result["name"] = v.get("name", "未命名")
+        results.append(result)
+
+    # Include default variant for old data without variant id
+    default_rows = [r for r in rows if not r.get("reply_variant_id")]
+    if default_rows:
+        default_result = build_variant_result("default", default_rows)
+        default_result["name"] = "默认版"
+        results.append(default_result)
+
+    return {
+        "industry_id": ind.id,
+        "variants": results,
+        "winner": pick_winner(results, metric="reply_rate"),
+    }
