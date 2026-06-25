@@ -11,6 +11,8 @@ class _OpsCommanderShellParser(HTMLParser):
         self.primary_nav_labels: dict[str, str] = {}
         self.ids: set[str] = set()
         self.inline_scripts: list[str] = []
+        self._in_dashboard_sidebar = False
+        self._dashboard_sidebar_depth = 0
         self._in_primary_nav = False
         self._primary_nav_depth = 0
         self._current_nav_key: str | None = None
@@ -24,7 +26,14 @@ class _OpsCommanderShellParser(HTMLParser):
         if tag_id:
             self.ids.add(tag_id)
 
-        if tag == "nav" and attr_map.get("class") == "flex-1 p-4 space-y-1":
+        if tag == "aside" and tag_id == "dashboard-sidebar":
+            self._in_dashboard_sidebar = True
+            self._dashboard_sidebar_depth = 1
+            return
+        if tag == "aside" and self._in_dashboard_sidebar:
+            self._dashboard_sidebar_depth += 1
+
+        if tag == "nav" and self._in_dashboard_sidebar and not self._in_primary_nav:
             self._in_primary_nav = True
             self._primary_nav_depth = 1
             return
@@ -56,6 +65,11 @@ class _OpsCommanderShellParser(HTMLParser):
             self._primary_nav_depth -= 1
             if self._primary_nav_depth == 0:
                 self._in_primary_nav = False
+
+        if tag == "aside" and self._in_dashboard_sidebar:
+            self._dashboard_sidebar_depth -= 1
+            if self._dashboard_sidebar_depth == 0:
+                self._in_dashboard_sidebar = False
 
         if tag == "script" and self._in_script:
             self.inline_scripts.append("".join(self._script_chunks))
