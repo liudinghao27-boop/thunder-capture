@@ -39,7 +39,7 @@ def test_index_loads_api_job_device_and_dashboard_modules_before_inline_app():
     bootstrap_index = next(
         index
         for index, script in enumerate(parser.scripts)
-        if script["src"] is None and "window.onload = () =>" in (script["content"] or "")
+        if script["src"] is None and (script["content"] or "").strip()
     )
     module_srcs = [
         script["src"]

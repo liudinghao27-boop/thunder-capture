@@ -17,6 +17,8 @@ class _OpsCommanderShellParser(HTMLParser):
         self._primary_nav_depth = 0
         self._current_nav_key: str | None = None
         self._current_nav_text: list[str] = []
+        self._in_nav_label_span = False
+        self._nav_label_span_depth = 0
         self._in_script = False
         self._script_chunks: list[str] = []
 
@@ -44,12 +46,19 @@ class _OpsCommanderShellParser(HTMLParser):
             self._current_nav_key = attr_map["data-nav"]
             self._current_nav_text = []
 
+        if tag == "span" and self._current_nav_key is not None and not self._in_nav_label_span:
+            self._in_nav_label_span = True
+            self._nav_label_span_depth = 1
+            return
+        if tag == "span" and self._in_nav_label_span:
+            self._nav_label_span_depth += 1
+
         if tag == "script" and attr_map.get("src") is None:
             self._in_script = True
             self._script_chunks = []
 
     def handle_data(self, data: str) -> None:
-        if self._current_nav_key is not None:
+        if self._in_nav_label_span:
             self._current_nav_text.append(data)
         if self._in_script:
             self._script_chunks.append(data)
@@ -60,6 +69,11 @@ class _OpsCommanderShellParser(HTMLParser):
             self._current_nav_key = None
             self._current_nav_text = []
             return
+
+        if tag == "span" and self._in_nav_label_span:
+            self._nav_label_span_depth -= 1
+            if self._nav_label_span_depth == 0:
+                self._in_nav_label_span = False
 
         if tag == "nav" and self._in_primary_nav:
             self._primary_nav_depth -= 1
