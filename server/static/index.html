@@ -4,33 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>雷霆捕获系统 — 获客营销控制台</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        slate: {
-                            950: '#030712',
-                            900: '#0f172a',
-                            800: '#1e293b',
-                            700: '#334155',
-                        },
-                        cyan: {
-                            400: '#22d3ee',
-                            500: '#06b6d4',
-                            600: '#0891b2',
-                        },
-                        pink: {
-                            400: '#f472b6',
-                            500: '#ec4899',
-                        }
-                    }
-                }
-            }
-        }
-    </script>
+    <link rel="stylesheet" href="/static/css/tailwind.css">
+    <script src="/static/js/api.js"></script>
+    <script src="/static/js/jobs.js"></script>
+    <script src="/static/js/devices.js"></script>
+    <script src="/static/js/dashboard.js"></script>
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1532,6 +1510,65 @@
             `;
         }
 
+        function getOverviewDecisionContext(ds) {
+            const activeJobs = ds.active_jobs || [];
+            const warnings = ds.warnings || [];
+            return {
+                hasProject: Number(ds.project?.industry_count || 0) > 0,
+                hasLLM: warnings.every(w => !w.includes('瀵嗛挜') && !w.toLowerCase().includes('key')),
+                hasDevice: Number(ds.device_matrix?.total || 0) > 0,
+                hasPending: Number(ds.lead_inventory?.pending || 0) > 0,
+                isWorking: Boolean(ds.has_active_job) || activeJobs.length > 0,
+                canSend: Boolean(ds.can_send),
+                projectSummary: Number(ds.project?.industry_count || 0) > 0 ? `${ds.project.industry_count} 涓」鐩凡閰嶇疆` : '杩樻病鏈夎幏瀹㈤」鐩?,
+                deviceSummary: Number(ds.device_matrix?.total || 0) > 0 ? `${ds.device_matrix.total} 鍙拌澶囧凡褰曞叆` : '杩樻病鏈夊綍鍏ヨ澶?,
+                collectSummary: Number(ds.lead_inventory?.pending || 0) > 0 ? `${ds.lead_inventory.pending} 鏉″緟鍙戦€?` : '褰撳墠娌℃湁寰呭彂閫佺嚎绱?,
+                sendSummary: activeJobs.length > 0 ? `${activeJobs.length} 涓换鍔℃墽琛屼腑` : (ds.can_send ? '鍙互寮€濮嬪彂閫佷换鍔? : '鍙戦€佹潯浠惰繕鏈綈澶?),
+            };
+        }
+
+        function renderOverviewStageList(context) {
+            const readyList = document.getElementById('overview-readiness-list');
+            if (!readyList || !window.DashboardUi) return;
+            readyList.innerHTML = window.DashboardUi.overviewStageItems(context).map(item => `
+                <div class="flex items-center justify-between p-3 bg-slate-950/40 rounded-lg border border-slate-800/60 gap-3">
+                    <div class="min-w-0">
+                        <p class="text-xs text-slate-300">${escapeHtml(item.label)}</p>
+                        <p class="text-[10px] text-slate-500 mt-1">${escapeHtml(item.summary || '')}</p>
+                    </div>
+                    <span class="shrink-0 text-[10px] font-bold ${item.ready ? 'text-emerald-400' : 'text-amber-400'}">${item.ready ? 'OK' : '寰呭鐞?}</span>
+                </div>
+            `).join('');
+        }
+
+        function applyOverviewDecision(primary) {
+            const nextTitle = document.getElementById('overview-next-title');
+            const nextDesc = document.getElementById('overview-next-desc');
+            const btnC = document.getElementById('overview-btn-collect');
+            const btnS = document.getElementById('overview-btn-send');
+            if (nextTitle) nextTitle.innerText = primary.label;
+            if (nextDesc) {
+                nextDesc.innerText = ({
+                    'create-industry': '鍏堥厤缃钩鍙般€佸叧閿瘝鍜屽鏍囪处鍙凤紝鍚庣画閲囬泦鍜屽彂閫佹墠鑳藉惎鍔ㄣ€?,
+                    settings: '鍏堣ˉ榻?LLM Key锛屾剰鍚戣瘑鍒拰鏂囨鐢熸垚鎵嶅彲鐢ㄣ€?,
+                    devices: '寤鸿鍏堟帴鍏ュ苟妫€鏌ヨ嚦灏?1 鍙拌澶囷紝鍐嶅紑濮嬪彂閫佷换鍔°€?,
+                    collect: '褰撳墠娌℃湁寰呭彂閫佺嚎绱紝鍏堝仛涓€杞噰闆嗗～鍏呭簱瀛樸€?,
+                    jobs: '褰撳墠宸叉湁浠诲姟杩愯涓紝鍏堟煡鐪嬫墽琛岃繘搴﹀拰寮傚父鐘舵€併€?,
+                    send: '绾跨储鍜岃澶囧凡鍏峰锛屽彲浠ュ紑濮嬪彂閫佷换鍔°€?,
+                })[primary.mode] || '绯荤粺浼氭牴鎹綋鍓嶇姸鎬佺粰鍑烘渶鐭矾寰勩€?';
+            }
+            if (btnC) {
+                btnC.className = primary.mode === 'collect'
+                    ? 'flex-1 py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-bold font-display text-xs rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed'
+                    : 'flex-1 py-3 bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-300 font-bold font-display text-xs rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed';
+            }
+            if (btnS) {
+                btnS.className = (primary.mode === 'send' || primary.mode === 'jobs')
+                    ? 'flex-1 py-3 bg-pink-600 hover:bg-pink-500 text-white font-bold font-display text-xs rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed'
+                    : 'flex-1 py-3 bg-pink-600/30 hover:bg-pink-600/50 text-pink-300 font-bold font-display text-xs rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed';
+            }
+        }
+
         function renderOverviewCommandCenter(overview, devices, health, aggregate, activeJobs) {
             const list = document.getElementById('overview-readiness-list');
             const title = document.getElementById('overview-command-title');
@@ -1680,6 +1717,13 @@
                         : 'px-6 py-3 rounded-xl font-bold text-sm bg-slate-700 text-slate-400';
                     nextAction.onclick = ds.can_send ? () => triggerSend(ds.project.active_industry_slug)
                         : (ds.can_collect ? () => triggerCollect(ds.project.active_industry_slug) : null);
+                }
+
+                if (window.DashboardUi) {
+                    const overviewContext = getOverviewDecisionContext(ds);
+                    const primary = window.DashboardUi.resolveOverviewPrimaryAction(overviewContext);
+                    renderOverviewStageList(overviewContext);
+                    applyOverviewDecision(primary);
                 }
 
                 // Leads stats
@@ -1883,6 +1927,12 @@
                     items.push(`<div class="flex items-center justify-between p-2.5 bg-cyan-950/20 rounded-lg border border-cyan-500/20"><span class="text-[10px] text-cyan-300">合规模式</span><button type="button" onclick="editIndustry(${ind.id})" class="text-[10px] font-bold text-cyan-300 hover:text-cyan-200">查看配置</button></div><p class="text-[10px] text-slate-500 px-1">已开启：只采集不发送，线索可导出或推送至 CRM</p>`);
                 }
                 readyList.innerHTML = items.join('');
+            }
+            if (window.DashboardUi) {
+                const overviewContext = getOverviewDecisionContext(ds);
+                const primary = window.DashboardUi.resolveOverviewPrimaryAction(overviewContext);
+                renderOverviewStageList(overviewContext);
+                applyOverviewDecision(primary);
             }
         }
 
