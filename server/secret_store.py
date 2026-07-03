@@ -1,8 +1,18 @@
-"""Helpers for encrypting user-provided secrets at rest."""
+"""Helpers for encrypting user-provided secrets at rest.
+
+Key rotation notes:
+- Secrets are encrypted with a Fernet key derived from THUNDER_ENCRYPTION_KEY
+  (preferred) or THUNDER_SECRET_KEY.
+- If you rotate the encryption key, previously encrypted secrets will fail to
+  decrypt. Plan rotation by re-encrypting secrets with the new key before
+  retiring the old one, or accept that old secrets must be re-entered.
+"""
 
 import base64
 import hashlib
 import os
+
+import logging
 
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -10,6 +20,7 @@ from server.config import SECRET_KEY
 
 _PREFIX = "enc:v1:"
 _fernet: Fernet | None = None
+logger = logging.getLogger("thunder.secret_store")
 
 
 def _derive_fernet_key(raw: str) -> bytes:
@@ -53,6 +64,11 @@ def decrypt_secret(value: str | None) -> str:
     try:
         return _get_fernet().decrypt(token.encode("utf-8")).decode("utf-8")
     except InvalidToken:
+        logger.warning(
+            "Failed to decrypt a secret (InvalidToken). "
+            "This usually means the encryption key has changed. "
+            "Re-enter the secret or restore the previous THUNDER_ENCRYPTION_KEY."
+        )
         return ""
 
 

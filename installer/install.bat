@@ -25,16 +25,26 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [1/5] 安装 Python 依赖...
-pip install -r requirements/base.txt -r requirements/server.txt -q
+:: Ensure .env exists from template
+if not exist .env (
+    if exist .env.example (
+        copy .env.example .env >nul
+        echo [提示] 已复制 .env.example 为 .env，请编辑填写真实值后重新运行。
+        pause
+        exit /b 1
+    )
+)
 
-echo [2/5] 启动数据库服务 (PostgreSQL + Redis)...
+echo [1/5] 安装 Python 依赖...
+pip install -e .[adapters] -q
+
+echo [2/5] 启动基础设施 (PostgreSQL + Redis)...
 docker compose up -d postgres redis
 
 echo [3/5] 初始化数据库表...
 python -c "from server.main import app; print('数据库就绪')"
 
-echo [4/5] 创建默认管理员账户...
+echo [4/5] 创建默认管理员账户 (如不存在)...
 python -c "from server.models.user import create_default_admin; create_default_admin()"
 
 echo [5/5] 启动服务...
@@ -44,7 +54,7 @@ echo.
 echo  ✅ 安装完成!
 echo.
 echo  访问控制台: http://localhost:8000
-echo  默认账号:   admin / admin123
+echo  默认账号:   admin / (见 .env 中的 THUNDER_ADMIN_PASSWORD)
 echo  请在浏览器中登录并修改密码。
 echo.
 echo  配置文件:   .env  (填你的 DeepSeek API Key)

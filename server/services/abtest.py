@@ -70,7 +70,7 @@ def select_reply_variant(
     if total_weight <= 0:
         return enabled[0]
     r = rng.uniform(0, total_weight)
-    cumulative = 0
+    cumulative = 0.0
     for v in enabled:
         cumulative += _to_weight(v.get("weight", 1))
         if r <= cumulative:

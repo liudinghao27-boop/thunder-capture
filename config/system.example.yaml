@@ -6,22 +6,25 @@
 api_keys:
   deepseek: "${THUNDER_DEEPSEEK_KEY}"
   zhipu: "${THUNDER_ZHIPU_KEY}"
+  openai: "${THUNDER_OPENAI_KEY}"
 
-# 智谱 AutoGLM
+# 智谱 AutoGLM（手机操控 + Vision 视觉）
 autoglm:
   base_url: "https://open.bigmodel.cn/api/paas/v4"
   model: "autoglm-phone"
+  vision_model: "glm-4v"
 
 # 数据库
 database:
   path: "data/thunder.db"
 
 # 设备矩阵
+# 注意：adb_serial 是敏感信息，请替换为你自己的真实设备序列号。
 devices:
   - id: "xiaomi-main"
-    adb_serial: "he896xaisooryth6"
-    daily_limit: 15
-    min_interval_sec: 90
+    adb_serial: "YOUR_ADB_SERIAL_1"
+    daily_limit: 10
+    min_interval_sec: 120
 
 # 采集配置
 collector:

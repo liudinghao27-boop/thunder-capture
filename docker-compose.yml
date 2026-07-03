@@ -1,8 +1,11 @@
-# 雷霆捕获系统 — 核心基础设施
+# 雷霆捕获系统 — 完整容器化部署
 #
-# 启动:  docker compose up -d
+# 启动:  cp .env.example .env 并填写真实值，然后 docker compose up -d
 # 停止:  docker compose down
 # 状态:  docker compose ps
+#
+# 注意：生产环境务必设置 THUNDER_SECRET_KEY、THUNDER_POSTGRES_PASSWORD 等敏感变量，
+#       切勿使用默认值。
 
 services:
   postgres:
@@ -10,15 +13,15 @@ services:
     container_name: thunder-pg
     restart: unless-stopped
     environment:
-      POSTGRES_USER: thunder
-      POSTGRES_PASSWORD: thunder123
-      POSTGRES_DB: thunder
+      POSTGRES_USER: ${THUNDER_POSTGRES_USER:-thunder}
+      POSTGRES_PASSWORD: ${THUNDER_POSTGRES_PASSWORD:?THUNDER_POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${THUNDER_POSTGRES_DB:-thunder}
     ports:
       - "5432:5432"
     volumes:
       - pg_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U thunder"]
+      test: ["CMD-SHELL", "pg_isready -U ${THUNDER_POSTGRES_USER:-thunder}"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -37,7 +40,52 @@ services:
       timeout: 3s
       retries: 5
 
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    container_name: thunder-server
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      THUNDER_ENV: ${THUNDER_ENV:-production}
+      THUNDER_SECRET_KEY: ${THUNDER_SECRET_KEY:?THUNDER_SECRET_KEY is required}
+      THUNDER_DATABASE_URL: ${THUNDER_DATABASE_URL:-postgresql://thunder:${THUNDER_POSTGRES_PASSWORD}@postgres:5432/thunder}
+      THUNDER_REDIS_URL: ${THUNDER_REDIS_URL:-redis://redis:6379/0}
+      THUNDER_CORS_ORIGINS: ${THUNDER_CORS_ORIGINS:-}
+      THUNDER_DEEPSEEK_KEY: ${THUNDER_DEEPSEEK_KEY:-}
+      THUNDER_ZHIPU_KEY: ${THUNDER_ZHIPU_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/system/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.celery
+    container_name: thunder-celery
+    restart: unless-stopped
+    environment:
+      THUNDER_ENV: ${THUNDER_ENV:-production}
+      THUNDER_SECRET_KEY: ${THUNDER_SECRET_KEY:?THUNDER_SECRET_KEY is required}
+      THUNDER_DATABASE_URL: ${THUNDER_DATABASE_URL:-postgresql://thunder:${THUNDER_POSTGRES_PASSWORD}@postgres:5432/thunder}
+      THUNDER_REDIS_URL: ${THUNDER_REDIS_URL:-redis://redis:6379/0}
+      THUNDER_DEEPSEEK_KEY: ${THUNDER_DEEPSEEK_KEY:-}
+      THUNDER_ZHIPU_KEY: ${THUNDER_ZHIPU_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
 volumes:
   pg_data:
   redis_data:
-

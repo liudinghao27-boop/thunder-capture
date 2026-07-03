@@ -4,11 +4,13 @@ from contextlib import contextmanager
 
 import pytest
 from fastapi.testclient import TestClient
+from jose import jwt
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from server.auth import get_current_user
+from server.config import ALGORITHM, SECRET_KEY
 from server.main import app
 from server.models import Base, get_db
 from server.models.user import User
@@ -116,3 +118,38 @@ def test_update_settings_ignores_masked_string(db_session):
     db_session.expire_all()
     user = db_session.query(User).filter(User.id == TEST_USER_ID).first()
     assert decrypt_secret(user.deepseek_key) == "****masked"
+
+
+def test_auth_status_reports_registration_closed_when_users_exist(monkeypatch, db_session):
+    monkeypatch.delenv("THUNDER_ALLOW_REGISTRATION", raising=False)
+    with _client(db_session) as client:
+        resp = client.get("/api/auth/status")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["has_users"] is True
+    assert data["registration_open"] is False
+    assert data["mode"] == "login_only"
+
+
+def test_auth_status_reports_registration_open_when_explicitly_enabled(monkeypatch, db_session):
+    monkeypatch.setenv("THUNDER_ALLOW_REGISTRATION", "1")
+    with _client(db_session) as client:
+        resp = client.get("/api/auth/status")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["has_users"] is True
+    assert data["registration_open"] is True
+    assert data["mode"] == "open"
+
+
+def test_access_token_contains_standard_claims():
+    from server.auth import create_access_token
+
+    token = create_access_token(TEST_USER_ID)
+    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+
+    assert payload["sub"] == TEST_USER_ID
+    assert "exp" in payload
+    assert "iat" in payload
+    assert "nbf" in payload
+    assert "jti" in payload

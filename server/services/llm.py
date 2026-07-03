@@ -7,7 +7,7 @@ and any OpenAI-compatible provider.
 
 import os
 import threading
-from typing import Optional
+from typing import Any, Optional
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -19,7 +19,7 @@ load_dotenv(dotenv_path=Path(__file__).resolve().parent.parent.parent / ".env")
 
 # ── Provider registry ──────────────────────────────────
 
-_PROVIDERS = {
+_PROVIDERS: dict[str, dict[str, Any]] = {
     "deepseek": {
         "env_key": "THUNDER_DEEPSEEK_KEY",
         "yaml_key": ("api_keys", "deepseek"),
@@ -61,7 +61,7 @@ def _resolve_api_key(provider: str) -> str:
             from core.config import load_system
             cfg = load_system()
             section, field = yk
-            key = cfg.get(section, {}).get(field, "")
+            key = str(cfg.get(section, {}).get(field, ""))
         except Exception:
             pass
 
@@ -81,7 +81,7 @@ def _resolve_api_key(provider: str) -> str:
 
 def get_llm_client(
     provider: str = "deepseek",
-    model: str = "deepseek-chat",
+    model: str = "deepseek-v4-flash",
     *,
     api_key: Optional[str] = None,
     timeout: float = 60.0,

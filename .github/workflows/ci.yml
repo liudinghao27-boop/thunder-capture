@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, 'feat/**', 'fix/**']
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  test-and-lint:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.12']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[adapters,dev]"
+
+      - name: Run ruff linter
+        run: |
+          ruff check server/ core/ tests/ adapters/ cli.py
+
+      - name: Run pytest
+        env:
+          THUNDER_SECRET_KEY: ${{ secrets.THUNDER_SECRET_KEY || 'ci-test-secret-key-do-not-use-in-production' }}
+          THUNDER_DATABASE_URL: sqlite:///data/test_thunder.db
+        run: |
+          python -m pytest tests/ -q --tb=short
+
+      - name: Check Alembic migrations
+        env:
+          THUNDER_DATABASE_URL: sqlite:///data/test_thunder.db
+        run: |
+          alembic upgrade head
+          alembic check

@@ -161,11 +161,99 @@ def test_worker_reads_short_id_from_multiple_keys():
     assert captured["search_target"] == "douyin-123"
 
 
-def test_worker_passes_daily_send_max_to_scheduler():
+def test_worker_passes_send_limits_to_scheduler():
     cfg = _make_industry(daily_send_max=42, global_daily_limit=100)
-    worker = DeviceWorker(device_id="d1", adb_serial="", industry=cfg)
+    setattr(cfg, "hourly_send_limit", 3)
+    worker = DeviceWorker(device_id="d1", adb_serial="", industry=cfg, daily_limit=7)
     assert worker._scheduler.daily_send_max == 42
     assert worker._scheduler.global_daily_limit == 100
+    assert worker._scheduler.device_daily_limit == 7
+    assert worker._scheduler.hourly_send_limit == 3
+
+
+def test_worker_marks_keyboard_error_when_agent_init_fails():
+    cfg = _make_industry()
+    worker = DeviceWorker(device_id="d1", adb_serial="serial-1", industry=cfg)
+    worker._generate_reply = MagicMock(return_value=("hello", ""))
+    worker._init_agent_safe = MagicMock(return_value=False)
+
+    claim = ClaimedTask(
+        task={
+            "id": 1,
+            "text": "hello",
+            "short_id": "123",
+            "source_name": "user",
+            "claim_token": "token-1",
+        },
+        reserved=True,
+    )
+    worker._scheduler.claim_for_device = MagicMock(return_value=claim)
+    worker._scheduler.commit_task = MagicMock(return_value=True)
+    worker._supervisor.preflight = MagicMock(return_value=MagicMock(ok=True))
+    worker._supervisor.mark_failure = MagicMock()
+    worker._supervisor.mark_finished = MagicMock()
+
+    summary = worker.run()
+
+    assert summary["status"] == "keyboard_error"
+    assert summary["failed"] == 1
+    worker._supervisor.mark_failure.assert_called_once()
+    assert worker._supervisor.mark_failure.call_args.kwargs["status"] == "keyboard_error"
+    worker._supervisor.mark_finished.assert_called_once()
+    assert worker._supervisor.mark_finished.call_args.kwargs["status"] == "keyboard_error"
+
+
+def test_worker_isolates_device_on_risk_blocker_result():
+    cfg = _make_industry()
+    worker = DeviceWorker(device_id="d1", adb_serial="serial-1", industry=cfg)
+    worker._generate_reply = MagicMock(return_value=("hello", ""))
+    worker._init_agent_safe = MagicMock(return_value=True)
+
+    claim = ClaimedTask(
+        task={
+            "id": 1,
+            "text": "hello",
+            "short_id": "123",
+            "source_name": "user",
+            "claim_token": "token-1",
+        },
+        reserved=True,
+    )
+    no_claim = ClaimedTask(None, reserved=False, reason="no_task")
+    worker._scheduler.claim_for_device = MagicMock(side_effect=[claim, no_claim])
+    worker._scheduler.commit_task = MagicMock(return_value=True)
+    worker._supervisor.preflight = MagicMock(return_value=MagicMock(ok=True))
+    worker._supervisor.mark_failure = MagicMock()
+    worker._supervisor.mark_finished = MagicMock()
+
+    with patch("core.agent.perception.PerceptionService", return_value=MagicMock()), \
+         patch("core.task.runner.TaskGraphRunner") as mock_runner_class, \
+         patch("core.task.worker.time.sleep"):
+        mock_runner = MagicMock()
+        mock_runner.run_douyin_dm.return_value = MagicMock(
+            ok=False,
+            status="blocked",
+            message="Blocked before execution: risk_control",
+        )
+        mock_runner_class.return_value = mock_runner
+
+        summary = worker.run()
+
+    assert summary["status"] == "isolated"
+    assert summary["failed"] == 1
+    worker._scheduler.commit_task.assert_called_once_with(
+        1,
+        "d1",
+        "fail",
+        "Blocked before execution: risk_control",
+        claim_token="token-1",
+    )
+    worker._supervisor.mark_failure.assert_called_once()
+    assert worker._supervisor.mark_failure.call_args.kwargs["status"] == "isolated"
+    assert "risk_control" in worker._supervisor.mark_failure.call_args.kwargs["error"]
+    worker._scheduler.claim_for_device.assert_called_once_with("d1")
+    worker._supervisor.mark_finished.assert_called_once()
+    assert worker._supervisor.mark_finished.call_args.kwargs["status"] == "isolated"
 
 
 def test_generate_reply_handles_none_content():

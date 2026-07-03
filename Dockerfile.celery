@@ -8,12 +8,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc libpq-dev && \
     rm -rf /var/lib/apt/lists/*
 
-# Python deps
-COPY requirements/base.txt requirements/server.txt requirements/adapters.txt /app/requirements/
-RUN pip install --no-cache-dir \
-    -r requirements/base.txt \
-    -r requirements/server.txt \
-    -r requirements/adapters.txt
+# Copy project metadata first for better layer caching
+COPY pyproject.toml ./
+COPY requirements ./requirements
+
+# Install package with adapter dependencies (PostgreSQL, Alembic, Celery, Redis)
+RUN pip install --no-cache-dir -e ".[adapters]"
 
 # App code
 COPY . .

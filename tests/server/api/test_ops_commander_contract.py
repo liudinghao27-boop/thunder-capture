@@ -129,3 +129,18 @@ def test_onboarding_modal_is_removed_from_shell():
     shell = _parse_shell()
     assert "modal-onboarding" not in shell.ids
     assert not any("startOnboarding(" in script for script in shell.inline_scripts)
+
+
+def test_legacy_primary_navigation_labels_are_removed():
+    html = _html()
+    assert "项目配置" not in html
+    assert "设备准备" not in html
+    assert "执行记录" not in html
+
+
+def test_subview_headings_match_ops_commander_information_architecture():
+    html = _html()
+    assert ">项目中心<" in html
+    assert ">设备中心<" in html
+    assert ">线索中心<" in html
+    assert ">任务中心<" in html

@@ -42,6 +42,13 @@ ADDITIVE_MIGRATIONS: dict[str, tuple[ColumnSpec, ...]] = {
         ColumnSpec("compliance_mode", "BOOLEAN DEFAULT FALSE"),
         ColumnSpec("webhook_url", "VARCHAR(512) DEFAULT ''"),
         ColumnSpec("auto_export_enabled", "BOOLEAN DEFAULT FALSE"),
+        ColumnSpec("send_start_time", "VARCHAR(8) DEFAULT '09:00'"),
+        ColumnSpec("send_end_time", "VARCHAR(8) DEFAULT '13:00'"),
+        ColumnSpec("pause_weekends", "BOOLEAN DEFAULT FALSE"),
+        ColumnSpec("daily_send_max", "INTEGER DEFAULT 0"),
+        ColumnSpec("hourly_send_limit", "INTEGER DEFAULT 0"),
+        ColumnSpec("effect_webhook_url", "VARCHAR(512) DEFAULT ''"),
+        ColumnSpec("reply_variants", "JSON DEFAULT '[]'"),
     ),
     "sa_devices": (
         ColumnSpec("runtime_status", "VARCHAR(32) DEFAULT 'idle'"),

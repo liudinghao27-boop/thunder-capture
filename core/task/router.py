@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field, is_dataclass
 from typing import Any, Callable
 
 log = logging.getLogger("thunder.task.router")
@@ -61,8 +61,20 @@ class TaskRouter:
             return DispatchResult(False, "unknown_route", f"No handler for {key}")
         try:
             result = handler(request)
+            if isinstance(result, DispatchResult):
+                return DispatchResult(
+                    result.ok,
+                    result.status,
+                    result.message,
+                    result.route or key,
+                )
+            if is_dataclass(result):
+                result = asdict(result)
+            if not isinstance(result, dict):
+                return DispatchResult(True, str(result or "done"), "", key)
             return DispatchResult(
                 True, result.get("status", "done"), result.get("message", ""), key,
             )
         except Exception as e:
+            log.exception("Task dispatch failed: route=%s", key)
             return DispatchResult(False, "error", str(e)[:500], key)

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import sys
 import time
 import threading
+from pathlib import Path
 from typing import Callable
 
 from core.agent.state import ActionStep, ExecutionResult
+from core.constants import DEFAULT_AGENT_MAX_STEPS
 from core.device.adb_client import ADBClient, ADBError
 
 _FAILURE_MARKERS = [
@@ -43,6 +46,14 @@ _SUCCESS_MARKERS = [
     "操作成功",
     "成功发送",
 ]
+
+
+def _ensure_bundled_phone_agent_path() -> Path:
+    """Expose the vendored Open-AutoGLM phone_agent package to imports."""
+    bundle_path = Path(__file__).resolve().parents[2] / "deps" / "Open-AutoGLM"
+    if bundle_path.exists() and str(bundle_path) not in sys.path:
+        sys.path.insert(0, str(bundle_path))
+    return bundle_path
 
 
 class AgentExecutor:
@@ -98,7 +109,7 @@ class PhoneAgentExecutor:
         api_key: str,
         should_stop: Callable[[], bool] | None = None,
         on_cancel: Callable[[], None] | None = None,
-        max_steps: int = 20,
+        max_steps: int = DEFAULT_AGENT_MAX_STEPS,
     ):
         self.adb_serial = adb_serial
         self.base_url = base_url
@@ -114,7 +125,23 @@ class PhoneAgentExecutor:
     def raw_agent(self):
         return self._agent
 
+    def stop(self) -> None:
+        """Release the underlying agent after a device run."""
+        agent = self._agent
+        self._agent = None
+        if not agent:
+            return
+        for method_name in ("stop", "close"):
+            method = getattr(agent, method_name, None)
+            if callable(method):
+                try:
+                    method()
+                except Exception:
+                    pass
+                return
+
     def start(self):
+        _ensure_bundled_phone_agent_path()
         from phone_agent import PhoneAgent
         from phone_agent.agent import AgentConfig
         from phone_agent.model import ModelConfig
@@ -192,6 +219,8 @@ class PhoneAgentExecutor:
             if self.should_stop and self.should_stop():
                 self._notify_cancel()
                 raise SystemExit("Cancelled by user")
+            if not self._agent:
+                raise RuntimeError("Agent failed to start")
             result = self._agent.run(goal)
             if self.should_stop and self.should_stop():
                 self._notify_cancel()

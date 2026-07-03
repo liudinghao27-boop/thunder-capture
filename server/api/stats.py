@@ -33,7 +33,7 @@ def overview(
 ):
     industries = (
         db.query(Industry)
-        .filter(Industry.user_id == current_user.id, Industry.is_active == True)
+        .filter(Industry.user_id == current_user.id, Industry.is_active.is_(True))
         .all()
     )
     return {
@@ -48,14 +48,15 @@ def overview(
 @router.get("/stats/effects")
 def get_effect_stats(
     industry_slug: str,
-    days: int = 7,
+    days: int = Query(7, ge=1, le=365),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    since = datetime.now(timezone.utc) - timedelta(days=days)
+    since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
     base_query = db.query(TaskQueue).filter(
         TaskQueue.industry_slug == industry_slug,
         TaskQueue.owner_user_id == current_user.id,
+        TaskQueue.fetched_at >= since,
     )
     sent = base_query.filter(TaskQueue.status.in_(["sent", "done", "replied", "converted"])).count()
     replied = base_query.filter(TaskQueue.status.in_(["replied", "converted"])).count()

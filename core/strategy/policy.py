@@ -10,6 +10,7 @@ import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from core.config import IndustryConfig
 
@@ -26,8 +27,13 @@ def _parse_time(value: str):
 
 
 def is_send_window_open(industry: IndustryConfig) -> bool:
-    """Return True if current UTC time is inside the industry's send window."""
-    now = datetime.now(timezone.utc)
+    """Return True if current business-local time is inside the send window."""
+    tz_name = getattr(industry, "timezone", "") or "Asia/Shanghai"
+    try:
+        business_tz = ZoneInfo(tz_name)
+    except Exception:
+        business_tz = ZoneInfo("Asia/Shanghai")
+    now = datetime.now(timezone.utc).astimezone(business_tz)
 
     if getattr(industry, "pause_weekends", False) and now.weekday() >= 5:
         return False

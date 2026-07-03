@@ -1,5 +1,5 @@
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from fastapi.testclient import TestClient
 import pytest
@@ -95,6 +95,18 @@ def db_session(monkeypatch):
     ]
     for row in rows:
         db.add(row)
+    db.add(TaskQueue(
+        industry_slug="test-ind",
+        platform="douyin",
+        video_id="old-v",
+        comment_id="old-c",
+        text="old",
+        source_keyword="old",
+        consumer_id="dev-old",
+        status="converted",
+        fetched_at=(datetime.now(timezone.utc) - timedelta(days=30)).isoformat(),
+        owner_user_id=FakeUser.id,
+    ))
 
     db.commit()
     yield db
@@ -178,6 +190,16 @@ def test_device_stats_success(db_session):
         assert devices["dev1"]["replied"] == 1
         assert devices["dev2"]["sent"] == 1
         assert devices["dev2"]["converted"] == 1
+
+
+def test_effect_stats_filters_by_days(db_session):
+    with _stats_client(db_session) as client:
+        resp = client.get("/api/stats/effects?industry_slug=test-ind&days=7")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["sent"] == 3
+        assert data["replied"] == 2
+        assert data["converted"] == 1
 
 
 def test_keyword_stats_rejects_invalid_days(db_session):

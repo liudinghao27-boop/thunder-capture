@@ -123,8 +123,9 @@
     <!-- 2. MAIN APPLICATION WORKSPACE -->
     <template id="view-dashboard">
         <div class="h-full flex overflow-hidden">
+            <button id="dashboard-sidebar-backdrop" type="button" class="fixed inset-0 z-30 hidden bg-slate-950/75 lg:hidden" aria-label="关闭导航菜单"></button>
             <!-- Sidebar -->
-            <aside class="w-64 glass-panel border-r border-slate-800/80 flex flex-col shrink-0">
+            <aside id="dashboard-sidebar" class="w-64 glass-panel border-r border-slate-800/80 flex flex-col shrink-0">
                 <!-- Header -->
                 <div class="p-6 flex items-center gap-3 border-b border-slate-800/60">
                     <div class="w-9 h-9 bg-gradient-to-tr from-cyan-500 to-pink-500 rounded-lg flex items-center justify-center shadow-lg shadow-cyan-500/20">
@@ -142,23 +143,23 @@
                 <nav class="flex-1 p-4 space-y-1">
                     <button data-nav="overview" class="nav-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all bg-slate-800/60 text-cyan-400 border border-slate-700/30">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v4a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
-                        <span>控制中心</span>
+                        <span>首页总览</span>
                     </button>
                     <button data-nav="industries" class="nav-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-400 hover:text-slate-200 hover:bg-slate-900/50">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
-                        <span>项目配置</span>
+                        <span>项目中心</span>
                     </button>
                     <button data-nav="devices" class="nav-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-400 hover:text-slate-200 hover:bg-slate-900/50">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
-                        <span>设备准备</span>
+                        <span>设备中心</span>
                     </button>
                     <button data-nav="tasks" class="nav-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-400 hover:text-slate-200 hover:bg-slate-900/50">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
-                        <span>线索池</span>
+                        <span>线索中心</span>
                     </button>
                     <button data-nav="jobs" class="nav-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-400 hover:text-slate-200 hover:bg-slate-900/50">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                        <span>执行记录</span>
+                        <span>任务中心</span>
                     </button>
                     <button data-nav="settings" class="nav-btn w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all text-slate-400 hover:text-slate-200 hover:bg-slate-900/50">
                         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
@@ -246,14 +247,10 @@
                         <h3 id="overview-next-title" class="font-bold text-lg font-display text-slate-100 mt-2">等待状态加载</h3>
                         <p id="overview-next-desc" class="text-xs text-slate-400 mt-2 leading-relaxed">系统会根据当前卡点给出最短路径。</p>
                     </div>
-                    <div class="flex gap-2">
-                        <button id="overview-btn-collect" onclick="triggerOverviewCollect()" disabled class="flex-1 py-3 bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-300 font-bold font-display text-xs rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed">
-                            采集
-                        </button>
-                        <button id="overview-btn-send" onclick="triggerOverviewSend()" disabled class="flex-1 py-3 bg-pink-600/30 hover:bg-pink-600/50 text-pink-300 font-bold font-display text-xs rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed">
-                            发送
-                        </button>
-                    </div>
+                    <button id="overview-primary-action" disabled class="w-full py-3 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-slate-950 font-bold font-display text-xs rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed">
+                        加载中...
+                    </button>
+                    <div id="overview-stage-list"></div>
                 </div>
             </div>
 
@@ -345,7 +342,10 @@
     <template id="tpl-subview-industries">
         <div class="space-y-6">
             <div class="flex items-center justify-between">
-                <p class="text-sm text-slate-400">定制针对不同业务模式的营销词、情感分类和采集策略，系统将根据设置进行大模型判定。</p>
+                <div>
+                    <h3 class="font-bold text-lg font-display text-slate-100">项目中心</h3>
+                    <p class="text-sm text-slate-400 mt-1">创建和维护项目策略，包括平台、关键词、对标账号、采集与发送参数。</p>
+                </div>
                 <button onclick="showCreateIndustryModal()" class="bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-slate-950 font-bold font-display text-xs px-4 py-2.5 rounded-lg shadow-lg shadow-cyan-500/10 hover:shadow-cyan-400/20 transition-all flex items-center gap-1.5 shrink-0">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
                     <span>新建获客项目</span>
@@ -363,7 +363,10 @@
     <template id="tpl-subview-devices">
         <div class="space-y-6">
             <div class="flex items-center justify-between">
-                <p class="text-sm text-slate-400">配置并监控通过 USB/Wi-Fi 与 ADB 连接的 Android 设备或云手机，执行私信引流拦截。</p>
+                <div>
+                    <h3 class="font-bold text-lg font-display text-slate-100">设备中心</h3>
+                    <p class="text-sm text-slate-400 mt-1">连接、检测并验收 Android 设备，处理在线状态和执行异常。</p>
+                </div>
                 <div class="flex gap-2">
                     <button id="btn-scan-devices" onclick="scanDevices()" class="bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-slate-950 font-bold font-display text-xs px-4 py-2.5 rounded-lg shadow-lg shadow-emerald-500/10 hover:shadow-emerald-400/20 transition-all flex items-center gap-1.5 shrink-0">
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
@@ -401,6 +404,10 @@
     <template id="tpl-subview-tasks">
         <div class="space-y-6">
             <div class="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                    <h3 class="font-bold text-lg font-display text-slate-100">线索中心</h3>
+                    <p class="text-sm text-slate-400 mt-1">查看线索库存、失败重发和导出结果，聚焦评论、状态和发送记录。</p>
+                </div>
                 <div class="flex items-center gap-3">
                     <label class="text-xs font-semibold text-slate-400">选择项目：</label>
                     <select id="task-filter-industry" onchange="loadTasksView()" class="bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500">
@@ -455,8 +462,8 @@
         <div class="space-y-6">
             <div class="flex items-center justify-between gap-4">
                 <div>
-                    <h3 class="font-bold text-lg font-display text-slate-100">执行记录</h3>
-                    <p class="text-xs text-slate-400 mt-1">查看采集与私信任务状态，运行中的任务可请求取消。</p>
+                    <h3 class="font-bold text-lg font-display text-slate-100">任务中心</h3>
+                    <p class="text-xs text-slate-400 mt-1">查看采集与发送任务状态、取消请求、执行日志和复盘证据。</p>
                 </div>
                 <button onclick="loadJobsView()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 font-semibold rounded-lg border border-slate-700 transition-colors">刷新</button>
             </div>
@@ -640,7 +647,7 @@
                                 </div>
                                 <div>
                                     <label class="block text-xs font-semibold text-slate-400 mb-1">模型名称</label>
-                                    <input type="text" id="industry-llm-model" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 text-slate-200" placeholder="如: deepseek-chat">
+                                    <input type="text" id="industry-llm-model" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 text-slate-200" placeholder="如: deepseek-v4-flash">
                                 </div>
                             </div>
 
@@ -879,6 +886,45 @@
             </form>
         </div>
     </div>
+
+    <!-- Modal: Device Acceptance -->
+    <div id="modal-device-acceptance" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+        <div class="w-full max-w-lg rounded-2xl glass-panel shadow-2xl overflow-hidden">
+            <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+                <div>
+                    <h3 id="acceptance-title" class="font-bold text-base font-display text-slate-100">设备验收</h3>
+                    <p id="acceptance-subtitle" class="mt-1 text-[11px] text-slate-500">检查截图、OCR/UI 解析、AI 决策与发送验证链路。</p>
+                </div>
+                <button type="button" onclick="closeDeviceAcceptanceModal()" class="text-slate-500 hover:text-slate-300 transition-colors" aria-label="Close acceptance modal">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <form id="form-device-acceptance" onsubmit="submitDeviceAcceptance(event)" class="p-6 space-y-4">
+                <input type="hidden" id="acceptance-device-id">
+                <input type="hidden" id="acceptance-live-send" value="false">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">项目 Slug</label>
+                        <input type="text" id="acceptance-industry" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 text-slate-200" placeholder="military-recruitment">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-400 mb-1">目标账号</label>
+                        <input type="text" id="acceptance-target" required class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 text-slate-200" placeholder="输入对标或测试账号">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 mb-1">验收消息</label>
+                    <textarea id="acceptance-message" required rows="3" class="w-full bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 text-slate-200 resize-none" placeholder="验收测试，请忽略">验收测试，请忽略</textarea>
+                </div>
+                <div id="acceptance-result" class="hidden rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-3 text-[11px] text-slate-300"></div>
+                <div class="flex items-center justify-end gap-3 pt-2">
+                    <button type="button" onclick="closeDeviceAcceptanceModal()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 font-semibold rounded-lg transition-colors">取消</button>
+                    <button id="acceptance-submit" type="submit" class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold font-display text-xs rounded-lg transition-all">开始验收</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Remote Screen Modal -->
     <div id="modal-remote-screen" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
         <div class="bg-slate-900 border border-slate-700/50 rounded-2xl w-full max-w-sm max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
@@ -964,28 +1010,21 @@
         </div>
     </div>
 
-    <!-- Onboarding Wizard Modal -->
-    <div id="modal-onboarding" role="dialog" aria-modal="true" aria-labelledby="onboarding-title" aria-describedby="onboarding-content" class="fixed inset-0 z-[60] hidden items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-        <div class="w-full max-w-md rounded-2xl glass-panel shadow-2xl relative flex flex-col overflow-hidden" tabindex="-1" id="onboarding-panel">
-            <div class="px-6 pt-6 pb-4">
-                <div class="flex items-center justify-between mb-4">
-                    <h3 id="onboarding-title" class="font-bold text-lg font-display text-slate-100">欢迎来到雷霆捕获系统</h3>
-                    <span id="onboarding-step-counter" class="text-xs font-semibold text-slate-500 font-display">1/4</span>
+    </div>
+
+    <!-- Drawer: Job Evidence Timeline -->
+    <div id="drawer-job-evidence" class="fixed inset-0 z-50 hidden bg-black/60 backdrop-blur-sm">
+        <div class="absolute inset-y-0 right-0 w-full max-w-2xl bg-slate-950 border-l border-slate-800 shadow-2xl flex flex-col">
+            <div class="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
+                <div class="min-w-0">
+                    <h3 id="job-evidence-title" class="font-bold text-base font-display text-slate-100 truncate">任务执行证据</h3>
+                    <p class="mt-1 text-[11px] text-slate-500">按时间查看设备动作、AI 决策、发送验证和截图证据。</p>
                 </div>
-                <div id="onboarding-dots" class="flex items-center justify-center gap-2" aria-hidden="true">
-                    <!-- Dots rendered by JS -->
-                </div>
+                <button type="button" onclick="closeJobEvidenceDrawer()" class="text-slate-500 hover:text-slate-300 transition-colors" aria-label="Close job evidence drawer">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
             </div>
-            <div id="onboarding-content" class="px-6 pb-6 text-sm text-slate-300 leading-relaxed min-h-[120px]" aria-live="polite">
-                <!-- Content rendered by JS -->
-            </div>
-            <div class="flex items-center justify-between gap-3 px-6 py-4 bg-slate-950/80 border-t border-slate-900">
-                <button type="button" onclick="skipOnboarding()" class="px-4 py-2 text-xs text-slate-400 hover:text-slate-200 font-semibold transition-colors">跳过</button>
-                <div class="flex items-center gap-3">
-                    <button type="button" id="onboarding-prev-btn" onclick="prevOnboardingStep()" class="hidden px-4 py-2 bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 font-semibold rounded-lg transition-colors">上一步</button>
-                    <button type="button" id="onboarding-next-btn" onclick="nextOnboardingStep()" class="px-4 py-2 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-slate-950 font-bold font-display text-xs rounded-lg transition-all shadow-lg shadow-cyan-500/10 hover:shadow-cyan-400/20">下一步</button>
-                </div>
-            </div>
+            <div id="job-evidence-timeline" class="flex-1 overflow-y-auto p-6 space-y-3 text-xs text-slate-300"></div>
         </div>
     </div>
 
@@ -1044,6 +1083,121 @@
                 '"': '&quot;',
                 "'": '&#39;'
             }[ch]));
+        }
+
+        function renderEvidenceScreenshotLink(path) {
+            if (!path) return '';
+            const encodedPath = encodeURIComponent(path);
+            return `
+                <button type="button" onclick="openEvidenceScreenshot('${encodedPath}')" class="mt-1 inline-flex max-w-full items-center gap-1 text-cyan-300 hover:text-cyan-200 font-mono text-[10px]">
+                    <span class="truncate">${escapeHtml(path)}</span>
+                    <span class="shrink-0">打开</span>
+                </button>
+            `;
+        }
+
+        async function openEvidenceScreenshot(encodedPath) {
+            if (!encodedPath) return;
+            try {
+                const response = await apiFetchRaw(`/api/devices/evidence/file?path=${encodedPath}`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const blob = await response.blob();
+                const objectUrl = URL.createObjectURL(blob);
+                window.open(objectUrl, '_blank', 'noopener,noreferrer');
+                setTimeout(() => URL.revokeObjectURL(objectUrl), 60000);
+            } catch (e) {
+                showToast('截图证据打开失败，请检查验收报告路径', 'warning');
+            }
+        }
+
+        function renderAgentDecisionTrace(decision, verification) {
+            if (!decision && !verification) return '';
+            const pageState = decision?.page_state || '-';
+            const nextAction = decision?.next_action || '-';
+            const confidence = Number(decision?.confidence || verification?.confidence || 0);
+            const blocker = decision?.blocker || '';
+            const reason = decision?.reason || verification?.reason || '';
+            const screenshot = decision?.screenshot || verification?.screenshot_path || '';
+            return `
+                <div class="mt-2 rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-3 py-2 text-[10px] leading-relaxed">
+                    <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-cyan-300">
+                        <span>Page: ${escapeHtml(pageState)}</span>
+                        <span>Next: ${escapeHtml(nextAction)}</span>
+                        <span>Conf: ${escapeHtml(confidence ? confidence.toFixed(2) : '-')}</span>
+                        ${blocker ? `<span class="text-amber-300">Blocker: ${escapeHtml(blocker)}</span>` : ''}
+                    </div>
+                    ${reason ? `<div class="mt-1 text-slate-400 truncate" title="${escapeHtml(reason)}">${escapeHtml(reason)}</div>` : ''}
+                    ${screenshot ? renderEvidenceScreenshotLink(screenshot) : ''}
+                </div>
+            `;
+        }
+
+        function summarizeAcceptanceTrace(report) {
+            const before = report?.before_decision || {};
+            const after = report?.after_decision || {};
+            const verification = report?.send_verification || {};
+            const active = Object.keys(after).length ? after : before;
+            return [
+                active.next_action ? `Next: ${active.next_action}` : '',
+                active.page_state ? `Page: ${active.page_state}` : '',
+                verification.reason ? `Verify: ${verification.reason}` : '',
+            ].filter(Boolean).join(' / ') || report?.status || 'acceptance finished';
+        }
+
+        function renderJobEvidenceLog(log, index, total) {
+            const payload = log?.payload || {};
+            const decision = log?.agent_decision || log?.agent_decisions?.after || log?.agent_decisions?.before || null;
+            const verification = payload?.send_verification || {};
+            const status = log?.status || '-';
+            const action = log?.action || '-';
+            const deviceId = log?.device_id || '-';
+            const detail = log?.detail || '';
+            const latency = Number(log?.latency_ms || 0);
+            const sequence = total - index;
+            return `
+                <div class="relative rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div class="flex flex-wrap items-center gap-2 min-w-0">
+                            <span class="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-cyan-500/10 px-1.5 text-[10px] font-bold text-cyan-300 border border-cyan-500/20">${sequence}</span>
+                            <span class="font-semibold text-slate-100">${escapeHtml(action)}</span>
+                            <span class="rounded border border-slate-700 px-2 py-0.5 text-[10px] text-slate-400">${escapeHtml(status)}</span>
+                            <span class="font-mono text-[10px] text-slate-500 truncate max-w-[180px]">${escapeHtml(deviceId)}</span>
+                        </div>
+                        <div class="text-[10px] text-slate-500">${escapeHtml(formatDateTime(log?.created_at))}${latency ? ` · ${latency}ms` : ''}</div>
+                    </div>
+                    ${detail ? `<div class="mt-2 text-[11px] text-slate-400 leading-relaxed">${escapeHtml(detail)}</div>` : ''}
+                    ${renderAgentDecisionTrace(decision, verification)}
+                </div>
+            `;
+        }
+
+        function renderJobEvidenceTimeline(logs) {
+            if (!Array.isArray(logs) || !logs.length) {
+                return '<div class="rounded-lg border border-slate-800 bg-slate-900/50 p-4 text-slate-500">暂无执行日志。任务可能尚未进入设备执行阶段。</div>';
+            }
+            const chronological = [...logs].reverse();
+            return chronological.map((log, index) => renderJobEvidenceLog(log, index, chronological.length)).join('');
+        }
+
+        async function openJobEvidenceDrawer(encodedJobId) {
+            const jobId = decodeURIComponent(encodedJobId || '');
+            if (!jobId) return;
+            const drawer = document.getElementById('drawer-job-evidence');
+            const title = document.getElementById('job-evidence-title');
+            const timeline = document.getElementById('job-evidence-timeline');
+            title.innerText = `任务执行证据 · ${jobId.slice(0, 8)}`;
+            timeline.innerHTML = '<div class="rounded-lg border border-slate-800 bg-slate-900/50 p-4 text-slate-400">正在加载执行证据...</div>';
+            drawer.classList.replace('hidden', 'block');
+            try {
+                const logs = await apiFetch(`/api/agent/execution-logs?job_id=${encodeURIComponent(jobId)}&limit=100`);
+                timeline.innerHTML = renderJobEvidenceTimeline(logs);
+            } catch (e) {
+                timeline.innerHTML = `<div class="rounded-lg border border-pink-500/20 bg-pink-500/5 p-4 text-pink-300">执行证据加载失败：${escapeHtml(e.message || e)}</div>`;
+            }
+        }
+
+        function closeJobEvidenceDrawer() {
+            document.getElementById('drawer-job-evidence').classList.replace('block', 'hidden');
         }
 
         /**
@@ -1191,9 +1345,9 @@
         }
 
         function formatDateTime(value) {
-            if (!value) return '—';
+            if (!value) return '-';
             const d = new Date(value);
-            if (Number.isNaN(d.getTime())) return '—';
+            if (Number.isNaN(d.getTime())) return '-';
             return d.toLocaleString('zh-CN', { hour12: false });
         }
 
@@ -1454,14 +1608,14 @@
                 
                 // Show subview title
                 const titles = {
-                    overview: '控制中心',
-                    industries: '获客项目配置',
-                    devices: '设备准备与检测',
-                    tasks: '线索池管理',
-                    jobs: '执行记录',
-                    settings: '系统设置 (API Key 配置)',
-                    keywords: '效果分析',
-                    abtest: '效果分析'
+                    overview: '首页总览',
+                    industries: '项目中心',
+                    devices: '设备中心',
+                    tasks: '线索中心',
+                    jobs: '任务中心',
+                    settings: '系统设置',
+                    keywords: '关键词效果',
+                    abtest: 'A/B 实验'
                 };
                 title.innerText = titles[subview] || '雷霆控制台';
 
@@ -1475,7 +1629,6 @@
                 // Load view specific data
                 if (subview === 'overview') {
                     await loadOverviewData();
-                    startOnboarding();
                 } else if (subview === 'industries') {
                     await loadIndustriesView();
                 } else if (subview === 'devices') {
@@ -1512,126 +1665,65 @@
 
         function getOverviewDecisionContext(ds) {
             const activeJobs = ds.active_jobs || [];
-            const warnings = ds.warnings || [];
             return {
                 hasProject: Number(ds.project?.industry_count || 0) > 0,
-                hasLLM: warnings.every(w => !w.includes('瀵嗛挜') && !w.toLowerCase().includes('key')),
+                hasLLM: Boolean(ds.has_llm),
                 hasDevice: Number(ds.device_matrix?.total || 0) > 0,
                 hasPending: Number(ds.lead_inventory?.pending || 0) > 0,
                 isWorking: Boolean(ds.has_active_job) || activeJobs.length > 0,
                 canSend: Boolean(ds.can_send),
-                projectSummary: Number(ds.project?.industry_count || 0) > 0 ? `${ds.project.industry_count} 涓」鐩凡閰嶇疆` : '杩樻病鏈夎幏瀹㈤」鐩?,
-                deviceSummary: Number(ds.device_matrix?.total || 0) > 0 ? `${ds.device_matrix.total} 鍙拌澶囧凡褰曞叆` : '杩樻病鏈夊綍鍏ヨ澶?,
-                collectSummary: Number(ds.lead_inventory?.pending || 0) > 0 ? `${ds.lead_inventory.pending} 鏉″緟鍙戦€?` : '褰撳墠娌℃湁寰呭彂閫佺嚎绱?,
-                sendSummary: activeJobs.length > 0 ? `${activeJobs.length} 涓换鍔℃墽琛屼腑` : (ds.can_send ? '鍙互寮€濮嬪彂閫佷换鍔? : '鍙戦€佹潯浠惰繕鏈綈澶?),
+                projectSummary: Number(ds.project?.industry_count || 0) > 0 ? `${ds.project.industry_count} 个项目已配置` : '还没有获客项目',
+                deviceSummary: Number(ds.device_matrix?.total || 0) > 0 ? `${ds.device_matrix.total} 台设备已接入` : '还没有录入设备',
+                collectSummary: Number(ds.lead_inventory?.pending || 0) > 0 ? `${ds.lead_inventory.pending} 条待发送` : '当前没有待发送线索',
+                sendSummary: activeJobs.length > 0 ? `${activeJobs.length} 个任务执行中` : (ds.can_send ? '可以开始发送任务' : '发送条件还未备齐'),
             };
         }
 
         function renderOverviewStageList(context) {
-            const readyList = document.getElementById('overview-readiness-list');
-            if (!readyList || !window.DashboardUi) return;
-            readyList.innerHTML = window.DashboardUi.overviewStageItems(context).map(item => `
-                <div class="flex items-center justify-between p-3 bg-slate-950/40 rounded-lg border border-slate-800/60 gap-3">
-                    <div class="min-w-0">
-                        <p class="text-xs text-slate-300">${escapeHtml(item.label)}</p>
-                        <p class="text-[10px] text-slate-500 mt-1">${escapeHtml(item.summary || '')}</p>
-                    </div>
-                    <span class="shrink-0 text-[10px] font-bold ${item.ready ? 'text-emerald-400' : 'text-amber-400'}">${item.ready ? 'OK' : '寰呭鐞?}</span>
+            const stageList = document.getElementById('overview-stage-list');
+            if (!stageList || !window.DashboardUi) return;
+            stageList.innerHTML = window.DashboardUi.overviewStageItems(context).map(item => `
+                <div class="rounded-xl border ${item.ready ? 'border-emerald-500/30' : 'border-slate-800'} bg-slate-950/40 px-4 py-4">
+                    <p class="text-[11px] uppercase tracking-wide ${item.ready ? 'text-emerald-400' : 'text-slate-500'}">${escapeHtml(item.label)}</p>
+                    <p class="mt-2 text-sm text-slate-200">${escapeHtml(item.summary || '')}</p>
                 </div>
             `).join('');
+        }
+
+
+        function runOverviewPrimaryAction(primary, primaryIndustry) {
+            if (!primary) return;
+            if (window.DashboardUi && window.DashboardUi.markFirstUseHintSeen) {
+                window.DashboardUi.markFirstUseHintSeen();
+            }
+            if (primary.mode === 'create-industry') return showCreateIndustryModal();
+            if (primary.mode === 'settings') return router.navigate('settings');
+            if (primary.mode === 'devices') return router.navigate('devices');
+            if (primary.mode === 'collect') return triggerCollect(primaryIndustry || overviewSelectedIndustry);
+            if (primary.mode === 'send') return triggerSend(primaryIndustry || overviewSelectedIndustry);
+            return router.navigate('jobs');
         }
 
         function applyOverviewDecision(primary) {
             const nextTitle = document.getElementById('overview-next-title');
             const nextDesc = document.getElementById('overview-next-desc');
-            const btnC = document.getElementById('overview-btn-collect');
-            const btnS = document.getElementById('overview-btn-send');
+            const button = document.getElementById('overview-primary-action');
             if (nextTitle) nextTitle.innerText = primary.label;
             if (nextDesc) {
-                nextDesc.innerText = ({
-                    'create-industry': '鍏堥厤缃钩鍙般€佸叧閿瘝鍜屽鏍囪处鍙凤紝鍚庣画閲囬泦鍜屽彂閫佹墠鑳藉惎鍔ㄣ€?,
-                    settings: '鍏堣ˉ榻?LLM Key锛屾剰鍚戣瘑鍒拰鏂囨鐢熸垚鎵嶅彲鐢ㄣ€?,
-                    devices: '寤鸿鍏堟帴鍏ュ苟妫€鏌ヨ嚦灏?1 鍙拌澶囷紝鍐嶅紑濮嬪彂閫佷换鍔°€?,
-                    collect: '褰撳墠娌℃湁寰呭彂閫佺嚎绱紝鍏堝仛涓€杞噰闆嗗～鍏呭簱瀛樸€?,
-                    jobs: '褰撳墠宸叉湁浠诲姟杩愯涓紝鍏堟煡鐪嬫墽琛岃繘搴﹀拰寮傚父鐘舵€併€?,
-                    send: '绾跨储鍜岃澶囧凡鍏峰锛屽彲浠ュ紑濮嬪彂閫佷换鍔°€?,
-                })[primary.mode] || '绯荤粺浼氭牴鎹綋鍓嶇姸鎬佺粰鍑烘渶鐭矾寰勩€?';
+                nextDesc.innerText = primary.hint || primary.description || ({
+                    'create-industry': '先配置平台、关键词和对标账号，后续采集和发送才能启动。',
+                    settings: '先填写 LLM Key，意图识别和文案生成才可用。',
+                    devices: '建议先接入并检查至少 1 台设备，再开始发送任务。',
+                    collect: '当前没有待发送线索，先做一轮采集填充库存。',
+                    jobs: '当前已有任务运行中，先查看执行进度和异常状态。',
+                    send: '线索和设备已具备，可以开始发送任务。',
+                })[primary.mode] || '系统会根据当前卡点给出最短路径。';
             }
-            if (btnC) {
-                btnC.className = primary.mode === 'collect'
-                    ? 'flex-1 py-3 bg-cyan-600 hover:bg-cyan-500 text-white font-bold font-display text-xs rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed'
-                    : 'flex-1 py-3 bg-cyan-600/30 hover:bg-cyan-600/50 text-cyan-300 font-bold font-display text-xs rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed';
-            }
-            if (btnS) {
-                btnS.className = (primary.mode === 'send' || primary.mode === 'jobs')
-                    ? 'flex-1 py-3 bg-pink-600 hover:bg-pink-500 text-white font-bold font-display text-xs rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed'
-                    : 'flex-1 py-3 bg-pink-600/30 hover:bg-pink-600/50 text-pink-300 font-bold font-display text-xs rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed';
-            }
-        }
-
-        function renderOverviewCommandCenter(overview, devices, health, aggregate, activeJobs) {
-            const list = document.getElementById('overview-readiness-list');
-            const title = document.getElementById('overview-command-title');
-            const desc = document.getElementById('overview-command-desc');
-            const score = document.getElementById('overview-command-score');
-            const nextTitle = document.getElementById('overview-next-title');
-            const nextDesc = document.getElementById('overview-next-desc');
-            const nextAction = document.getElementById('overview-next-action');
-            if (!list || !nextAction) return;
-
-            const checks = health?.checks || [];
-            const healthCheck = name => checks.find(c => c.name === name);
-            const hasProject = Number(overview.industry_count || 0) > 0;
-            const hasDevice = devices.length > 0;
-            const hasLLM = Boolean(healthCheck('llm_keys')?.ok);
-            const coreOk = Boolean(health) && ['server_db', 'jobs_table', 'engine_db'].every(name => healthCheck(name)?.ok === true);
-            const hasPending = aggregate.totalPending > 0;
-            const isWorking = activeJobs.length > 0;
-            const primaryIndustry = aggregate.primaryIndustryId || overview.industries?.[0]?.id || '';
-            const collectIndustry = aggregate.collectIndustryId || primaryIndustry;
-            const readyCount = [hasProject, hasLLM, hasDevice, hasPending, coreOk].filter(Boolean).length;
-            const readyPercent = Math.round((readyCount / 5) * 100);
-
-            score.innerHTML = `
-                <p class="text-[10px] text-slate-500 font-semibold">就绪度</p>
-                <p class="text-lg font-bold ${readyPercent >= 80 ? 'text-emerald-400' : readyPercent >= 60 ? 'text-cyan-400' : 'text-amber-400'} font-display">${readyPercent}%</p>
-            `;
-            title.innerText = isWorking ? '任务执行中，关注进度和取消状态' : readyPercent >= 80 ? '系统已具备今日获客条件' : '还有关键项需要补齐';
-            desc.innerText = `项目 ${overview.industry_count || 0} 个，设备 ${devices.length} 台，待发送线索 ${aggregate.totalPending} 条，库存缺口 ${aggregate.totalDeficit} 条。`;
-
-            list.innerHTML = [
-                renderReadinessItem('获客项目', hasProject ? `${overview.industry_count} 个项目已配置` : '还没有获客项目，无法启动采集。', hasProject, '新建项目', 'showCreateIndustryModal()'),
-                renderReadinessItem('LLM 密钥', hasLLM ? (healthCheck('llm_keys')?.detail || '至少一个模型 Key 可用') : '未配置 LLM Key，意向识别和文案生成会失败。', hasLLM, '去配置', "router.navigate('settings')"),
-                renderReadinessItem('设备矩阵', hasDevice ? `${devices.length} 台设备已录入，发送前仍建议检测在线状态。` : '还没有录入手机或云手机，无法执行私信发送。', hasDevice, '扫描设备', "router.navigate('devices')"),
-                renderReadinessItem('线索库存', hasPending ? `当前待发送 ${aggregate.totalPending} 条。` : '没有待发送线索，建议先跑一次采集。', hasPending, '采集线索', collectIndustry ? `triggerCollect('${collectIndustry}')` : 'showCreateIndustryModal()'),
-                renderReadinessItem('系统自检', coreOk ? '本地数据库和任务表可用。' : '本地运行环境存在异常，请先查看系统设置。', coreOk, '查看自检', "router.navigate('settings')"),
-            ].join('');
-
-            if (!hasProject) {
-                nextTitle.innerText = '先创建获客项目';
-                nextDesc.innerText = '配置平台、关键词和对标账号，这是后续采集和发送的基础。';
-                nextAction.innerText = '新建获客项目';
-                nextAction.onclick = showCreateIndustryModal;
-            } else if (!hasLLM) {
-                nextTitle.innerText = '补齐 LLM Key';
-                nextDesc.innerText = '意向识别依赖模型能力，先配置 DeepSeek、智谱或 OpenAI Key。';
-                nextAction.innerText = '去系统设置';
-                nextAction.onclick = () => router.navigate('settings');
-            } else if (!hasDevice) {
-                nextTitle.innerText = '连接测试设备';
-                nextDesc.innerText = '建议先接入 1 台手机完成测试发送，再扩展到矩阵设备。';
-                nextAction.innerText = '去扫描设备';
-                nextAction.onclick = () => router.navigate('devices');
-            } else if (!hasPending) {
-                nextTitle.innerText = '先采集一批线索';
-                nextDesc.innerText = '当前没有待发送库存，建议先做小批量采集验证关键词漏斗。';
-                nextAction.innerText = '开始采集线索';
-                nextAction.onclick = () => collectIndustry ? triggerCollect(collectIndustry) : router.navigate('industries');
-            } else {
-                nextTitle.innerText = isWorking ? '查看执行记录' : '启动矩阵发送';
-                nextDesc.innerText = isWorking ? '当前有任务运行中，可以查看进度或发出停止请求。' : '线索和设备已具备，发送前确认平台账号已登录。';
-                nextAction.innerText = isWorking ? '查看执行记录' : '开始发送任务';
-                nextAction.onclick = () => isWorking ? router.navigate('jobs') : triggerSend(primaryIndustry);
+            if (button) {
+                button.className = primary.buttonClass || 'w-full py-3 bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-slate-950 font-bold font-display text-xs rounded-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed';
+                button.innerText = primary.label;
+                button.disabled = false;
+                button.onclick = () => runOverviewPrimaryAction(primary, overviewSelectedIndustry || overviewState?.project?.active_industry_slug || '');
             }
         }
 
@@ -1655,7 +1747,7 @@
                         }
                     } catch(e) {}
                 }
-                updateOverviewButtons();
+                
                 updateReadinessDisplay(ds);
                 if (ds.has_active_job) startDashboardPoll();
                 document.getElementById('stat-industries').innerText = ds.project.industry_count;
@@ -1668,80 +1760,6 @@
                     document.getElementById('stat-reply-rate').textContent = ((stats.reply_rate || 0) * 100).toFixed(1) + '%';
                     document.getElementById('stat-conversion-rate').textContent = ((stats.conversion_rate || 0) * 100).toFixed(1) + '%';
                 } catch (e) {}
-
-                // Command center — 今日运营总控
-                const cmdTitle = document.getElementById('overview-command-title');
-                const cmdDesc = document.getElementById('overview-command-desc');
-                const cmdScore = document.getElementById('overview-command-score');
-                const readyList = document.getElementById('overview-readiness-list');
-                if (cmdTitle) cmdTitle.innerText = ds.can_send ? '✅ 发送就绪' : (ds.can_collect ? '📋 可采集' : '⏳ 等待条件');
-                if (cmdDesc) cmdDesc.innerText = ds.next_action;
-                if (cmdScore) {
-                    const score = (ds.device_matrix.available > 0 ? 40 : 0) + (ds.lead_inventory.pending > 0 ? 40 : 0) + (ds.warnings.length === 0 ? 20 : 0);
-                    cmdScore.innerHTML = `<p class=\"text-[10px] text-slate-500 font-semibold\">就绪度</p><p class=\"text-lg font-bold ${score>=80?'text-emerald-400':score>=40?'text-amber-400':'text-slate-400'} font-display\">${score}%</p>`;
-                }
-                if (readyList) {
-                    const items = [
-                        { label: 'LLM 密钥', ok: ds.warnings.every(w => !w.includes('密钥') && !w.includes('key')) },
-                        { label: `线索库存 (${ds.lead_inventory.pending} 条)`, ok: ds.lead_inventory.pending > 0 },
-                        { label: `可用设备 (${ds.device_matrix.available}/${ds.device_matrix.total})`, ok: ds.device_matrix.available > 0 },
-                        { label: '任务队列', ok: !ds.has_active_job || ds.active_jobs.length === 0 },
-                    ].map(item =>
-                        `<div class=\"flex items-center justify-between p-3 bg-slate-950/40 rounded-lg border border-slate-800/60\">
-                            <span class=\"text-xs text-slate-300\">${item.label}</span>
-                            <span class=\"text-xs font-bold ${item.ok?'text-emerald-400':'text-amber-400'}\">${item.ok?'✓ 正常':'⚠ 需处理'}</span>
-                        </div>`
-                    );
-                    const activeInd = overviewIndustries.find(i => i.slug === overviewSelectedIndustry);
-                    const isCompliance = activeInd && activeInd.compliance_mode;
-                    if (isCompliance) {
-                        items.push(`<div class=\"flex items-center justify-between p-3 bg-cyan-950/20 rounded-lg border border-cyan-500/20\">
-                            <span class=\"text-xs text-cyan-300\">合规模式</span>
-                            <button type=\"button\" onclick=\"editIndustry(${activeInd.id})\" class=\"text-[10px] font-bold text-cyan-300 hover:text-cyan-200\">查看配置</button>
-                        </div>
-                        <p class=\"text-[10px] text-slate-500 px-1\">已开启：只采集不发送，线索可导出或推送至 CRM</p>`);
-                    }
-                    readyList.innerHTML = items.join('');
-                }
-
-                // Next action
-                const nextTitle = document.getElementById('overview-next-title');
-                const nextDesc = document.getElementById('overview-next-desc');
-                const nextAction = document.getElementById('overview-next-action');
-                if (nextTitle) nextTitle.innerText = ds.can_send ? '准备就绪' : (ds.can_collect ? '可以采集' : '等待条件');
-                if (nextDesc) nextDesc.innerText = ds.next_action;
-                if (nextAction) {
-                    nextAction.innerText = ds.can_send ? '开始发送' : (ds.can_collect ? '开始采集' : '查看详情');
-                    nextAction.className = (ds.can_send || ds.can_collect)
-                        ? 'px-6 py-3 rounded-xl font-bold text-sm bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white shadow-lg shadow-cyan-500/20 transition-all'
-                        : 'px-6 py-3 rounded-xl font-bold text-sm bg-slate-700 text-slate-400';
-                    nextAction.onclick = ds.can_send ? () => triggerSend(ds.project.active_industry_slug)
-                        : (ds.can_collect ? () => triggerCollect(ds.project.active_industry_slug) : null);
-                }
-
-                if (window.DashboardUi) {
-                    const overviewContext = getOverviewDecisionContext(ds);
-                    const primary = window.DashboardUi.resolveOverviewPrimaryAction(overviewContext);
-                    renderOverviewStageList(overviewContext);
-                    applyOverviewDecision(primary);
-                }
-
-                // Leads stats
-                document.getElementById('stat-pending').innerText = ds.lead_inventory.pending;
-                document.getElementById('stat-done').innerText = ds.lead_inventory.done;
-                document.getElementById('stat-failed').innerText = ds.lead_inventory.failed;
-
-                // Device matrix
-                const onlineCount = ds.device_matrix.available;
-                document.getElementById('stat-devices-online').innerText = onlineCount;
-                const devList = document.getElementById('overview-devices-list');
-                if (devList && ds.device_matrix.devices) {
-                    devList.innerHTML = ds.device_matrix.devices.slice(0, 10).map(d =>
-                        `<div class="flex items-center justify-between text-xs px-3 py-2 bg-slate-950/40 rounded-lg">
-                            <span class="text-slate-300">${escapeHtml(d.name)}</span>
-                            <span class="text-[10px] px-2 py-0.5 rounded ${d.status==='idle'?'bg-emerald-900/60 text-emerald-400':d.status==='offline'?'bg-slate-700 text-slate-400':'bg-amber-900/60 text-amber-400'}">${d.status_label}</span>
-                        </div>`).join('');
-                }
 
                 // Warnings
                 const warnList = document.getElementById('overview-warnings');
@@ -1765,6 +1783,11 @@
                     const rate = inv.total > 0 ? Math.round(inv.done / Math.max(inv.total, 1) * 100) : 0;
                     const stockDays = inv.funnel?.inventory_days_remaining;
                     const activeJobs = ds.active_jobs || [];
+                    const deviceRows = dev.devices || [];
+                    const remainingRows = deviceRows
+                        .map(d => Number(d.daily_remaining ?? d.daily_limit ?? 0))
+                        .filter(v => Number.isFinite(v) && v > 0);
+                    const minDeviceRemaining = remainingRows.length ? Math.min(...remainingRows) : 0;
                     indList.innerHTML = `
                     <div class="grid grid-cols-4 gap-3 mb-3">
                         <div class="text-center bg-slate-950/50 p-3 rounded-lg">
@@ -1896,7 +1919,7 @@
                 try {
                     const ds = await apiFetch('/api/dashboard/state');
                     overviewState = ds;
-                    updateOverviewButtons();
+                    
                     updateReadinessDisplay(ds);
                     if (ds.active_jobs.length === 0 && overviewSelectedIndustry) {
                         await refreshIndustryCard(overviewSelectedIndustry);
@@ -1911,14 +1934,14 @@
         function updateReadinessDisplay(ds) {
             const cmdTitle = document.getElementById('overview-command-title');
             const cmdDesc = document.getElementById('overview-command-desc');
-            if (cmdTitle) cmdTitle.innerText = ds.has_active_job ? '任务执行中' : (ds.can_send ? '可发送' : (ds.can_collect ? '可采集' : '等待条件'));
+            if (cmdTitle) cmdTitle.innerText = '运营总控';
             if (cmdDesc) cmdDesc.innerText = ds.next_action;
             const readyList = document.getElementById('overview-readiness-list');
             const ind = overviewIndustries.find(i => i.slug === overviewSelectedIndustry);
             const isCompliance = ind && ind.compliance_mode;
             if (readyList) {
                 const items = [
-                    { label: 'LLM', ok: ds.warnings.every(w => !w.includes('密钥') && !w.includes('key')) },
+                    { label: 'LLM', ok: Boolean(ds.has_llm) },
                     { label: '线索 (' + ds.lead_inventory.pending + ' 条)', ok: ds.lead_inventory.pending > 0 },
                     { label: '设备 (' + ds.device_matrix.available + '/' + ds.device_matrix.total + ' 可用)', ok: ds.device_matrix.available > 0 },
                     { label: '队列空闲', ok: ds.active_jobs.length === 0 },
@@ -1930,7 +1953,9 @@
             }
             if (window.DashboardUi) {
                 const overviewContext = getOverviewDecisionContext(ds);
-                const primary = window.DashboardUi.resolveOverviewPrimaryAction(overviewContext);
+                const primary = window.DashboardUi.decorateOverviewForFirstUse(
+                    window.DashboardUi.describeOverviewPrimaryAction(overviewContext)
+                );
                 renderOverviewStageList(overviewContext);
                 applyOverviewDecision(primary);
             }
@@ -1939,7 +1964,7 @@
         async function onOverviewIndustryChange() {
             const sel = document.getElementById('overview-industry-select');
             overviewSelectedIndustry = sel.value;
-            updateOverviewButtons();
+            
             updateReadinessDisplay(overviewState);
             // Force a fresh readiness check for the newly selected industry.
             loadReadinessBanner.inFlight = null;
@@ -1987,35 +2012,6 @@
             } catch(e) {}
         }
 
-        function updateOverviewButtons() {
-            const btnC = document.getElementById('overview-btn-collect');
-            const btnS = document.getElementById('overview-btn-send');
-            const slug = overviewSelectedIndustry;
-            const st = overviewState;
-            if (!slug) { btnC.disabled = true; btnS.disabled = true; return; }
-            const ind = overviewIndustries.find(i => i.slug === slug);
-            const isCompliance = ind && ind.compliance_mode;
-            const hasLeads = st.lead_inventory && (st.lead_inventory.pending > 0 || st.lead_inventory.done > 0 || st.lead_inventory.failed > 0);
-            if (isCompliance) {
-                btnS.innerText = '导出高意向线索';
-                btnS.onclick = () => { router.navigate('tasks'); setTimeout(() => openExportModal(ind.slug), 200); };
-                btnS.disabled = !hasLeads;
-            } else {
-                btnS.innerText = '发送';
-                btnS.onclick = () => triggerOverviewSend();
-                btnS.disabled = !st.can_send;
-            }
-            btnC.disabled = !st.can_collect;
-        }
-
-        async function triggerOverviewCollect() {
-            if (!overviewSelectedIndustry) return showToast('请先选择项目', 'warning');
-            await triggerCollect(overviewSelectedIndustry);
-        }
-        async function triggerOverviewSend() {
-            if (!overviewSelectedIndustry) return showToast('请先选择项目', 'warning');
-            await triggerSend(overviewSelectedIndustry);
-        }
 
         // Heartbeat verification inside overview / device page
         async function quickHeartbeat(btn, deviceId) {
@@ -2277,16 +2273,17 @@
                 industryId,
                 timer: setInterval(async () => {
                     try {
-                        const status = await apiFetch(`/api/tasks/status/${jobId}`);
+                        const status = await apiFetch(`/api/jobs/${jobId}`);
                         if (status.status === 'done') {
                             const sendSummary = status.send_summary || {};
                             const collectSummary = status.collect_summary || {};
+                            const collectEmptyWarning = type === 'collect' && collectSummary.empty_reason && Number(collectSummary.candidate_comments || 0) === 0;
                             const doneMessage = type === 'send' && Object.keys(sendSummary).length
                                 ? `自动发信完成：发送 ${sendSummary.sent || 0} 封，在线设备 ${sendSummary.online_count || 0}/${sendSummary.target_count || 0}`
                                 : type === 'collect' && Object.keys(collectSummary).length
                                     ? `线索采集完成：候选 ${collectSummary.candidate_comments || 0}，入队 ${collectSummary.enqueued || 0}`
                                     : `${type === 'collect' ? '线索采集' : '自动发信'} 任务执行成功！100% 完成`;
-                            showToast(doneMessage, 'success');
+                            showToast(collectEmptyWarning ? (collectSummary.warning || doneMessage) : doneMessage, collectEmptyWarning ? 'warning' : 'success');
                             clearInterval(activeJobPolls[jobId].timer);
                             delete activeJobPolls[jobId];
                             // Refresh current view
@@ -2325,7 +2322,7 @@
         async function cancelRunningJob(jobId) {
             if (!jobId || !confirm('确定停止这个任务？当前手机动作会在安全停顿点后停止。')) return;
             try {
-                await apiFetch(`/api/tasks/status/${jobId}/cancel`, { method: 'POST' });
+                await apiFetch(`/api/jobs/${jobId}/cancel`, { method: 'POST' });
                 if (activeJobPolls[jobId]) {
                     activeJobPolls[jobId].status = 'cancelling';
                 }
@@ -2348,7 +2345,7 @@
                 document.getElementById('industry-reply-style').value = ind.reply_style;
                 document.getElementById('industry-reply-hook').value = ind.reply_hook || '';
                 document.getElementById('industry-llm-provider').value = ind.llm_provider || 'deepseek';
-                document.getElementById('industry-llm-model').value = ind.llm_model || 'deepseek-chat';
+                document.getElementById('industry-llm-model').value = ind.llm_model || 'deepseek-v4-flash';
                 document.getElementById('industry-daily-limit').value = ind.daily_limit;
                 document.getElementById('industry-video-max-age').value = ind.video_max_age_days;
                 document.getElementById('industry-comment-max-age').value = ind.comment_max_age_hours;
@@ -2393,7 +2390,7 @@
 
         // Delete industry
         async function deleteIndustry(id) {
-            if (!confirm('是否确定删除该获客项目配置（该操作不可逆，将隐藏相关线索）？')) return;
+            if (!confirm('是否确定删除该获客项目（该操作不可逆，将隐藏相关线索）？')) return;
             try {
                 await apiFetch(`/api/industries/${id}`, { method: 'DELETE' });
                 showToast('已成功删除获客项目', 'success');
@@ -2406,7 +2403,7 @@
             const provider = document.getElementById('industry-llm-provider').value;
             const modelInput = document.getElementById('industry-llm-model');
             if (provider === 'deepseek') {
-                modelInput.value = 'deepseek-chat';
+                modelInput.value = 'deepseek-v4-flash';
             } else if (provider === 'zhipu') {
                 modelInput.value = 'glm-4-flash';
             } else if (provider === 'openai') {
@@ -2569,7 +2566,7 @@
 
                     if (res.llm_provider) {
                         document.getElementById('industry-llm-provider').value = res.llm_provider;
-                        document.getElementById('industry-llm-model').value = res.llm_model || 'deepseek-chat';
+                        document.getElementById('industry-llm-model').value = res.llm_model || 'deepseek-v4-flash';
                     }
 
                     if (res.intent_keywords && Array.isArray(res.intent_keywords)) {
@@ -2610,6 +2607,8 @@
 
                     if (res.bigdata_used) {
                         showToast('🎉 成功抓取抖音热门大数据，AI 已提炼出精准痛点词库并填充表单！', 'success');
+                    } else if (bigDataEnabled && res.bigdata_note) {
+                        showToast(res.bigdata_note, 'warning', 8000);
                     } else {
                         showToast('AI 智能匹配配置成功，已自动填充下方表单！', 'success');
                     }
@@ -2755,6 +2754,8 @@
                         <td class="px-6 py-4 text-xs text-slate-300 text-center">${d.min_interval_sec} 秒</td>
                         <td class="px-6 py-4 text-right whitespace-nowrap">
                             <button onclick="openRemoteScreen('${d.id}', '${escapeHtml(d.name)}')" class="px-2 py-1 mr-1 text-[10px] text-emerald-400 hover:bg-slate-900 rounded border border-emerald-500/20 transition-all">云真机(屏幕)</button>
+                            <button onclick="runDeviceAcceptance('${d.id}', false)" class="px-2 py-1 mr-1 text-[10px] text-cyan-400 hover:bg-slate-900 rounded border border-cyan-500/20 transition-all">验收</button>
+                            <button onclick="runDeviceAcceptance('${d.id}', true)" class="px-2 py-1 mr-1 text-[10px] text-pink-400 hover:bg-slate-900 rounded border border-pink-500/20 transition-all">实发验收</button>
                             <button onclick="prepareDeviceKeyboard('${d.id}')" class="px-2 py-1 mr-1 text-[10px] text-cyan-400 hover:bg-slate-900 rounded border border-cyan-500/20 transition-all">准备键盘</button>
                             <button onclick="resetDeviceFuse('${d.id}')" class="px-2 py-1 mr-1 text-[10px] text-amber-400 hover:bg-slate-900 rounded border border-amber-500/20 transition-all">重置熔断</button>
                             <button onclick="deleteDevice('${d.id}')" class="p-1.5 text-slate-500 hover:text-pink-400 hover:bg-slate-900 rounded-lg transition-all" title="注销设备">
@@ -2928,6 +2929,83 @@
             } catch (e) {}
         }
 
+        function openDeviceAcceptanceModal(id, liveSend) {
+            const industry = getActiveIndustry();
+            const industrySlug = industry?.slug || industry?.id || '';
+            const modal = document.getElementById('modal-device-acceptance');
+            document.getElementById('acceptance-device-id').value = id;
+            document.getElementById('acceptance-live-send').value = liveSend ? 'true' : 'false';
+            document.getElementById('acceptance-industry').value = industrySlug;
+            document.getElementById('acceptance-target').value = '';
+            document.getElementById('acceptance-message').value = '验收测试，请忽略';
+            document.getElementById('acceptance-result').classList.add('hidden');
+            document.getElementById('acceptance-result').innerHTML = '';
+            document.getElementById('acceptance-title').innerText = liveSend ? '实发验收' : '干跑验收';
+            document.getElementById('acceptance-subtitle').innerText = liveSend
+                ? '会真实执行 1 条发送，请确认目标账号无误。'
+                : '只验证截图、OCR/UI 解析和 AI 决策，不真实发送。';
+            document.getElementById('acceptance-submit').innerText = liveSend ? '确认实发验收' : '开始干跑验收';
+            modal.classList.replace('hidden', 'flex');
+            setTimeout(() => document.getElementById('acceptance-target').focus(), 0);
+        }
+
+        function closeDeviceAcceptanceModal() {
+            document.getElementById('modal-device-acceptance').classList.replace('flex', 'hidden');
+        }
+
+        async function submitDeviceAcceptance(event) {
+            event.preventDefault();
+            const id = document.getElementById('acceptance-device-id').value;
+            const liveSend = document.getElementById('acceptance-live-send').value === 'true';
+            const industrySlug = document.getElementById('acceptance-industry').value.trim();
+            const target = document.getElementById('acceptance-target').value.trim();
+            const message = document.getElementById('acceptance-message').value.trim();
+            if (!id || !industrySlug || !target || !message) return;
+            if (liveSend && !confirm(`确认对 ${target} 执行 1 条真实发送验收？`)) return;
+
+            const submit = document.getElementById('acceptance-submit');
+            const resultBox = document.getElementById('acceptance-result');
+            submit.disabled = true;
+            submit.classList.add('opacity-70', 'cursor-not-allowed');
+            submit.innerText = liveSend ? '实发验收中...' : '干跑验收中...';
+            resultBox.classList.remove('hidden');
+            resultBox.innerHTML = '<div class="text-slate-400">正在执行验收...</div>';
+
+            const payload = {
+                industry_slug: industrySlug,
+                target,
+                message,
+                confirm_target: liveSend ? target : '',
+                max_sends: liveSend ? 1 : 0,
+            };
+            try {
+                const report = liveSend
+                    ? await window.DeviceApi.liveSend(id, payload)
+                    : await window.DeviceApi.dryRun(id, payload);
+                const activeDecision = Object.keys(report.after_decision || {}).length
+                    ? report.after_decision
+                    : report.before_decision;
+                resultBox.innerHTML = `
+                    <div class="font-semibold ${report.ok ? 'text-emerald-300' : 'text-amber-300'}">${escapeHtml(report.status || 'acceptance finished')}</div>
+                    ${renderAgentDecisionTrace(activeDecision, report.send_verification)}
+                    ${report.report_path ? `<div class="mt-2 text-slate-500 font-mono truncate" title="${escapeHtml(report.report_path)}">Report: ${escapeHtml(report.report_path)}</div>` : ''}
+                    ${report.screenshot_path ? renderEvidenceScreenshotLink(report.screenshot_path) : ''}
+                `;
+                showToast(`验收完成：${summarizeAcceptanceTrace(report)}`, report.ok ? 'success' : 'warning');
+                await loadDevicesView();
+            } catch (e) {
+                resultBox.innerHTML = `<div class="text-pink-300">验收失败：${escapeHtml(e.message || e)}</div>`;
+            } finally {
+                submit.disabled = false;
+                submit.classList.remove('opacity-70', 'cursor-not-allowed');
+                submit.innerText = liveSend ? '确认实发验收' : '开始干跑验收';
+            }
+        }
+
+        async function runDeviceAcceptance(id, liveSend) {
+            openDeviceAcceptanceModal(id, liveSend);
+        }
+
         // Delete device
         async function deleteDevice(id) {
             document.getElementById('modal-device').classList.replace('flex', 'hidden');
@@ -3026,7 +3104,7 @@
             tbody.innerHTML = '';
 
             if (!industryId) {
-                tbody.innerHTML = `<tr><td colspan="8" class="px-6 py-8 text-center text-slate-500">请先在项目配置中创建您的第一个获客项目。</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="8" class="px-6 py-8 text-center text-slate-500">请先在项目中心创建您的第一个获客项目。</td></tr>`;
                 return;
             }
 
@@ -3174,13 +3252,19 @@
                 for (const job of jobs) {
                     const tr = document.createElement('tr');
                     tr.className = "hover:bg-slate-900/30 transition-colors";
-                    const canCancel = job.status === 'running' || job.status === 'cancelling';
+                    const normalizedStatus = job.normalized_status || job.status;
+                    const canCancel = typeof job.can_cancel === 'boolean'
+                        ? job.can_cancel
+                        : (job.status === 'running' || job.status === 'cancelling');
                     const statusText = statusLabels[job.status] || job.status || '未知';
                     const typeText = typeLabels[job.type] || job.type || '任务';
                     const progress = Number(job.progress || 0);
-                    const error = job.error ? `<div class="text-[10px] text-pink-400 mt-1 truncate max-w-[260px]" title="${escapeHtml(job.error)}">${escapeHtml(job.error)}</div>` : '';
+                    const failureReason = job.failure_reason || job.final_reason || job.error || '';
+                    const error = failureReason ? `<div class="text-[10px] text-pink-400 mt-1 truncate max-w-[260px]" title="${escapeHtml(failureReason)}">${escapeHtml(failureReason)}</div>` : '';
                     const sendSummary = job.send_summary || job.payload?.send_summary || {};
                     const collectSummary = job.collect_summary || job.payload?.collect_summary || {};
+                    const traceDecision = job.latest_execution?.agent_decision || null;
+                    const traceVerification = job.latest_execution?.send_verification || null;
                     const categoryRows = sendSummary.result_summary?.by_category || [];
                     const categoryText = categoryRows.slice(0, 2).map(c => `${c.label}:${c.devices}`).join(' · ');
                     const autoReplenish = sendSummary.auto_replenish || {};
@@ -3197,11 +3281,12 @@
                                 <span class="font-mono text-slate-300">${escapeHtml((job.job_id || '').slice(0, 8))}</span>
                                 <span class="text-[10px] text-slate-500 truncate max-w-[260px]">${escapeHtml(job.industry_name || job.industry_slug || '未绑定项目')}</span>
                                 ${summaryHtml}
+                                ${renderAgentDecisionTrace(traceDecision, traceVerification)}
                                 ${error}
                             </div>
                         </td>
                         <td class="px-5 py-4 text-center text-slate-300 font-semibold">${escapeHtml(typeText)}</td>
-                        <td class="px-5 py-4 text-center"><span class="px-2.5 py-1 rounded-full border text-[9px] font-semibold ${statusColors[job.status] || 'bg-slate-800 text-slate-400'}">${escapeHtml(statusText)}</span></td>
+                        <td class="px-5 py-4 text-center"><span class="px-2.5 py-1 rounded-full border text-[9px] font-semibold ${statusColors[normalizedStatus] || statusColors[job.status] || 'bg-slate-800 text-slate-400'}">${escapeHtml(statusText)}</span></td>
                         <td class="px-5 py-4 text-center">
                             <div class="w-24 mx-auto h-1.5 bg-slate-800 rounded-full overflow-hidden">
                                 <div class="h-full bg-cyan-400" style="width:${Math.max(0, Math.min(progress, 100))}%"></div>
@@ -3210,6 +3295,7 @@
                         </td>
                         <td class="px-5 py-4 text-center text-slate-500 font-mono text-[10px]">${formatDateTime(job.created_at)}</td>
                         <td class="px-5 py-4 text-right">
+                            <button onclick="openJobEvidenceDrawer('${encodeURIComponent(job.job_id || '')}')" class="px-2.5 py-1 mr-1 rounded border border-cyan-500/30 text-[10px] font-semibold text-cyan-300 hover:bg-cyan-500/10 transition-colors">证据</button>
                             <button onclick="cancelJob('${escapeHtml(job.job_id)}')" ${canCancel ? '' : 'disabled'} class="px-2.5 py-1 rounded border text-[10px] font-semibold transition-colors ${canCancel ? 'border-amber-500/30 text-amber-400 hover:bg-amber-500/10' : 'border-slate-800 text-slate-600 cursor-not-allowed'}">取消</button>
                         </td>
                     `;
@@ -3221,7 +3307,7 @@
         async function cancelJob(jobId) {
             if (!jobId || !confirm('确定请求取消该后台任务？当前手机动作会在安全停顿点后停止。')) return;
             try {
-                await apiFetch(`/api/tasks/status/${jobId}/cancel`, { method: 'POST' });
+                await apiFetch(`/api/jobs/${jobId}/cancel`, { method: 'POST' });
                 showToast('已提交取消请求', 'warning');
                 await loadJobsView();
             } catch (e) {}
@@ -3521,134 +3607,6 @@
             };
         }
 
-
-        // --- ONBOARDING WIZARD ---
-        const ONBOARDING_STEPS = [
-            {
-                title: '欢迎来到雷霆捕获系统',
-                body: '雷霆捕获系统帮助您在抖音、快手、小红书等平台自动采集高意向评论并批量发送私信。首次使用只需完成 3 个基础配置，即可开始获客。',
-                action: '下一步',
-                actionType: 'next'
-            },
-            {
-                title: '配置 LLM API Key',
-                body: '系统使用大模型完成评论意向识别、情感分类和私信文案生成。请先至少配置 DeepSeek、智谱 GLM 或 OpenAI 中的一个 API Key。',
-                action: '去配置',
-                actionType: 'navigate-settings'
-            },
-            {
-                title: '连接 Android 设备',
-                body: '私信发送依赖真实 Android 设备或云手机。请确保设备已通过 ADB 连接，并在“设备准备”页面完成录入和检测。',
-                action: '去添加',
-                actionType: 'navigate-devices'
-            },
-            {
-                title: '创建首个获客项目',
-                body: '项目是获客的基础单元。配置目标平台、关键词、对标账号和回复话术后，即可开始采集和发送任务。',
-                action: '去创建',
-                actionType: 'create-industry'
-            }
-        ];
-
-        let onboardingCurrentStep = 0;
-
-        function startOnboarding() {
-            if (localStorage.getItem('thunder_onboarding_seen') === 'true') return;
-            // Guard against navigation that happened while overview data was loading.
-            if (router.currentSubview !== 'overview') return;
-            onboardingCurrentStep = 0;
-            const modal = document.getElementById('modal-onboarding');
-            const panel = document.getElementById('onboarding-panel');
-            if (modal) {
-                modal.classList.remove('hidden');
-                modal.classList.add('flex');
-                renderOnboardingStep();
-                if (panel) panel.focus();
-            }
-        }
-
-        function hideOnboarding() {
-            const modal = document.getElementById('modal-onboarding');
-            if (modal) {
-                modal.classList.add('hidden');
-                modal.classList.remove('flex');
-            }
-        }
-
-        function completeOnboarding() {
-            localStorage.setItem('thunder_onboarding_seen', 'true');
-            hideOnboarding();
-        }
-
-        function skipOnboarding() {
-            completeOnboarding();
-        }
-
-        document.addEventListener('keydown', (e) => {
-            const modal = document.getElementById('modal-onboarding');
-            if (modal && !modal.classList.contains('hidden') && e.key === 'Escape') {
-                e.preventDefault();
-                skipOnboarding();
-            }
-        });
-
-        function renderOnboardingStep() {
-            const step = ONBOARDING_STEPS[onboardingCurrentStep];
-            const title = document.getElementById('onboarding-title');
-            const counter = document.getElementById('onboarding-step-counter');
-            const content = document.getElementById('onboarding-content');
-            const dots = document.getElementById('onboarding-dots');
-            const nextBtn = document.getElementById('onboarding-next-btn');
-            const prevBtn = document.getElementById('onboarding-prev-btn');
-
-            if (!step || !title || !content || !nextBtn) return;
-
-            title.innerText = step.title;
-            counter.innerText = `${onboardingCurrentStep + 1}/${ONBOARDING_STEPS.length}`;
-            content.innerHTML = `<p>${escapeHtml(step.body)}</p>`;
-
-            if (dots) {
-                dots.innerHTML = ONBOARDING_STEPS.map((_, idx) =>
-                    `<span class="w-2 h-2 rounded-full transition-colors ${idx === onboardingCurrentStep ? 'bg-cyan-400' : 'bg-slate-600'}"></span>`
-                ).join('');
-            }
-
-            prevBtn.classList.toggle('hidden', onboardingCurrentStep === 0);
-            nextBtn.innerText = step.action;
-        }
-
-        function nextOnboardingStep() {
-            const step = ONBOARDING_STEPS[onboardingCurrentStep];
-            if (!step) return;
-
-            if (step.actionType === 'navigate-settings') {
-                completeOnboarding();
-                router.navigate('settings');
-                return;
-            } else if (step.actionType === 'navigate-devices') {
-                completeOnboarding();
-                router.navigate('devices');
-                return;
-            } else if (step.actionType === 'create-industry') {
-                completeOnboarding();
-                showCreateIndustryModal();
-                return;
-            }
-
-            if (onboardingCurrentStep < ONBOARDING_STEPS.length - 1) {
-                onboardingCurrentStep++;
-                renderOnboardingStep();
-            } else {
-                completeOnboarding();
-            }
-        }
-
-        function prevOnboardingStep() {
-            if (onboardingCurrentStep > 0) {
-                onboardingCurrentStep--;
-                renderOnboardingStep();
-            }
-        }
 
         // --- ENTRY POINT ---
         window.onload = () => {

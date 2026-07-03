@@ -4,8 +4,6 @@ import random
 import logging
 import threading
 
-from openai import OpenAI
-
 from core.agent.executor import PhoneAgentExecutor
 from core.agent.memory import AgentMemoryStore
 from core.agent.planner import Planner
@@ -13,7 +11,9 @@ from core.task.scheduler import MatrixTaskScheduler
 from core.device.manager import load_active_devices
 from core.device.supervisor import DeviceSupervisor
 from core.strategy.policy import is_send_window_open
+from core.strategy.risk import RiskManager
 from core.config import IndustryConfig, load_system
+from core.constants import DEFAULT_DAILY_LIMIT, DEFAULT_MIN_INTERVAL_SEC, DEFAULT_AGENT_MAX_STEPS
 from server.services.abtest import select_reply_variant
 
 log = logging.getLogger("thunder.worker")
@@ -29,6 +29,8 @@ def _get_reply_client(api_key: str = ""):
     key = api_key or sys_cfg["api_keys"]["deepseek"]
     if _reply_client is None or key != _loaded_reply_key:
         import httpx
+        from openai import OpenAI
+
         _reply_client = OpenAI(
             base_url="https://api.deepseek.com",
             api_key=key,
@@ -54,8 +56,8 @@ TONE_VARIATIONS = [
 
 class DeviceWorker:
     def __init__(self, device_id: str, adb_serial: str,
-                 industry: IndustryConfig, daily_limit: int = 15,
-                 min_interval: int = 90, should_stop=None,
+                 industry: IndustryConfig, daily_limit: int = DEFAULT_DAILY_LIMIT,
+                 min_interval: int = DEFAULT_MIN_INTERVAL_SEC, should_stop=None,
                  job_id: str = ""):
         self.device_id = device_id
         self.adb_serial = adb_serial
@@ -72,12 +74,15 @@ class DeviceWorker:
         self._planner = Planner()
         self._memory = AgentMemoryStore(user_id=self.owner_user_id, industry_slug=self.industry_slug)
         self._supervisor = DeviceSupervisor(user_id=self.owner_user_id, industry_slug=self.industry_slug)
+        self._risk = RiskManager()
         
         self._scheduler = MatrixTaskScheduler(
             industry_slug=self.industry_slug,
             owner_user_id=self.owner_user_id,
             global_daily_limit=int(getattr(self.industry, "global_daily_limit", 0) or 0),
             daily_send_max=int(getattr(self.industry, "daily_send_max", 0) or 0),
+            device_daily_limit=int(self.daily_limit or 0),
+            hourly_send_limit=int(getattr(self.industry, "hourly_send_limit", 0) or 0),
             job_id=self.job_id,
         )
 
@@ -108,8 +113,10 @@ class DeviceWorker:
             pass
 
         hints = ""
-        if question: hints += f"用户问题：{question}。"
-        if reply_topic: hints += f"回复方向：{reply_topic}。"
+        if question:
+            hints += f"用户问题：{question}。"
+        if reply_topic:
+            hints += f"回复方向：{reply_topic}。"
 
         tone_variation = random.choice(TONE_VARIATIONS)
         hook_prompt = ""
@@ -125,7 +132,7 @@ class DeviceWorker:
                 + REPLY_FOOTER
             )
             resp = _get_reply_client(getattr(self.industry, "deepseek_key", "")).chat.completions.create(
-                model="deepseek-chat", messages=[{"role": "user", "content": prompt}],
+                model="deepseek-v4-flash", messages=[{"role": "user", "content": prompt}],
                 max_tokens=80, temperature=0.9,
             )
             content = resp.choices[0].message.content
@@ -156,7 +163,7 @@ class DeviceWorker:
                 model_name=glm_model,
                 api_key=glm_key,
                 should_stop=self.should_stop,
-                max_steps=20,
+                max_steps=DEFAULT_AGENT_MAX_STEPS,
             ).start()
             return True
         except Exception as e:
@@ -196,16 +203,52 @@ class DeviceWorker:
                         summary.update(status="no_task", no_task=True)
                     break
 
+                def _handle_send_failure(error_message: str) -> None:
+                    self._scheduler.commit_task(
+                        claim.task_id, self.device_id, "fail", error_message[:500],
+                        claim_token=claim_token
+                    )
+                    summary["failed"] += 1
+                    decision = self._risk.assess_action_result(
+                        error_message,
+                        consecutive_failures=int(summary.get("failed") or 0),
+                    )
+                    if decision.action == "isolate":
+                        self._supervisor.mark_failure(
+                            device_id=self.device_id,
+                            job_id=self.job_id,
+                            status="isolated",
+                            error=decision.reason or error_message,
+                        )
+                        summary.update(status="isolated", error=decision.reason or error_message)
+                    elif decision.action == "cooldown":
+                        self._supervisor.mark_cooldown(
+                            device_id=self.device_id,
+                            job_id=self.job_id,
+                            error=decision.reason or error_message,
+                            hours=decision.cooldown_hours or 1,
+                        )
+                        summary.update(status="cooldown", error=decision.reason or error_message)
+
                 task = claim.task
+                claim_token = task.get("claim_token", "")
                 reply_msg, variant_id = self._generate_reply(task)
                 short_id = (
                     task.get("short_id") or task.get("douyin_id") or task.get("unique_id")
                     or task.get("user_id") or task.get("sec_uid") or ""
                 )
-                claim_token = task.get("claim_token", "")
-                
+
                 if not self._init_agent_safe():
-                    self._scheduler.commit_task(claim.task_id, self.device_id, "fail", "Agent init failed", claim_token=claim_token)
+                    error = "Agent init failed"
+                    self._scheduler.commit_task(claim.task_id, self.device_id, "fail", error, claim_token=claim_token)
+                    self._supervisor.mark_failure(
+                        device_id=self.device_id,
+                        job_id=self.job_id,
+                        status="keyboard_error",
+                        error=error,
+                    )
+                    summary.update(status="keyboard_error", error=error)
+                    summary["failed"] += 1
                     break
 
                 try:
@@ -232,17 +275,13 @@ class DeviceWorker:
                         )
                         summary["sent"] += 1
                     else:
-                        self._scheduler.commit_task(
-                            claim.task_id, self.device_id, "fail", exec_result.message[:500],
-                            claim_token=claim_token
-                        )
-                        summary["failed"] += 1
+                        _handle_send_failure(exec_result.message or exec_result.status or "send failed")
+                        if summary["status"] in {"isolated", "cooldown"}:
+                            break
                 except Exception as e:
-                    self._scheduler.commit_task(
-                        claim.task_id, self.device_id, "fail", str(e)[:500],
-                        claim_token=claim_token
-                    )
-                    summary["failed"] += 1
+                    _handle_send_failure(str(e)[:500])
+                    if summary["status"] in {"isolated", "cooldown"}:
+                        break
 
                 # Rest between sends
                 wait = self.min_interval + random.randint(0, 30)
@@ -267,7 +306,7 @@ def _run_device(d: dict, industry: IndustryConfig, should_stop=None, job_id: str
         worker = DeviceWorker(
             device_id=d["id"], adb_serial=d.get("adb_serial", ""),
             industry=industry, daily_limit=d.get("daily_limit", industry.daily_limit),
-            min_interval=d.get("min_interval_sec", 90),
+            min_interval=d.get("min_interval_sec", DEFAULT_MIN_INTERVAL_SEC),
             should_stop=should_stop, job_id=job_id
         )
         return worker.run()
@@ -275,7 +314,7 @@ def _run_device(d: dict, industry: IndustryConfig, should_stop=None, job_id: str
         log.error(f"[{d['id']}] fatal: {e}")
         return {"device_id": d["id"], "status": "failed", "error": str(e)[:500]}
 
-def run_senders(industry: IndustryConfig, device_ids: list[str] = None, should_stop=None, job_id: str = ""):
+def run_senders(industry: IndustryConfig, device_ids: list[str] | None = None, should_stop=None, job_id: str = ""):
     """Dispatch send tasks to Celery workers (or fallback to threading).
 
     With Celery available:
@@ -318,6 +357,14 @@ def run_senders(industry: IndustryConfig, device_ids: list[str] = None, should_s
     # ── Try Celery first ──
     try:
         from adapters.celery.send import send_dm_task
+        from adapters.celery.app import app
+        # Fail fast when the broker is unreachable so local/dev runs still send.
+        try:
+            with app.connection() as conn:
+                conn.connect()
+        except Exception as exc:
+            log.warning("Celery broker unreachable (%s), falling back to threading", exc)
+            raise
         log.info("Using Celery backend for %d devices", len(targets))
 
         task_results = []
@@ -337,6 +384,8 @@ def run_senders(industry: IndustryConfig, device_ids: list[str] = None, should_s
                     "user_id": user_id,
                     "daily_send_max": int(getattr(industry, "daily_send_max", 0) or 0),
                     "global_daily_limit": int(getattr(industry, "global_daily_limit", 0) or 0),
+                    "hourly_send_limit": int(getattr(industry, "hourly_send_limit", 0) or 0),
+                    "job_id": job_id,
                 },
                 reply_msg="",  # Celery task generates reply itself
             )
@@ -363,6 +412,7 @@ def run_senders(industry: IndustryConfig, device_ids: list[str] = None, should_s
 
     # ── Fallback: native threading ──
     threads = []
+    thread_devices = []
     results = []
     results_lock = threading.Lock()
 
@@ -375,9 +425,50 @@ def run_senders(industry: IndustryConfig, device_ids: list[str] = None, should_s
         t = threading.Thread(target=_target, name=f"sender-{d['id']}", daemon=True)
         t.start()
         threads.append(t)
+        thread_devices.append((t, d))
 
-    for t in threads:
-        t.join()
+    cancel_started_at = None
+    while True:
+        alive = [t for t in threads if t.is_alive()]
+        if not alive:
+            break
+        if should_stop and should_stop():
+            if cancel_started_at is None:
+                cancel_started_at = time.monotonic()
+            if time.monotonic() - cancel_started_at >= _SENDER_CANCEL_GRACE_SECONDS:
+                with results_lock:
+                    completed_results = list(results)
+                completed_device_ids = {
+                    str(result.get("device_id"))
+                    for result in completed_results
+                    if result.get("device_id")
+                }
+                pending_results = [
+                    {
+                        "device_id": d["id"],
+                        "status": "cancelling_timeout",
+                        "sent": 0,
+                        "failed": 0,
+                        "cancelled": True,
+                        "error": "Cancellation requested while device worker was still stopping.",
+                    }
+                    for t, d in thread_devices
+                    if t.is_alive() and str(d.get("id")) not in completed_device_ids
+                ]
+                all_results = completed_results + pending_results
+                return {
+                    "ok": False,
+                    "backend": "threading",
+                    "cancelled": True,
+                    "error": "Cancellation requested; some device workers did not stop within grace period.",
+                    "industry_slug": getattr(industry, "slug", ""),
+                    "devices_total": len(targets),
+                    "sent_total": sum(int(r.get("sent") or 0) for r in all_results),
+                    "failed_total": sum(int(r.get("failed") or 0) for r in all_results),
+                    "devices": all_results,
+                }
+        for t in alive:
+            t.join(timeout=_SENDER_JOIN_POLL_SECONDS)
 
     sent_total = sum(int(r.get("sent") or 0) for r in results)
     failed_total = sum(int(r.get("failed") or 0) for r in results)

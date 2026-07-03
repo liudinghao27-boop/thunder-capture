@@ -12,7 +12,7 @@ import logging
 import re
 import time
 from dataclasses import dataclass
-from typing import Callable
+from typing import Callable, cast
 
 from core.agent.state import ExecutionResult
 from core.device.adb_client import ADBClient
@@ -175,7 +175,7 @@ Rules:
         )
         resp.raise_for_status()
         data = resp.json()
-        return data["choices"][0]["message"]["content"]
+        return cast(str, data["choices"][0]["message"]["content"])
 
     def _execute_action(self, action: GLMAction) -> str:
         """Execute a single GLM action via ADB. Returns error string or ''."""

@@ -45,6 +45,7 @@ def test_run_senders_includes_scheduler_limits_in_celery_task_data(monkeypatch):
     industry = _make_industry(compliance_mode=False)
     industry.daily_send_max = 25
     industry.global_daily_limit = 500
+    setattr(industry, "hourly_send_limit", 6)
 
     class FakeDevice:
         def __init__(self):
@@ -58,11 +59,13 @@ def test_run_senders_includes_scheduler_limits_in_celery_task_data(monkeypatch):
             mock_send = MagicMock()
             mock_send.delay.return_value = MagicMock(id="celery-id-1")
             monkeypatch.setattr("adapters.celery.send.send_dm_task", mock_send)
-
-            run_senders(industry, device_ids=[])
+            with patch("adapters.celery.app.app.connection") as mock_conn:
+                mock_conn.return_value.__enter__.return_value.connect.return_value = None
+                run_senders(industry, device_ids=[])
 
     assert mock_send.delay.called
     _, kwargs = mock_send.delay.call_args
     task_data = kwargs["task_data"]
     assert task_data.get("daily_send_max") == 25
     assert task_data.get("global_daily_limit") == 500
+    assert task_data.get("hourly_send_limit") == 6

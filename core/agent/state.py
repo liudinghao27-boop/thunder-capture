@@ -58,6 +58,32 @@ class Observation:
 
 
 @dataclass(frozen=True)
+class AgentDecision:
+    page_state: str
+    confidence: float
+    next_action: str
+    reason: str
+    screenshot: str
+    blocker: str = ""
+    evidence: list[str] = field(default_factory=list)
+    ocr_text: str = ""
+    ui_elements: list[dict[str, Any]] = field(default_factory=list)
+
+    def as_dict(self) -> dict:
+        return {
+            "page_state": self.page_state,
+            "confidence": round(float(self.confidence), 3),
+            "next_action": self.next_action,
+            "reason": self.reason,
+            "screenshot": self.screenshot,
+            "blocker": self.blocker,
+            "evidence": list(self.evidence),
+            "ocr_text": self.ocr_text,
+            "ui_elements": list(self.ui_elements),
+        }
+
+
+@dataclass(frozen=True)
 class ExecutionResult:
     ok: bool
     status: str

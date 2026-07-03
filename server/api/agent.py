@@ -18,6 +18,7 @@ from server.models.device import Device
 from server.models.industry import Industry
 from server.models.matrix import DeviceState, ExecutionLog, TaskGraph
 from server.models.user import User
+from server.services.agent_decision import extract_agent_decision, extract_agent_decisions
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
 
@@ -42,6 +43,21 @@ class ActRequest(BaseModel):
     target: str = ""
     payload: dict = Field(default_factory=dict)
     industry_id: str | None = None
+
+
+class ExecutionLogOut(BaseModel):
+    id: str
+    job_id: str
+    device_id: str
+    action: str
+    target: str
+    status: str
+    detail: str
+    latency_ms: int | None = None
+    payload: dict = Field(default_factory=dict)
+    agent_decision: dict | None = None
+    agent_decisions: dict = Field(default_factory=dict)
+    created_at: str | None = None
 
 
 def _get_owned_device(device_id: str, current_user: User, db: Session) -> Device:
@@ -181,7 +197,7 @@ def list_agent_task_graphs(
     ]
 
 
-@router.get("/execution-logs")
+@router.get("/execution-logs", response_model=list[ExecutionLogOut])
 def list_agent_execution_logs(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -196,8 +212,10 @@ def list_agent_execution_logs(
     if device_id:
         query = query.filter(ExecutionLog.device_id == device_id)
     rows = query.order_by(ExecutionLog.created_at.desc()).limit(limit).all()
-    return [
-        {
+    results = []
+    for row in rows:
+        payload = row.payload if isinstance(row.payload, dict) else {}
+        results.append({
             "id": row.id,
             "job_id": row.job_id,
             "device_id": row.device_id,
@@ -206,8 +224,9 @@ def list_agent_execution_logs(
             "status": row.status,
             "detail": row.detail,
             "latency_ms": row.latency_ms,
-            "payload": row.payload or {},
+            "payload": payload,
+            "agent_decision": extract_agent_decision(payload),
+            "agent_decisions": extract_agent_decisions(payload),
             "created_at": row.created_at.isoformat() if row.created_at else None,
-        }
-        for row in rows
-    ]
+        })
+    return results

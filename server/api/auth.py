@@ -3,6 +3,7 @@
 import os
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from server.auth import create_access_token, get_current_user, hash_password, verify_password
@@ -14,12 +15,63 @@ from server.secret_store import encrypt_secret, mask_secret
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
+class UserSettingsOut(BaseModel):
+    deepseek_key: str
+    zhipu_key: str
+    openai_key: str
+
+
+class AuthStatusOut(BaseModel):
+    has_users: bool
+    registration_open: bool
+    mode: str
+    detail: str = ""
+
+
+class UserSettingsUpdate(BaseModel):
+    deepseek_key: str | None = None
+    zhipu_key: str | None = None
+    openai_key: str | None = None
+
+
+def _registration_open(has_users: bool) -> bool:
+    if not has_users:
+        return True
+    return os.getenv("THUNDER_ALLOW_REGISTRATION", "").lower() in {
+        "1", "true", "yes", "on",
+    }
+
+
+@router.get("/status", response_model=AuthStatusOut)
+def auth_status(db: Session = Depends(get_db)):
+    has_users = db.query(User.id).first() is not None
+    registration_open = _registration_open(has_users)
+    if not has_users:
+        return AuthStatusOut(
+            has_users=False,
+            registration_open=True,
+            mode="bootstrap",
+            detail="首次使用，请先注册管理员账号。",
+        )
+    if registration_open:
+        return AuthStatusOut(
+            has_users=True,
+            registration_open=True,
+            mode="open",
+            detail="可登录现有账号，也可继续注册新用户。",
+        )
+    return AuthStatusOut(
+        has_users=True,
+        registration_open=False,
+        mode="login_only",
+        detail="当前系统已关闭注册，请使用现有账号登录。",
+    )
+
+
 @router.post("/register", response_model=TokenResponse)
 def register(data: UserRegister, db: Session = Depends(get_db)):
     has_users = db.query(User.id).first() is not None
-    allow_registration = os.getenv("THUNDER_ALLOW_REGISTRATION", "").lower() in {
-        "1", "true", "yes", "on",
-    }
+    allow_registration = _registration_open(has_users)
     if has_users and not allow_registration:
         raise HTTPException(
             status_code=403,
@@ -45,20 +97,6 @@ def login(data: UserLogin, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Invalid credentials")
     token = create_access_token(user.id)
     return TokenResponse(access_token=token)
-
-
-from pydantic import BaseModel
-
-class UserSettingsOut(BaseModel):
-    deepseek_key: str
-    zhipu_key: str
-    openai_key: str
-
-
-class UserSettingsUpdate(BaseModel):
-    deepseek_key: str | None = None
-    zhipu_key: str | None = None
-    openai_key: str | None = None
 
 
 @router.get("/me", response_model=UserOut)
@@ -87,7 +125,7 @@ def update_user_settings(
 
     Rules per key:
     - None: leave unchanged.
-    - Empty string \"\": clear the key.
+    - Empty string "": clear the key.
     - Any non-empty string: encrypt and save.
     """
     if data.deepseek_key is not None:

@@ -63,7 +63,8 @@ class OCRService:
     _lock = threading.Lock()
 
     def __init__(self, provider: str | None = None):
-        self.provider = (provider or os.getenv("THUNDER_OCR_PROVIDER", "auto")).strip().lower()
+        raw = provider or os.getenv("THUNDER_OCR_PROVIDER", "auto") or "auto"
+        self.provider = raw.strip().lower()
 
     def extract(self, image_bytes: bytes) -> OCRResult:
         if not image_bytes:

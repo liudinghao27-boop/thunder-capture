@@ -26,7 +26,7 @@ class FakeIndustry:
     video_max_age_days = 14
     comment_max_age_hours = 48
     llm_provider = "deepseek"
-    llm_model = "deepseek-chat"
+    llm_model = "deepseek-v4-flash"
     intent_keywords = []
     noise_keywords = []
     target_users = []

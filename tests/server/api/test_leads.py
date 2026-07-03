@@ -55,6 +55,12 @@ class FakeQuery:
     def offset(self, n):
         return self
 
+    def yield_per(self, n):
+        return self
+
+    def __iter__(self):
+        return iter(self.all())
+
     def all(self):
         return [FakeRow()]
 

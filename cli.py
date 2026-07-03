@@ -24,38 +24,28 @@ if sys.platform == "win32":
     if hasattr(sys.stderr, "buffer") and not isinstance(sys.stderr, io.TextIOWrapper):
         sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding="utf-8", errors="replace")
 
-import asyncio
-import time
-import logging
-from pathlib import Path
+import asyncio  # noqa: E402
+import time  # noqa: E402
 
 BASE_DIR = Path(__file__).resolve().parent
 sys.path.insert(0, str(BASE_DIR))
 # Make vendored deps importable
 sys.path.insert(0, str(BASE_DIR / "deps" / "crawl4ai"))
 
-from core.config import (
+from core.config import (  # noqa: E402
     load_system, load_industry,
     list_industries, create_industry,
 )
-from server.services.task_stats import (
+from server.services.task_stats import (  # noqa: E402
     queue_stats, blogger_source_stats as blogger_stats,
     get_wave_state as get_consumer_state, get_bloggers, add_blogger,
     mark_target_inactive,
 )
-from core.classify import classify_batch, enqueue_classified
-from core.task.worker import run_senders
+from core.classify import classify_batch, enqueue_classified  # noqa: E402
+from core.task.worker import run_senders  # noqa: E402
+from server.logging_config import setup_logging  # noqa: E402
 
-os.makedirs("logs", exist_ok=True)
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler("logs/thunder.log", encoding="utf-8")
-    ],
-)
-log = logging.getLogger("thunder")
+log = setup_logging()
 
 
 def cmd_create(args):
@@ -86,7 +76,7 @@ def cmd_collect(args):
     init()
 
     _run_collect_once(industry, args)
-    bs = blogger_stats(industry.slug)
+    _ = blogger_stats(industry.slug)
 
     # ── Loop mode: re-run every N minutes ──
     if args.loop:

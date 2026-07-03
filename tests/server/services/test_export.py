@@ -1,7 +1,12 @@
-import io
 import csv
+import io
 from openpyxl import load_workbook
 from server.services.export import generate_csv, generate_xlsx, DEFAULT_EXPORT_FIELDS
+
+
+def _xlsx_bytes(rows, fields=None):
+    """Consume the XLSX generator into a BytesIO for openpyxl."""
+    return io.BytesIO(b"".join(generate_xlsx(rows, fields=fields)))
 
 
 def test_generate_csv_with_rows():
@@ -49,7 +54,7 @@ def test_generate_xlsx_with_rows():
         {"id": 1, "platform": "douyin", "user_name": "u1", "text": "hello"},
     ]
     fields = ["id", "platform", "user_name", "text"]
-    buffer = generate_xlsx(rows, fields=fields)
+    buffer = _xlsx_bytes(rows, fields=fields)
     wb = load_workbook(buffer)
     ws = wb.active
     assert ws.title == "线索池"
@@ -61,7 +66,22 @@ def test_generate_xlsx_with_rows():
 def test_generate_xlsx_collection_field():
     rows = [{"id": 1, "matched_categories": ["咨询", "其他"]}]
     fields = ["id", "matched_categories"]
-    buffer = generate_xlsx(rows, fields=fields)
+    buffer = _xlsx_bytes(rows, fields=fields)
     wb = load_workbook(buffer)
     ws = wb.active
     assert "咨询" in ws.cell(row=2, column=2).value
+
+
+def test_generate_xlsx_accepts_generator():
+    """XLSX generator should consume rows lazily without requiring a list."""
+    def row_gen():
+        for i in range(100):
+            yield {"id": i, "text": f"comment {i}"}
+
+    fields = ["id", "text"]
+    chunks = list(generate_xlsx(row_gen(), fields=fields))
+    assert chunks
+    buffer = io.BytesIO(b"".join(chunks))
+    wb = load_workbook(buffer)
+    ws = wb.active
+    assert ws.max_row == 101  # header + 100 rows

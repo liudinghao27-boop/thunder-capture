@@ -96,14 +96,29 @@ class PerceptionService:
 
     def _current_focus(self, adb_serial: str) -> tuple[str, str]:
         client = ADBClient(adb_serial)
-        result = client.shell("dumpsys", "window", "windows", timeout=5)
-        text = result.text
-        match = re.search(r"mCurrentFocus=.*?\s([a-zA-Z0-9_.]+)/([a-zA-Z0-9_.$]+)", text)
-        if not match:
-            match = re.search(r"mFocusedApp=.*?\s([a-zA-Z0-9_.]+)/([a-zA-Z0-9_.$]+)", text)
-        if not match:
-            return "", ""
-        return match.group(1), match.group(2)
+        for args in (("dumpsys", "window", "windows"), ("dumpsys", "window")):
+            result = client.shell(*args, timeout=5)
+            focused = self._parse_focused_component(result.text)
+            if focused != ("", ""):
+                return focused
+        return "", ""
+
+    def _parse_focused_component(self, text: str) -> tuple[str, str]:
+        patterns = [
+            r"mCurrentFocus=.*?\s([a-zA-Z0-9_.]+)/([a-zA-Z0-9_.$]+)",
+            r"mFocusedApp=.*?\s([a-zA-Z0-9_.]+)/([a-zA-Z0-9_.$]+)",
+            r"mResumedActivity:.*?\s([a-zA-Z0-9_.]+)/([a-zA-Z0-9_.$]+)",
+            r"ResumedActivity:.*?\s([a-zA-Z0-9_.]+)/([a-zA-Z0-9_.$]+)",
+        ]
+        for pattern in patterns:
+            match = re.search(pattern, text or "")
+            if not match:
+                continue
+            package_name, activity = match.group(1), match.group(2)
+            if activity.startswith("."):
+                activity = f"{package_name}{activity}"
+            return package_name, activity
+        return "", ""
 
     def save_snapshot(
         self,

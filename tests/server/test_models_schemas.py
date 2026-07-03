@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import pytest
 from server.schemas.industry import IndustryCreate, IndustryUpdate, IndustryOut
 from server.models.industry import Industry
@@ -42,12 +44,13 @@ def test_industry_create_has_schedule_fields():
     data = IndustryCreate(
         name="测试", slug="test-schedule",
         send_start_time="09:00", send_end_time="21:00",
-        pause_weekends=True, daily_send_max=100,
+        pause_weekends=True, daily_send_max=100, hourly_send_limit=6,
         effect_webhook_url="https://example.com/events",
     )
     assert data.send_start_time == "09:00"
     assert data.pause_weekends is True
     assert data.daily_send_max == 100
+    assert data.hourly_send_limit == 6
 
 
 def test_industry_model_has_schedule_columns():
@@ -55,6 +58,7 @@ def test_industry_model_has_schedule_columns():
     assert hasattr(ind, "send_start_time")
     assert hasattr(ind, "pause_weekends")
     assert hasattr(ind, "daily_send_max")
+    assert hasattr(ind, "hourly_send_limit")
 
 
 def test_industry_config_has_schedule_fields():
@@ -62,12 +66,13 @@ def test_industry_config_has_schedule_fields():
         name="测试", slug="test-schedule", keywords=["a"], reply_tone="测试",
         reply_style="测试", categories=["c"],
         send_start_time="10:00", send_end_time="22:00",
-        pause_weekends=True, daily_send_max=200,
+        pause_weekends=True, daily_send_max=200, hourly_send_limit=8,
         effect_webhook_url="https://example.com/events",
     )
     assert cfg.send_start_time == "10:00"
     assert cfg.pause_weekends is True
     assert cfg.daily_send_max == 200
+    assert cfg.hourly_send_limit == 8
 
 
 def test_industry_create_defaults():
@@ -89,7 +94,7 @@ def test_industry_out_defaults():
         keywords=[], platforms=["douyin"], reply_tone="a", reply_style="b",
         reply_hook="", categories=[], daily_limit=15,
         video_max_age_days=14, comment_max_age_hours=48,
-        llm_provider="deepseek", llm_model="deepseek-chat",
+        llm_provider="deepseek", llm_model="deepseek-v4-flash",
         intent_keywords=[], noise_keywords=[], target_users=[],
         is_active=True, created_at="2026-06-15T10:00:00",
     )
@@ -113,7 +118,7 @@ def test_industry_out_model_validate():
     ind.video_max_age_days = 14
     ind.comment_max_age_hours = 48
     ind.llm_provider = "deepseek"
-    ind.llm_model = "deepseek-chat"
+    ind.llm_model = "deepseek-v4-flash"
     ind.intent_keywords = []
     ind.noise_keywords = []
     ind.target_users = []
@@ -132,6 +137,7 @@ def test_industry_out_model_validate():
     ind.send_end_time = "13:00"
     ind.pause_weekends = False
     ind.daily_send_max = 0
+    ind.hourly_send_limit = 0
     ind.effect_webhook_url = ""
     ind.reply_variants = []
     ind.is_active = True
@@ -144,6 +150,7 @@ def test_industry_out_model_validate():
     assert out.send_start_time == "09:00"
     assert out.pause_weekends is False
     assert out.daily_send_max == 0
+    assert out.hourly_send_limit == 0
 
 
 def test_target_users_normalization():
@@ -154,9 +161,6 @@ def test_target_users_normalization():
 def test_single_platform_validation():
     with pytest.raises(ValueError):
         IndustryCreate(name="测试", slug="test-ind", platforms=["douyin", "kuaishou"])
-
-
-from unittest.mock import patch
 
 
 @patch("server.services.url_security.socket.gethostbyname")
@@ -190,6 +194,32 @@ def test_task_queue_has_effect_columns():
     assert hasattr(t, "converted_at")
     assert hasattr(t, "reply_text")
     assert hasattr(t, "conversion_value")
+
+
+def test_create_default_admin_does_not_print_generated_password(monkeypatch, capsys):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+
+    from server.models import Base
+    from server.models import user as user_module
+
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    Base.metadata.create_all(bind=engine)
+    monkeypatch.setattr("server.models.SessionLocal", TestingSessionLocal)
+    monkeypatch.delenv("THUNDER_ADMIN_PASSWORD", raising=False)
+
+    user_module.create_default_admin()
+
+    captured = capsys.readouterr()
+    assert "Generated random password" not in captured.out
+    assert "Default admin user created." in captured.out
+    Base.metadata.drop_all(bind=engine)
 
 
 def test_industry_create_has_reply_variants():

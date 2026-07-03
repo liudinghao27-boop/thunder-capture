@@ -19,14 +19,19 @@ logs/
 data/chrome_profile/
 data/profiles/
 data/checkpoints/
+data/acceptance/
 data/*cookies*.json
 data/*.jsonl
 config/system.yaml
 
 # Local AI-agent/tooling metadata
+.agents/
 .codex/
 .claude/
 .context/
+.playwright-cli/
+.superpowers/
+.tmp/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

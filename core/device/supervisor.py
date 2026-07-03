@@ -31,6 +31,10 @@ class DeviceSupervisor:
         self.memory = AgentMemoryStore(user_id=user_id, industry_slug=industry_slug)
 
     def preflight(self, *, device_id: str, adb_serial: str, job_id: str = "") -> DeviceGate:
+        cooldown_gate = self._cooldown_gate(device_id)
+        if cooldown_gate is not None:
+            return cooldown_gate
+
         health = check_device_health(adb_serial)
         if not health.get("online"):
             reason = str(health.get("error") or "ADB device offline")[:500]
@@ -44,6 +48,42 @@ class DeviceSupervisor:
             return DeviceGate(False, "offline", reason, health)
         self.mark_started(device_id=device_id, job_id=job_id, health=health)
         return DeviceGate(True, "running", health=health)
+
+    def _cooldown_gate(self, device_id: str) -> DeviceGate | None:
+        if not self.user_id or not device_id:
+            return None
+        try:
+            from server.models import SessionLocal
+            from server.models.device import Device
+        except Exception:
+            return None
+
+        db = SessionLocal()
+        try:
+            device = db.query(Device).filter(
+                Device.id == device_id,
+                Device.user_id == self.user_id,
+            ).first()
+            if not device or not device.cooldown_until:
+                return None
+            cooldown_until = device.cooldown_until
+            if cooldown_until.tzinfo is None:
+                cooldown_until = cooldown_until.replace(tzinfo=timezone.utc)
+            if cooldown_until > utcnow():
+                reason = f"cooldown_until:{cooldown_until.isoformat()}"
+                return DeviceGate(False, "cooldown", reason)
+
+            device.cooldown_until = None
+            if device.runtime_status == "cooldown":
+                device.runtime_status = "idle"
+            device.last_error = ""
+            db.commit()
+            return None
+        except Exception:
+            db.rollback()
+            return None
+        finally:
+            db.close()
 
     def mark_started(self, *, device_id: str, job_id: str = "", health: dict | None = None) -> None:
         self._update_device(

@@ -4,6 +4,7 @@ import os
 import secrets
 import warnings
 from pathlib import Path
+
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -11,10 +12,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Load .env file
 load_dotenv(dotenv_path=BASE_DIR / ".env")
 
+# ── Runtime environment ──
+THUNDER_ENV = os.getenv("THUNDER_ENV", "development").lower()
+IS_PRODUCTION = THUNDER_ENV == "production"
+
 # ── Security: SECRET_KEY MUST be set via environment variable in production ──
-_raw_key = os.getenv("THUNDER_SECRET_KEY", "")
+_raw_key = os.getenv("THUNDER_SECRET_KEY", "").strip()
 if not _raw_key:
-    if os.getenv("THUNDER_ENV", "").lower() == "production":
+    if IS_PRODUCTION:
         raise RuntimeError(
             "THUNDER_SECRET_KEY must be set via environment variable in production. "
             "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
@@ -30,6 +35,7 @@ if not _raw_key:
         "THUNDER_SECRET_KEY not set — using persisted development key from "
         f"{dev_key_path}. Set THUNDER_SECRET_KEY in production!",
         RuntimeWarning,
+        stacklevel=2,
     )
 SECRET_KEY = _raw_key
 ALGORITHM = "HS256"
@@ -45,9 +51,13 @@ DEEPSEEK_KEY = os.getenv("THUNDER_DEEPSEEK_KEY", "")
 ZHIPU_KEY = os.getenv("THUNDER_ZHIPU_KEY", "")
 
 # ── CORS configuration ──
+# In production, THUNDER_CORS_ORIGINS must be explicitly set. Empty/unspecified
+# means no cross-origin requests are allowed (safe default).
 _CORS_ORIGINS = os.getenv("THUNDER_CORS_ORIGINS", "")
 if _CORS_ORIGINS:
-    CORS_ORIGINS = [o.strip() for o in _CORS_ORIGINS.split(",")]
+    CORS_ORIGINS = [o.strip() for o in _CORS_ORIGINS.split(",") if o.strip()]
+elif IS_PRODUCTION:
+    CORS_ORIGINS = []
 else:
     # Development defaults — override in production via THUNDER_CORS_ORIGINS
     CORS_ORIGINS = ["http://localhost:5173", "http://localhost:3000"]

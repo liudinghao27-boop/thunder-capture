@@ -6,7 +6,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from server.models import Base
-from server.models.task import CollectedVideo, CollectorState, TargetBlogger
+from server.models.task import CollectedVideo, CollectorState, TargetBlogger, TaskQueue
 
 
 @pytest.fixture
@@ -112,3 +112,50 @@ def test_collector_state_uses_value_column(db):
     set_collector_state("test-ind", "douyin", "cursor", {"page": 2})
     retrieved = get_collector_state("test-ind", "douyin", "cursor")
     assert retrieved == {"page": 2}
+
+
+def test_enqueue_tasks_batch_result_reports_inserted_and_duplicates(db, monkeypatch):
+    import server.models as models_module
+
+    monkeypatch.setattr(models_module, "SessionLocal", lambda: db)
+    monkeypatch.setattr(models_module, "engine", db.get_bind())
+
+    from server.services.task_stats import enqueue_tasks_batch_result
+
+    comments = [
+        {
+            "industry_slug": "test-ind",
+            "text": "想咨询报名流程",
+            "source_name": "user-a",
+            "source_sec_uid": "sec-a",
+            "source_short_id": "comment-1",
+            "source_video_id": "video-1",
+            "source_keyword": "征兵",
+            "matched_categories": {"categories": ["咨询"], "confidence": "high"},
+            "owner_user_id": "u1",
+            "job_id": "job-1",
+            "source_platform": "douyin",
+        },
+        {
+            "industry_slug": "test-ind",
+            "text": "想咨询报名流程",
+            "source_name": "user-a",
+            "source_sec_uid": "sec-a",
+            "source_short_id": "comment-1",
+            "source_video_id": "video-1",
+            "source_keyword": "征兵",
+            "matched_categories": {"categories": ["咨询"], "confidence": "high"},
+            "owner_user_id": "u1",
+            "job_id": "job-1",
+            "source_platform": "douyin",
+        },
+    ]
+
+    result = enqueue_tasks_batch_result(comments)
+
+    assert result == {"received": 2, "valid": 2, "inserted": 1, "duplicates": 1, "invalid": 0}
+    rows = db.query(TaskQueue).all()
+    assert len(rows) == 1
+    assert rows[0].owner_user_id == "u1"
+    assert rows[0].job_id == "job-1"
+    assert rows[0].platform == "douyin"

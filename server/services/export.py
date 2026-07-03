@@ -3,6 +3,8 @@
 import csv
 import io
 import json
+import tempfile
+from pathlib import Path
 from typing import Iterable
 
 from openpyxl import Workbook
@@ -81,27 +83,38 @@ def generate_csv(rows: Iterable[dict], fields: list[str] | None = None) -> Itera
     return _write_csv_rows(rows, fields)
 
 
-def generate_xlsx(rows: Iterable[dict], fields: list[str] | None = None) -> io.BytesIO:
-    """Generate an XLSX workbook in memory."""
+def generate_xlsx(rows: Iterable[dict], fields: list[str] | None = None) -> Iterable[bytes]:
+    """Yield an XLSX workbook as byte chunks.
+
+    Uses an openpyxl write-only workbook and a temporary file so that the whole
+    workbook is never materialised in memory. The input ``rows`` may be a
+    generator, allowing the database to be read in batches.
+    """
     fields = fields or DEFAULT_EXPORT_FIELDS
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "线索池"
-
     headers = [FIELD_TITLES.get(f, f) for f in fields]
-    ws.append(headers)
 
-    for row in rows:
-        normalized = normalize_export_row(row, fields)
-        ws.append([normalized[f] for f in fields])
+    with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
+        tmp_path = Path(tmp.name)
 
-    for i, _ in enumerate(fields, 1):
-        col_letter = get_column_letter(i)
-        ws.column_dimensions[col_letter].width = min(
-            60, max(12, len(FIELD_TITLES.get(fields[i - 1], fields[i - 1])) + 2)
-        )
+    try:
+        wb = Workbook(write_only=True)
+        ws = wb.create_sheet(title="线索池")
+        ws.append(headers)
 
-    buffer = io.BytesIO()
-    wb.save(buffer)
-    buffer.seek(0)
-    return buffer
+        for i, field in enumerate(fields, 1):
+            col_letter = get_column_letter(i)
+            ws.column_dimensions[col_letter].width = min(
+                60, max(12, len(FIELD_TITLES.get(field, field)) + 2)
+            )
+
+        for row in rows:
+            normalized = normalize_export_row(row, fields)
+            ws.append([normalized[f] for f in fields])
+
+        wb.save(tmp_path)
+
+        with open(tmp_path, "rb") as f:
+            while chunk := f.read(64 * 1024):
+                yield chunk
+    finally:
+        tmp_path.unlink(missing_ok=True)

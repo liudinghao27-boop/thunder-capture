@@ -6,6 +6,7 @@ import logging
 import re
 import subprocess
 from pathlib import Path
+from typing import Any
 
 log = logging.getLogger("thunder.adb_keyboard")
 
@@ -30,6 +31,8 @@ def _run_adb(serial: str, args: list[str], timeout: float = 8.0) -> subprocess.C
         ["adb", "-s", serial, *args],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         timeout=timeout,
     )
 
@@ -74,11 +77,46 @@ def install_adb_keyboard(serial: str) -> tuple[bool, str]:
     output = (result.stdout + result.stderr).strip()
     if result.returncode == 0 or "success" in output.lower():
         return True, output or "installed"
+
+    if "INSTALL_FAILED_VERSION_DOWNGRADE" in output:
+        try:
+            retry = _run_adb(serial, ["install", "-r", "-d", str(apk)], timeout=30)
+        except subprocess.TimeoutExpired:
+            return False, "install downgrade retry timed out; check USB install permission on the phone"
+        retry_output = (retry.stdout + retry.stderr).strip()
+        if retry.returncode == 0 or "success" in retry_output.lower():
+            return True, retry_output or "installed with downgrade flag"
+        return False, retry_output or f"adb install -d failed with code {retry.returncode}"
+
+    if "INSTALL_FAILED_UPDATE_INCOMPATIBLE" in output:
+        try:
+            uninstall = _run_adb(serial, ["uninstall", ADB_KEYBOARD_PACKAGE], timeout=20)
+            reinstall = _run_adb(serial, ["install", "-r", str(apk)], timeout=30)
+        except subprocess.TimeoutExpired:
+            return False, "install incompatible retry timed out"
+        uninstall_output = (uninstall.stdout + uninstall.stderr).strip()
+        reinstall_output = (reinstall.stdout + reinstall.stderr).strip()
+        if reinstall.returncode == 0 or "success" in reinstall_output.lower():
+            return True, "; ".join(
+                part for part in [uninstall_output or "uninstalled incompatible package", reinstall_output] if part
+            )
+        return False, reinstall_output or f"adb reinstall failed with code {reinstall.returncode}"
+
     return False, output or f"adb install failed with code {result.returncode}"
 
 
 def enable_adb_keyboard(serial: str) -> tuple[bool, str]:
     messages = []
+    try:
+        package_enable = _run_adb(
+            serial,
+            ["shell", "pm", "enable", ADB_KEYBOARD_PACKAGE],
+            timeout=8,
+        )
+        messages.append((package_enable.stdout + package_enable.stderr).strip())
+    except subprocess.TimeoutExpired:
+        return False, "package enable timed out"
+
     try:
         enable = _run_adb(
             serial,
@@ -148,10 +186,10 @@ def prepare_adb_keyboard(serial: str, install_if_missing: bool = True) -> dict:
         return result
 
 
-def adb_device_health(serial: str) -> dict:
+def adb_device_health(serial: str) -> dict[str, Any]:
     """Return lightweight ADB health details for UI diagnostics."""
     validate_adb_serial(serial)
-    health = {
+    health: dict[str, Any] = {
         "serial": serial,
         "online": False,
         "boot_completed": False,

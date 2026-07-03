@@ -58,6 +58,7 @@ def db_session():
 
     db.close()
     Base.metadata.drop_all(bind=engine)
+    engine.dispose()
 
 
 @contextmanager
@@ -71,7 +72,8 @@ def _auth_client(db_session):
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_current_user] = lambda: FakeUser()
     try:
-        yield TestClient(app)
+        with TestClient(app) as client:
+            yield client
     finally:
         app.dependency_overrides.clear()
 

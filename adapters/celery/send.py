@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 
 from adapters.celery.app import app
+from core.constants import DEFAULT_DAILY_LIMIT, DEFAULT_MIN_INTERVAL_SEC
 
 log = logging.getLogger("thunder.celery.send")
 
@@ -40,7 +41,6 @@ def send_dm_task(
     from server.models import SessionLocal
     from server.models.industry import Industry
     from server.api.industries import _to_industry_config
-    from core.task.worker import DeviceWorker
 
     db = SessionLocal()
     try:
@@ -56,14 +56,16 @@ def send_dm_task(
 
     def should_stop():
         # Celery best-effort abort signal
-        return self.is_aborted()
+        is_aborted = getattr(self, "is_aborted", None)
+        return bool(is_aborted and is_aborted())
 
+    from core.task.worker import DeviceWorker
     worker = DeviceWorker(
         device_id=device_id,
         adb_serial=adb_serial,
         industry=cfg,
-        daily_limit=task_data.get("daily_limit", cfg.daily_limit or 15),
-        min_interval=task_data.get("min_interval_sec", 90),
+        daily_limit=task_data.get("daily_limit", cfg.daily_limit or DEFAULT_DAILY_LIMIT),
+        min_interval=task_data.get("min_interval_sec", DEFAULT_MIN_INTERVAL_SEC),
         should_stop=should_stop,
         job_id=task_data.get("job_id", ""),
     )
@@ -75,7 +77,7 @@ def send_dm_task(
 
 
 @app.task(bind=True, max_retries=1)
-def run_send_batch(self, industry_slug: str, user_id: str = "", device_ids: list[str] = None):
+def run_send_batch(self, industry_slug: str, user_id: str = "", device_ids: list[str] | None = None):
     """Orchestrate batch sending across multiple devices using DB config."""
     from core.task.worker import run_senders
     from server.models import SessionLocal
@@ -85,7 +87,7 @@ def run_send_batch(self, industry_slug: str, user_id: str = "", device_ids: list
     db = SessionLocal()
     try:
         if industry_slug == "__all_active__":
-            industries = db.query(Industry).filter(Industry.is_active == True).all()
+            industries = db.query(Industry).filter(Industry.is_active.is_(True)).all()
             results = []
             for ind in industries:
                 cfg = _to_industry_config(ind)
@@ -102,12 +104,4 @@ def run_send_batch(self, industry_slug: str, user_id: str = "", device_ids: list
     finally:
         db.close()
 
-    result = run_senders(cfg, device_ids)
-    log.info(
-        "Batch send done: skipped=%s sent=%d failed=%d devices=%d",
-        result.get("skipped", False),
-        result.get("sent_total", 0),
-        result.get("failed_total", 0),
-        result.get("devices_total", 0),
-    )
-    return result
+    return run_senders(cfg, device_ids)

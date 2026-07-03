@@ -1,6 +1,8 @@
 """JWT authentication."""
 
+import uuid
 from datetime import datetime, timedelta, timezone
+from typing import cast
 
 import bcrypt
 from fastapi import Depends, HTTPException
@@ -24,9 +26,16 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def create_access_token(user_id: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    payload = {"sub": user_id, "exp": expire}
-    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+    issued_at = datetime.now(timezone.utc)
+    expire = issued_at + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    payload = {
+        "sub": user_id,
+        "iat": issued_at,
+        "nbf": issued_at,
+        "jti": str(uuid.uuid4()),
+        "exp": expire,
+    }
+    return cast(str, jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM))
 
 
 def get_current_user(

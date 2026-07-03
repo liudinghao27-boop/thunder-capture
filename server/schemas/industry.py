@@ -5,6 +5,17 @@ from typing import Optional
 
 from pydantic import BaseModel, field_validator
 
+from core.constants import (
+    DEFAULT_COLLECT_AUTHORS_PER_RUN,
+    DEFAULT_COLLECT_VIDEO_LIMIT,
+    DEFAULT_COMMENT_MAX_AGE_HOURS,
+    DEFAULT_DAILY_LIMIT,
+    DEFAULT_KEYWORD_BATCH_SIZE,
+    DEFAULT_LEAD_INVENTORY_DAYS,
+    DEFAULT_MATRIX_TARGET_DEVICES,
+    DEFAULT_REPLENISH_THRESHOLD_DAYS,
+    DEFAULT_VIDEO_MAX_AGE_DAYS,
+)
 from server.services.url_security import is_safe_webhook_url
 
 
@@ -58,22 +69,22 @@ class IndustryCreate(BaseModel):
     reply_style: str = "亲切专业"
     reply_hook: str = ""
     categories: list[str] = []
-    daily_limit: int = 15
-    video_max_age_days: int = 14
-    comment_max_age_hours: int = 48
+    daily_limit: int = DEFAULT_DAILY_LIMIT
+    video_max_age_days: int = DEFAULT_VIDEO_MAX_AGE_DAYS
+    comment_max_age_hours: int = DEFAULT_COMMENT_MAX_AGE_HOURS
     llm_provider: str = "deepseek"
-    llm_model: str = "deepseek-chat"
+    llm_model: str = "deepseek-v4-flash"
     intent_keywords: list[str] = []
     noise_keywords: list[str] = []
     target_users: list[str] = []
-    matrix_target_devices: int = 30
-    lead_inventory_days: int = 3
+    matrix_target_devices: int = DEFAULT_MATRIX_TARGET_DEVICES
+    lead_inventory_days: int = DEFAULT_LEAD_INVENTORY_DAYS
     global_daily_limit: int = 0
     auto_replenish_enabled: bool = False
-    replenish_threshold_days: int = 1
-    keyword_batch_size: int = 12
-    collect_authors_per_run: int = 60
-    collect_video_limit: int = 120
+    replenish_threshold_days: int = DEFAULT_REPLENISH_THRESHOLD_DAYS
+    keyword_batch_size: int = DEFAULT_KEYWORD_BATCH_SIZE
+    collect_authors_per_run: int = DEFAULT_COLLECT_AUTHORS_PER_RUN
+    collect_video_limit: int = DEFAULT_COLLECT_VIDEO_LIMIT
     compliance_mode: bool = False
     webhook_url: str = ""
     auto_export_enabled: bool = False
@@ -81,6 +92,7 @@ class IndustryCreate(BaseModel):
     send_end_time: str = "13:00"
     pause_weekends: bool = False
     daily_send_max: int = 0
+    hourly_send_limit: int = 0
     effect_webhook_url: str = ""
     reply_variants: list[dict] = []
 
@@ -140,6 +152,7 @@ class IndustryUpdate(BaseModel):
     send_end_time: str | None = None
     pause_weekends: bool | None = None
     daily_send_max: int | None = None
+    hourly_send_limit: int | None = None
     effect_webhook_url: str | None = None
     reply_variants: list[dict] | None = None
     is_active: Optional[bool] = None
@@ -188,14 +201,14 @@ class IndustryOut(BaseModel):
     intent_keywords: list
     noise_keywords: list
     target_users: list[str] = []
-    matrix_target_devices: int = 30
-    lead_inventory_days: int = 3
+    matrix_target_devices: int = DEFAULT_MATRIX_TARGET_DEVICES
+    lead_inventory_days: int = DEFAULT_LEAD_INVENTORY_DAYS
     global_daily_limit: int = 0
     auto_replenish_enabled: bool = False
-    replenish_threshold_days: int = 1
-    keyword_batch_size: int = 12
-    collect_authors_per_run: int = 60
-    collect_video_limit: int = 120
+    replenish_threshold_days: int = DEFAULT_REPLENISH_THRESHOLD_DAYS
+    keyword_batch_size: int = DEFAULT_KEYWORD_BATCH_SIZE
+    collect_authors_per_run: int = DEFAULT_COLLECT_AUTHORS_PER_RUN
+    collect_video_limit: int = DEFAULT_COLLECT_VIDEO_LIMIT
     compliance_mode: bool = False
     webhook_url: str = ""
     auto_export_enabled: bool = False
@@ -203,6 +216,7 @@ class IndustryOut(BaseModel):
     send_end_time: str = "13:00"
     pause_weekends: bool = False
     daily_send_max: int = 0
+    hourly_send_limit: int = 0
     effect_webhook_url: str = ""
     reply_variants: list[dict] = []
     is_active: bool

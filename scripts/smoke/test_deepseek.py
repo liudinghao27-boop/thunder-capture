@@ -21,7 +21,7 @@ def main() -> int:
     client = OpenAI(base_url="https://api.deepseek.com", api_key=api_key)
     try:
         response = client.chat.completions.create(
-            model=os.getenv("THUNDER_DEEPSEEK_MODEL", "deepseek-chat"),
+            model=os.getenv("THUNDER_DEEPSEEK_MODEL", "deepseek-v4-flash"),
             messages=[{"role": "user", "content": "Reply with OK only."}],
             max_tokens=8,
             temperature=0,

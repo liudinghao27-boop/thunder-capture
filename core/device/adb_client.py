@@ -5,9 +5,12 @@ from __future__ import annotations
 import base64
 import re
 import subprocess
+import time
 from dataclasses import dataclass
 
 _ADB_SERIAL_RE = re.compile(r"^[a-zA-Z0-9._:\-]{1,128}$")
+_ADB_TEXT_ENCODING = "utf-8"
+_INPUT_VERIFY_DELAY_SEC = 0.7
 
 
 class ADBError(RuntimeError):
@@ -52,6 +55,39 @@ def parse_adb_devices(output: str) -> list[str]:
     return serials
 
 
+def _decode_adb_text(value: str | bytes | None) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value
+    return value.decode(_ADB_TEXT_ENCODING, errors="replace")
+
+
+def _contains_non_ascii(text: str) -> bool:
+    return any(ord(ch) > 127 for ch in text or "")
+
+
+def _normalize_visible_text(text: str) -> str:
+    replacements = {
+        "，": ",",
+        "。": ".",
+        "！": "!",
+        "？": "?",
+        "：": ":",
+        "；": ";",
+        "（": "(",
+        "）": ")",
+        "“": '"',
+        "”": '"',
+        "‘": "'",
+        "’": "'",
+    }
+    normalized = str(text or "")
+    for source, target in replacements.items():
+        normalized = normalized.replace(source, target)
+    return re.sub(r"\s+", "", normalized)
+
+
 class ADBClient:
     """Small validated ADB client.
 
@@ -68,10 +104,10 @@ class ADBClient:
         result = subprocess.run(
             ["adb", "devices"],
             capture_output=True,
-            text=True,
+            text=False,
             timeout=timeout,
         )
-        return parse_adb_devices(result.stdout + result.stderr)
+        return parse_adb_devices(_decode_adb_text(result.stdout) + _decode_adb_text(result.stderr))
 
     def run(
         self,
@@ -86,17 +122,19 @@ class ADBClient:
             result = subprocess.run(
                 command,
                 capture_output=True,
-                text=text,
+                text=False,
                 timeout=timeout,
             )
         except subprocess.TimeoutExpired as exc:
             raise ADBError(f"ADB command timed out: {' '.join(command)}") from exc
 
+        stdout_text = _decode_adb_text(result.stdout) if text else ""
+        stderr_text = _decode_adb_text(result.stderr) if text else ""
         adb_result = ADBResult(
             args=command,
             returncode=result.returncode,
-            stdout=result.stdout if text else "",
-            stderr=result.stderr if text else "",
+            stdout=stdout_text,
+            stderr=stderr_text,
             output=b"" if text else (result.stdout or b""),
         )
         if check and not adb_result.ok:
@@ -133,6 +171,7 @@ class ADBClient:
         return self.shell("input", "keyevent", key, timeout=3)
 
     def input_text(self, text: str) -> ADBResult:
+        expected = text or ""
         encoded = base64.b64encode((text or "").encode("utf-8")).decode("utf-8")
         result = self.shell(
             "am",
@@ -144,9 +183,48 @@ class ADBClient:
             encoded,
             timeout=5,
         )
+        if result.ok and self._input_text_verified(expected):
+            return result
+        if result.ok and _contains_non_ascii(expected):
+            chars = ",".join(str(ord(ch)) for ch in expected)
+            chars_result = self.shell(
+                "am",
+                "broadcast",
+                "-a",
+                "ADB_INPUT_CHARS",
+                "--eia",
+                "chars",
+                chars,
+                timeout=5,
+            )
+            if chars_result.ok and self._input_text_verified(expected):
+                return chars_result
+            return ADBResult(
+                args=result.args,
+                returncode=2,
+                stdout=result.stdout,
+                stderr=(
+                    "ADB keyboard accepted the broadcast, but the focused field "
+                    "does not contain the expected Unicode text. Stop before send."
+                ),
+            )
         if result.ok:
             return result
         return self.shell("input", "text", text or "", timeout=5)
+
+    def _input_text_verified(self, expected: str) -> bool:
+        if not expected or not _contains_non_ascii(expected):
+            return True
+        time.sleep(_INPUT_VERIFY_DELAY_SEC)
+        try:
+            from core.vision.ocr import OCRService
+
+            ocr_result = OCRService().extract(self.screen_png())
+        except Exception:
+            return False
+        if ocr_result.status != "ok":
+            return False
+        return _normalize_visible_text(expected) in _normalize_visible_text(ocr_result.text)
 
     def force_stop(self, package_name: str) -> ADBResult:
         if not re.match(r"^[a-zA-Z0-9_.]+$", str(package_name or "")):

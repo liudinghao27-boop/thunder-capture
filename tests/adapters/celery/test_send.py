@@ -86,6 +86,8 @@ def test_send_dm_task_runs_when_compliance_mode_disabled(db_session, monkeypatch
 
     assert result == worker_summary
     worker_mock.assert_called_once()
+    should_stop = worker_mock.call_args.kwargs["should_stop"]
+    assert should_stop() is False
     retry_mock.assert_not_called()
 
 

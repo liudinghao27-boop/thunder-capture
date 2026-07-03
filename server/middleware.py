@@ -1,14 +1,20 @@
 """Rate-limiting and security middleware for Thunder Capture API."""
 
-import time
+import logging
 import threading
+import time
+import uuid
 from collections import defaultdict, deque
-from typing import Callable
+from typing import Callable, cast
 
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
+
+from core.redis import get_redis_client
+
+logger = logging.getLogger("thunder.middleware")
 
 
 class InMemoryRateLimiter:
@@ -66,6 +72,74 @@ class InMemoryRateLimiter:
             return max(0, self.max_requests - len(bucket))
 
 
+class RedisRateLimiter:
+    """Redis-backed sliding-window rate limiter.
+
+    Shares state across API workers so a single client cannot exceed limits by
+    hitting different processes. Falls back to the in-memory implementation when
+    Redis is unavailable.
+    """
+
+    _ALLOW_SCRIPT = """
+    local key = KEYS[1]
+    local window = tonumber(ARGV[1])
+    local now = tonumber(ARGV[2])
+    local max_requests = tonumber(ARGV[3])
+    local member = ARGV[4]
+    local cutoff = now - window
+
+    redis.call('ZREMRANGEBYSCORE', key, 0, cutoff)
+    local count = redis.call('ZCARD', key)
+    if count < max_requests then
+        redis.call('ZADD', key, now, member)
+        redis.call('EXPIRE', key, window)
+        return 1
+    else
+        return 0
+    end
+    """
+
+    def __init__(self, redis_client, max_requests: int = 60, window_seconds: int = 60):
+        self._redis = redis_client
+        self.max_requests = max_requests
+        self.window_seconds = window_seconds
+
+    def _key(self, key: str) -> str:
+        return f"thunder:ratelimit:{self.window_seconds}:{key}"
+
+    def is_allowed(self, key: str) -> bool:
+        now = time.time()
+        member = f"{now}:{uuid.uuid4().hex}"
+        result = self._redis.eval(
+            self._ALLOW_SCRIPT,
+            1,
+            self._key(key),
+            self.window_seconds,
+            now,
+            self.max_requests,
+            member,
+        )
+        return bool(result)
+
+    def remaining(self, key: str) -> int:
+        k = self._key(key)
+        now = time.time()
+        cutoff = now - self.window_seconds
+        pipe = self._redis.pipeline()
+        pipe.zremrangebyscore(k, 0, cutoff)
+        pipe.zcard(k)
+        results = pipe.execute()
+        count = cast(int, results[1])
+        return max(0, self.max_requests - count)
+
+
+def _make_limiter(redis_client, max_requests: int, window_seconds: int):
+    """Build the best available limiter for the current environment."""
+    if redis_client is not None:
+        return RedisRateLimiter(redis_client, max_requests, window_seconds)
+    return InMemoryRateLimiter(max_requests, window_seconds)
+
+
 # ── FastAPI middleware ──────────────────────────────────
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -74,13 +148,23 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     Limits:
       - /api/auth/*     → 20 req/min (login/register)
       - /api/* (general) → 60 req/min
+      - polling/status endpoints → 120 req/min
+
+    Uses Redis when ``THUNDER_REDIS_URL``/``REDIS_URL`` is reachable, otherwise
+    falls back to an in-memory limiter.
     """
 
-    def __init__(self, app):
+    def __init__(self, app, redis_client=None):
         super().__init__(app)
-        self.auth_limiter = InMemoryRateLimiter(max_requests=20, window_seconds=60)
-        self.general_limiter = InMemoryRateLimiter(max_requests=60, window_seconds=60)
-        self.monitor_limiter = InMemoryRateLimiter(max_requests=120, window_seconds=60)
+        if redis_client is None:
+            redis_client = get_redis_client()
+        if redis_client is None:
+            logger.info("Rate limiting: Redis unavailable, using in-memory limiter.")
+        else:
+            logger.info("Rate limiting: using Redis-backed limiter.")
+        self.auth_limiter = _make_limiter(redis_client, 20, 60)
+        self.general_limiter = _make_limiter(redis_client, 60, 60)
+        self.monitor_limiter = _make_limiter(redis_client, 120, 60)
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
         path = request.url.path
@@ -88,7 +172,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         # Static files and GET status endpoints skip rate limiting
         if path.startswith("/static") or path == "/" or path == "/favicon.ico":
-            return await call_next(request)
+            return cast(Response, await call_next(request))
 
         # Get client IP (respect X-Forwarded-For if behind proxy)
         client_ip = (
@@ -98,7 +182,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             else "unknown"
         )
 
-        # GET status/cancel-check endpoints — 60 req/min (sufficient for dashboard polling)
+        # GET status/cancel-check endpoints — higher limit for dashboard polling
         if method == "GET" and (
             path.startswith("/api/jobs")
             or path.startswith("/api/stats")
@@ -121,7 +205,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 headers={"Retry-After": str(retry_after)},
             )
 
-        response = await call_next(request)
+        response = cast(Response, await call_next(request))
         return response
 
 
@@ -131,7 +215,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Add basic security headers to all responses."""
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        response = await call_next(request)
+        response = cast(Response, await call_next(request))
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-XSS-Protection"] = "1; mode=block"

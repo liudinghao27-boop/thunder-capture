@@ -7,9 +7,17 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+from core.constants import (
+    DEFAULT_DAILY_LIMIT,
+    DEFAULT_LEAD_INVENTORY_DAYS,
+    DEFAULT_MATRIX_TARGET_DEVICES,
+    DEFAULT_REPLENISH_THRESHOLD_DAYS,
+)
+from core.task.job_state import transition
+
 # ── Import engine modules at module level (fail-fast on startup) ──
 from core.discover import run_discovery
-from core.classify import classify_batch, enqueue_classified
+from core.classify import classify_batch, enqueue_classified_result
 from core.task.worker import run_senders
 from server.services.llm import get_llm_client
 
@@ -21,6 +29,8 @@ _jobs_lock = threading.Lock()
 _MAX_JOB_HISTORY = 200
 _CANCELLING_GRACE_SECONDS = 120
 _COLLECT_HEARTBEAT_SECONDS = 20
+_RUNNING_JOB_TIMEOUT_SECONDS = 300  # 5 minutes without an update is considered orphaned
+_SEND_HEARTBEAT_SECONDS = 30
 
 
 def _now():
@@ -74,7 +84,7 @@ def _release_claimed_tasks_for_job(job: dict) -> int:
     devices = [str(d).strip() for d in devices if str(d).strip()]
     try:
         from server.models import SessionLocal
-        from server.models.task import TaskQueue
+        from server.models.task import IndustryDailyQuota, TaskQueue
     except Exception as e:
         log.debug("Queue unavailable for claim release: %s", e)
         return 0
@@ -82,6 +92,19 @@ def _release_claimed_tasks_for_job(job: dict) -> int:
     job_id = job.get("job_id") or job.get("id", "")
     db = SessionLocal()
     released = 0
+
+    def release_quota_reservations(count: int) -> None:
+        if not industry_slug or count <= 0:
+            return
+        day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        quota = db.query(IndustryDailyQuota).filter(
+            IndustryDailyQuota.industry_slug == industry_slug,
+            IndustryDailyQuota.day == day,
+        ).first()
+        if quota is None:
+            return
+        quota.reserved = max(int(quota.reserved or 0) - count, 0)
+
     try:
         if job_id:
             released = db.query(TaskQueue).filter(
@@ -95,6 +118,7 @@ def _release_claimed_tasks_for_job(job: dict) -> int:
                 TaskQueue.retry_after: None,
                 TaskQueue.error: None
             }, synchronize_session=False)
+            release_quota_reservations(released)
             db.commit()
             if released:
                 log.warning("Released %s claimed task(s) for cancelled/orphaned job %s", released, job_id)
@@ -113,6 +137,7 @@ def _release_claimed_tasks_for_job(job: dict) -> int:
                 TaskQueue.retry_after: None,
                 TaskQueue.error: None
             }, synchronize_session=False)
+            release_quota_reservations(released)
             db.commit()
             if released:
                 log.warning("Released %s claimed task(s) for cancelled/orphaned job %s", released, job.get("job_id") or job.get("id", ""))
@@ -126,7 +151,8 @@ def reconcile_stale_cancellations(user_id: str = "") -> int:
     try:
         from server.models import SessionLocal
         from server.models.job import Job
-    except Exception:
+    except Exception as exc:
+        log.debug("Cannot reconcile stale cancellations: %s", exc)
         return 0
 
     now = datetime.now(timezone.utc)
@@ -136,12 +162,12 @@ def reconcile_stale_cancellations(user_id: str = "") -> int:
     try:
         query = db.query(Job).filter(
             Job.status == "cancelling",
-            Job.cancel_requested == True,
+            Job.cancel_requested.is_(True),
         )
         if user_id:
             query = query.filter(Job.user_id == user_id)
         for job in query.all():
-            payload = job.payload or {}
+            payload: dict = dict(job.payload or {})
             requested_at = _as_aware_utc(
                 _parse_dt(payload.get("cancel_requested_at"))
                 or job.updated_at
@@ -217,12 +243,25 @@ def _fail_orphaned_running_snapshot(job_id: str, job: dict) -> dict:
     return snapshot
 
 
+def _is_orphaned_running_job(job) -> bool:
+    """Return True when a running job has not updated its heartbeat recently."""
+    if job.status != "running":
+        return False
+    updated_at = _as_aware_utc(job.updated_at)
+    if updated_at is None:
+        return True
+    return datetime.now(timezone.utc) - updated_at > timedelta(
+        seconds=_RUNNING_JOB_TIMEOUT_SECONDS
+    )
+
+
 def reconcile_orphaned_running_jobs(user_id: str = "") -> int:
-    """Fail DB running jobs that survived their owning worker process/thread."""
+    """Fail DB running jobs whose heartbeat/update timestamp has gone stale."""
     try:
         from server.models import SessionLocal
         from server.models.job import Job
-    except Exception:
+    except Exception as exc:
+        log.debug("Cannot reconcile orphaned jobs: %s", exc)
         return 0
 
     db = SessionLocal()
@@ -232,7 +271,7 @@ def reconcile_orphaned_running_jobs(user_id: str = "") -> int:
         if user_id:
             query = query.filter(Job.user_id == user_id)
         for job in query.all():
-            if _job_in_memory(job.id):
+            if not _is_orphaned_running_job(job):
                 continue
             snapshot = {
                 **(job.payload or {}),
@@ -285,14 +324,16 @@ def _persist_job(job_id: str, fields: dict):
         return
 
     user_id = fields.get("user_id", "")
-    if not user_id:
-        return
 
     db = SessionLocal()
     try:
         Job.__table__.create(bind=db.get_bind(), checkfirst=True)
         job = db.query(Job).filter(Job.id == job_id).first()
         if not job:
+            # user_id is required by the schema; skip creation if we do not know
+            # the owner, but still keep the in-memory cache up to date.
+            if not user_id:
+                return
             job = Job(
                 id=job_id,
                 user_id=user_id,
@@ -301,6 +342,10 @@ def _persist_job(job_id: str, fields: dict):
                 created_at=_parse_dt(fields.get("created_at")) or datetime.now(timezone.utc),
             )
             db.add(job)
+
+        target_status = fields.get("status")
+        if job.status and target_status:
+            transition(job.status, target_status)
 
         for attr in (
             "user_id", "type", "status", "progress", "industry_slug",
@@ -322,6 +367,9 @@ def _persist_job(job_id: str, fields: dict):
                 payload[key] = value
         job.payload = payload
         db.commit()
+    except ValueError:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         log.warning("Failed to persist job %s: %s", job_id, e)
@@ -330,15 +378,28 @@ def _persist_job(job_id: str, fields: dict):
 
 
 def _set_job(job_id: str, **fields):
-    """Thread-safe job state update with atomic prune."""
-    fields.setdefault("job_id", job_id)
-    with _jobs_lock:
-        if job_id in _jobs:
-            _jobs[job_id].update(fields)
-        else:
-            _jobs[job_id] = fields
+    """Thread-safe job state update with DB as the source of truth.
 
-        # Prune old jobs to prevent memory leak (inside same critical section)
+    The database is written first so that other processes/API workers see the
+    latest state; the in-memory cache is kept only for low-latency lookups in
+    the current process.
+    """
+    fields.setdefault("job_id", job_id)
+
+    # Merge with any cached state so the DB always receives the full snapshot.
+    with _jobs_lock:
+        existing = dict(_jobs.get(job_id, {}))
+    if existing.get("status") and fields.get("status"):
+        transition(existing["status"], fields["status"])
+    snapshot = {**existing, **fields}
+    snapshot.setdefault("updated_at", _now())
+
+    _persist_job(job_id, snapshot)
+
+    with _jobs_lock:
+        _jobs[job_id] = snapshot
+
+        # Prune old jobs to prevent memory leak.
         if len(_jobs) > _MAX_JOB_HISTORY + 50:
             finished = [
                 jid for jid, j in _jobs.items()
@@ -351,9 +412,6 @@ def _set_job(job_id: str, **fields):
                 )
                 for old_jid in finished[_MAX_JOB_HISTORY:]:
                     del _jobs[old_jid]
-        snapshot = dict(_jobs.get(job_id, {}))
-
-    _persist_job(job_id, snapshot)
 
 
 def _is_cancel_requested(job_id: str) -> bool:
@@ -363,12 +421,13 @@ def _is_cancel_requested(job_id: str) -> bool:
     try:
         from server.models import SessionLocal
         from server.models.job import Job
-    except Exception:
+    except Exception as exc:
+        log.debug("Cannot check cancel status: %s", exc)
         return False
 
     db = SessionLocal()
     try:
-        job = db.query(Job).filter(Job.id == job_id).first()
+        job: Job | None = db.query(Job).filter(Job.id == job_id).first()
         return bool(job and job.cancel_requested)
     finally:
         db.close()
@@ -433,6 +492,16 @@ def _run_async(coro):
     t.start()
 
 
+def _collect_source_breakdown(comments: list[dict] | None) -> dict:
+    breakdown = {"keyword": 0, "target_account": 0}
+    for comment in comments or []:
+        source_type = str(comment.get("source_type") or "keyword").strip() or "keyword"
+        if source_type not in breakdown:
+            breakdown[source_type] = 0
+        breakdown[source_type] += 1
+    return breakdown
+
+
 def _trigger_auto_export(slug: str, user_id: str, passed: list[dict]) -> None:
     """Push classified leads to webhook when auto_export_enabled is set.
 
@@ -486,8 +555,8 @@ def run_collect_job(industry_cfg, skip_discover: bool = False) -> str:
             # Always sync keywords and categories (critical for classification)
             if yaml_val and (not db_val or field in ("keywords", "categories", "intent_keywords", "noise_keywords")):
                 setattr(industry_cfg, field, yaml_val)
-    except Exception:
-        pass
+    except Exception as exc:
+        log.warning("Failed to merge YAML industry config for %s: %s", slug, exc)
 
     job_id = str(uuid.uuid4())
     _set_job(job_id, status="running", progress=0, created_at=_now(),
@@ -535,7 +604,7 @@ def run_collect_job(industry_cfg, skip_discover: bool = False) -> str:
                     api_key_override = getattr(industry_cfg, "openai_key", "") or ""
                 client = get_llm_client(
                     provider,
-                    model=getattr(industry_cfg, 'llm_model', 'deepseek-chat'),
+                    model=getattr(industry_cfg, 'llm_model', 'deepseek-v4-flash'),
                     api_key=api_key_override or None,
                 )
                 intent_words = getattr(industry_cfg, 'intent_keywords', None) or None
@@ -559,6 +628,7 @@ def run_collect_job(industry_cfg, skip_discover: bool = False) -> str:
             if owner_user_id:
                 for comment in comments or []:
                     comment.setdefault("owner_user_id", owner_user_id)
+                    comment.setdefault("job_id", job_id_local)
             if heartbeat_task:
                 heartbeat_task.cancel()
                 try:
@@ -582,7 +652,8 @@ def run_collect_job(industry_cfg, skip_discover: bool = False) -> str:
                                        noise_words=noise_words,
                                        progress_callback=_classify_progress)
                 _set_job(job_id_local, progress=80)
-                enqueued = enqueue_classified(passed)
+                enqueue_result = enqueue_classified_result(passed)
+                enqueued = int(enqueue_result.get("inserted", 0))
                 # Auto-export high-intent leads to webhook if enabled
                 if passed and getattr(industry_cfg, "auto_export_enabled", False) and getattr(industry_cfg, "webhook_url", ""):
                     _trigger_auto_export(
@@ -593,14 +664,38 @@ def run_collect_job(industry_cfg, skip_discover: bool = False) -> str:
             else:
                 passed = []
                 enqueued = 0
+                enqueue_result = {"received": 0, "valid": 0, "inserted": 0, "duplicates": 0, "invalid": 0}
+            source_breakdown = _collect_source_breakdown(comments)
             collect_summary = {
                 "candidate_comments": len(comments or []),
+                "keyword_candidates": int(source_breakdown.get("keyword", 0)),
+                "target_candidates": int(source_breakdown.get("target_account", 0)),
+                "deduped_candidates": len(comments or []),
+                "source_breakdown": source_breakdown,
                 "classified_passed": len(passed),
                 "enqueued": enqueued,
+                "queue_received": int(enqueue_result.get("received", 0)),
+                "queue_valid": int(enqueue_result.get("valid", 0)),
+                "queue_duplicates": int(enqueue_result.get("duplicates", 0)),
+                "queue_invalid": int(enqueue_result.get("invalid", 0)),
                 "platforms": list(getattr(industry_cfg, "platforms", []) or []),
                 "target_user_count": len(getattr(industry_cfg, "target_users", []) or []),
                 "keyword_count": len(getattr(industry_cfg, "keywords", []) or []),
             }
+            if not comments:
+                collect_summary["empty_reason"] = "no_source_comments"
+                collect_summary["warning"] = (
+                    "MediaCrawler completed but produced no source comments. "
+                    "Check Douyin login status, keyword quality, platform search results, and crawler stdout/stderr logs."
+                )
+                log.warning(
+                    "Collect job %s completed with zero source comments: industry=%s platforms=%s keywords=%s targets=%s",
+                    job_id_local,
+                    slug,
+                    list(getattr(industry_cfg, "platforms", []) or []),
+                    len(getattr(industry_cfg, "keywords", []) or []),
+                    len(getattr(industry_cfg, "target_users", []) or []),
+                )
             _set_job(job_id_local, status="done", progress=100,
                      completed_at=_now(), type="collect",
                      collect_summary=collect_summary)
@@ -620,7 +715,7 @@ def run_collect_job(industry_cfg, skip_discover: bool = False) -> str:
     return job_id
 
 
-def run_send_job(industry_cfg, device_ids: list[str] = None) -> str:
+def run_send_job(industry_cfg, device_ids: list[str] | None = None) -> str:
     """Trigger a background send job. Returns job_id."""
     job_id = str(uuid.uuid4())
     _set_job(job_id, status="running", progress=0, created_at=_now(),
@@ -638,11 +733,11 @@ def run_send_job(industry_cfg, device_ids: list[str] = None) -> str:
             from server.services.task_stats import replenishment_plan
             plan = replenishment_plan(
                 getattr(industry_cfg, "slug", ""),
-                target_devices=int(getattr(industry_cfg, "matrix_target_devices", 30) or 30),
-                per_device_daily_limit=int(getattr(industry_cfg, "daily_limit", 15) or 15),
-                inventory_days=int(getattr(industry_cfg, "lead_inventory_days", 3) or 3),
+                target_devices=int(getattr(industry_cfg, "matrix_target_devices", DEFAULT_MATRIX_TARGET_DEVICES) or DEFAULT_MATRIX_TARGET_DEVICES),
+                per_device_daily_limit=int(getattr(industry_cfg, "daily_limit", DEFAULT_DAILY_LIMIT) or DEFAULT_DAILY_LIMIT),
+                inventory_days=int(getattr(industry_cfg, "lead_inventory_days", DEFAULT_LEAD_INVENTORY_DAYS) or DEFAULT_LEAD_INVENTORY_DAYS),
                 global_daily_limit=int(getattr(industry_cfg, "global_daily_limit", 0) or 0),
-                threshold_days=int(getattr(industry_cfg, "replenish_threshold_days", 1) or 1),
+                threshold_days=int(getattr(industry_cfg, "replenish_threshold_days", DEFAULT_REPLENISH_THRESHOLD_DAYS) or DEFAULT_REPLENISH_THRESHOLD_DAYS),
             )
             if not plan.get("should_replenish"):
                 return {"started": False, "reason": "库存充足", "plan": plan}
@@ -663,6 +758,19 @@ def run_send_job(industry_cfg, device_ids: list[str] = None) -> str:
 
     def _send():
         job_id_local = job_id
+        stop_heartbeat = threading.Event()
+
+        def _heartbeat():
+            while not stop_heartbeat.wait(_SEND_HEARTBEAT_SECONDS):
+                with _jobs_lock:
+                    j = _jobs.get(job_id_local)
+                if not j or j.get("status") != "running":
+                    return
+                _set_job(job_id_local, heartbeat_at=_now())
+
+        heartbeat_thread = threading.Thread(target=_heartbeat, daemon=True, name=f"send-hb-{job_id_local}")
+        heartbeat_thread.start()
+
         try:
             if _is_cancel_requested(job_id_local):
                 _set_job(job_id_local, status="cancelled", progress=0,
@@ -705,6 +813,8 @@ def run_send_job(industry_cfg, device_ids: list[str] = None) -> str:
             log.exception(f"Send job {job_id_local} failed")
             _set_job(job_id_local, status="failed", error=str(e),
                      completed_at=_now(), type="send")
+        finally:
+            stop_heartbeat.set()
 
     threading.Thread(target=_send, daemon=True).start()
     return job_id
@@ -726,7 +836,8 @@ def get_job_status(job_id: str, user_id: str = "") -> dict | None:
     try:
         from server.models import SessionLocal
         from server.models.job import Job
-    except Exception:
+    except Exception as exc:
+        log.debug("Cannot get job status: %s", exc)
         return None
 
     db = SessionLocal()
@@ -749,8 +860,10 @@ def get_job_status(job_id: str, user_id: str = "") -> dict | None:
             "updated_at": job.updated_at.isoformat() if job.updated_at else None,
             "completed_at": job.completed_at.isoformat() if job.completed_at else None,
         }
-        if snapshot.get("status") == "running" and not _job_in_memory(job.id):
-            return _fail_orphaned_running_snapshot(job.id, snapshot)
+        # DB is the source of truth. A running job in the DB is only marked
+        # failed by the periodic auto-recovery loop when its heartbeat/update
+        # timestamp is stale; a local memory miss is not enough (the worker may
+        # be running in another process).
         return _reconcile_snapshot(job.id, snapshot)
     finally:
         db.close()
@@ -769,8 +882,8 @@ def _auto_recovery_loop():
         try:
             reconcile_stale_cancellations("")
             reconcile_orphaned_running_jobs("")
-        except Exception:
-            pass
+        except Exception as exc:
+            log.warning("Auto-recovery loop error: %s", exc)
         import time
         time.sleep(_AUTO_RECOVERY_INTERVAL_SEC)
 

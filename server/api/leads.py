@@ -1,5 +1,6 @@
 """Lead pool management routes — CRUD, filter, retry."""
 
+import logging
 import re
 import urllib.parse
 from datetime import datetime, timezone
@@ -35,9 +36,16 @@ class LeadSummary(BaseModel):
     ai_reply: str = ""
     error: str = ""
     retry_count: int = 0
-    fetched_at: str = ""
-    processed_at: str = ""
-    claimed_at: str = ""
+    fetched_at: str | None = None
+    processed_at: str | None = None
+    claimed_at: str | None = None
+
+
+class LeadListResponse(BaseModel):
+    leads: list[LeadSummary]
+    total: int
+    limit: int
+    offset: int
 
 
 class LeadExportRequest(BaseModel):
@@ -111,7 +119,7 @@ def _owner_filter(current_user: User):
 
 # ── Routes ────────────────────────────────────────
 
-@router.get("")
+@router.get("", response_model=LeadListResponse)
 def list_leads(
     current_user: User = Depends(get_current_user),
     industry_slug: str = Query(default=""),
@@ -123,8 +131,9 @@ def list_leads(
     try:
         from server.models import SessionLocal
         db = SessionLocal()
-    except Exception:
-        return {"leads": [], "total": 0}
+    except Exception as exc:
+        logging.getLogger("thunder.api.leads").warning("list_leads failed: %s", exc)
+        return {"leads": [], "total": 0, "limit": limit, "offset": offset}
 
     try:
         query = db.query(TaskQueue).filter(_owner_filter(current_user))
@@ -159,7 +168,8 @@ def lead_stats(
             "done": stats.get("done", 0),
             "failed": stats.get("failed", 0),
         }
-    except Exception:
+    except Exception as exc:
+        logging.getLogger("thunder.api.leads").warning("lead_stats failed: %s", exc)
         return {"total": 0, "pending": 0, "claimed": 0, "done": 0, "failed": 0}
 
 
@@ -172,7 +182,8 @@ def retry_failed_leads(
     try:
         from server.models import SessionLocal
         db = SessionLocal()
-    except Exception:
+    except Exception as exc:
+        logging.getLogger("thunder.api.leads").error("retry_failed_leads queue unavailable: %s", exc)
         raise HTTPException(status_code=500, detail="Queue unavailable")
 
     try:
@@ -190,7 +201,45 @@ def retry_failed_leads(
             TaskQueue.error: ''
         })
         db.commit()
-        return {"ok": True, "retried": n}
+        return {
+            "ok": True,
+            "code": "LEADS_REQUEUED",
+            "retried": n,
+            "requeued": n,
+            "skipped": 0,
+            "message": f"已重新加入发送队列 {n} 条",
+        }
+    finally:
+        db.close()
+
+
+def _build_export_query(db: Session, req: LeadExportRequest, current_user: User):
+    query = db.query(TaskQueue).filter(
+        TaskQueue.industry_slug == req.industry_slug,
+        _owner_filter(current_user),
+    )
+    if req.status:
+        query = query.filter(TaskQueue.status == req.status)
+    return query
+
+
+def _iter_export_rows(req: LeadExportRequest, current_user: User, batch_size: int = 500):
+    """Yield lead dicts from the database in batches.
+
+    The session is kept open until the generator is exhausted so that the
+    export can stream without materialising all rows in memory.
+    """
+    from server.models import SessionLocal
+
+    db = SessionLocal()
+    try:
+        query = (
+            _build_export_query(db, req, current_user)
+            .order_by(TaskQueue.fetched_at.desc())
+            .limit(req.limit)
+        )
+        for row in query.yield_per(batch_size):
+            yield _taskqueue_row_to_dict(row)
     finally:
         db.close()
 
@@ -205,46 +254,35 @@ def export_leads(
 
     db = SessionLocal()
     try:
-        query = db.query(TaskQueue).filter(
-            TaskQueue.industry_slug == req.industry_slug,
-            _owner_filter(current_user),
-        )
-        if req.status:
-            query = query.filter(TaskQueue.status == req.status)
-
-        total = query.count()
+        total = _build_export_query(db, req, current_user).count()
         if total > req.limit:
             raise HTTPException(
                 status_code=400,
                 detail=f"结果 {total} 条超过限制 {req.limit}，请缩小筛选范围",
             )
-
-        rows = query.order_by(TaskQueue.fetched_at.desc()).limit(req.limit).offset(0).all()
-        fields = req.fields or DEFAULT_EXPORT_FIELDS
-
-        lead_rows = [_taskqueue_row_to_dict(r) for r in rows]
-
-        timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-        filename = f"leads_{req.industry_slug}_{timestamp}"
-        quoted_filename = urllib.parse.quote(filename, safe='')
-
-        if req.format == "csv":
-            return StreamingResponse(
-                generate_csv(lead_rows, fields=fields),
-                media_type="text/csv; charset=utf-8-sig",
-                headers={"Content-Disposition": f"attachment; filename=\"{quoted_filename}.csv\""},
-            )
-        elif req.format == "xlsx":
-            buffer = generate_xlsx(lead_rows, fields=fields)
-            return StreamingResponse(
-                buffer,
-                media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                headers={"Content-Disposition": f"attachment; filename=\"{quoted_filename}.xlsx\""},
-            )
-        else:
-            raise HTTPException(status_code=400, detail="format 必须是 csv 或 xlsx")
     finally:
         db.close()
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    filename = f"leads_{req.industry_slug}_{timestamp}"
+    quoted_filename = urllib.parse.quote(filename, safe='')
+    fields = req.fields or DEFAULT_EXPORT_FIELDS
+
+    row_iterator = _iter_export_rows(req, current_user)
+
+    if req.format == "csv":
+        return StreamingResponse(
+            generate_csv(row_iterator, fields=fields),
+            media_type="text/csv; charset=utf-8-sig",
+            headers={"Content-Disposition": f"attachment; filename=\"{quoted_filename}.csv\""},
+        )
+    if req.format == "xlsx":
+        return StreamingResponse(
+            generate_xlsx(row_iterator, fields=fields),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename=\"{quoted_filename}.xlsx\""},
+        )
+    raise HTTPException(status_code=400, detail="format 必须是 csv 或 xlsx")
 
 
 @router.post("/{lead_id}/mark-replied")

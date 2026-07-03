@@ -1,11 +1,17 @@
 """Industry management routes."""
 
+import json_repair
+import hashlib
+import logging
+import os
 import re
+
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, field_validator
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
-from datetime import datetime, timezone
 
 from server.auth import get_current_user
 from server.models import get_db
@@ -19,6 +25,14 @@ from server.services.url_security import is_safe_webhook_url
 from server.services.abtest import normalize_variant, build_variant_result, pick_winner
 from server.services.analytics import query_task_rows
 from server.workers import run_collect_job, run_send_job
+from core.constants import (
+    DEFAULT_COLLECT_AUTHORS_PER_RUN,
+    DEFAULT_COLLECT_VIDEO_LIMIT,
+    DEFAULT_KEYWORD_BATCH_SIZE,
+    DEFAULT_LEAD_INVENTORY_DAYS,
+    DEFAULT_MATRIX_TARGET_DEVICES,
+    DEFAULT_REPLENISH_THRESHOLD_DAYS,
+)
 
 router = APIRouter(prefix="/api/industries", tags=["industries"])
 
@@ -45,7 +59,7 @@ def _to_industry_config(industry: Industry):
         comment_max_age_hours=industry.comment_max_age_hours,
         platforms=_single_platform(industry.platforms),
         llm_provider=industry.llm_provider or "deepseek",
-        llm_model=industry.llm_model or "deepseek-chat",
+        llm_model=industry.llm_model or "deepseek-v4-flash",
         deepseek_key=decrypt_secret(user.deepseek_key) if user else "",
         zhipu_key=decrypt_secret(user.zhipu_key) if user else "",
         openai_key=decrypt_secret(user.openai_key) if user else "",
@@ -53,14 +67,14 @@ def _to_industry_config(industry: Industry):
         noise_keywords=industry.noise_keywords or [],
         target_users=industry.target_users or [],
         user_id=industry.user_id,
-        matrix_target_devices=industry.matrix_target_devices or 30,
-        lead_inventory_days=industry.lead_inventory_days or 3,
+        matrix_target_devices=industry.matrix_target_devices or DEFAULT_MATRIX_TARGET_DEVICES,
+        lead_inventory_days=industry.lead_inventory_days or DEFAULT_LEAD_INVENTORY_DAYS,
         global_daily_limit=industry.global_daily_limit or 0,
         auto_replenish_enabled=bool(industry.auto_replenish_enabled),
-        replenish_threshold_days=industry.replenish_threshold_days or 1,
-        keyword_batch_size=industry.keyword_batch_size or 12,
-        collect_authors_per_run=industry.collect_authors_per_run or 60,
-        collect_video_limit=industry.collect_video_limit or 120,
+        replenish_threshold_days=industry.replenish_threshold_days or DEFAULT_REPLENISH_THRESHOLD_DAYS,
+        keyword_batch_size=industry.keyword_batch_size or DEFAULT_KEYWORD_BATCH_SIZE,
+        collect_authors_per_run=industry.collect_authors_per_run or DEFAULT_COLLECT_AUTHORS_PER_RUN,
+        collect_video_limit=industry.collect_video_limit or DEFAULT_COLLECT_VIDEO_LIMIT,
         compliance_mode=bool(getattr(industry, "compliance_mode", False)),
         webhook_url=getattr(industry, "webhook_url", "") or "",
         auto_export_enabled=bool(getattr(industry, "auto_export_enabled", False)),
@@ -68,6 +82,7 @@ def _to_industry_config(industry: Industry):
         send_end_time=getattr(industry, "send_end_time", "") or "13:00",
         pause_weekends=bool(getattr(industry, "pause_weekends", False)),
         daily_send_max=int(getattr(industry, "daily_send_max", 0) or 0),
+        hourly_send_limit=int(getattr(industry, "hourly_send_limit", 0) or 0),
         effect_webhook_url=getattr(industry, "effect_webhook_url", "") or "",
         reply_variants=list(getattr(industry, "reply_variants", []) or []),
     )
@@ -78,7 +93,7 @@ def _matrix_capacity(ind: Industry, db: Session, user_id: str) -> dict:
 
     active_devices = db.query(Device).filter(
         Device.user_id == user_id,
-        Device.is_active == True,
+        Device.is_active.is_(True),
     ).count()
     target_devices = max(active_devices, ind.matrix_target_devices or 30)
     return {
@@ -90,9 +105,6 @@ def _matrix_capacity(ind: Industry, db: Session, user_id: str) -> dict:
         "threshold_days": ind.replenish_threshold_days or 1,
     }
 
-
-import os
-import json_repair
 
 SYSTEM_PROMPT = """你是一个专业的互联网精准营销专家和获客配置专家。请根据用户输入的“业务描述”（比如他是做什么的、目标客户群是谁），自动分析并生成一套行业匹配的配置。
 
@@ -126,8 +138,8 @@ def _has_api_key(user: User | None = None) -> bool:
         api_keys = cfg.get("api_keys", {})
         if api_keys.get("deepseek") or api_keys.get("zhipu") or api_keys.get("openai"):
             return True
-    except Exception:
-        pass
+    except Exception as exc:
+        logging.getLogger("thunder.api.industries").debug("_has_api_key system.yaml check failed: %s", exc)
 
     return False
 
@@ -135,7 +147,7 @@ def _has_api_key(user: User | None = None) -> bool:
 def select_available_llm(user: User | None = None):
     """Detect available LLM provider and model by checking env variables or system.yaml."""
     if os.getenv("THUNDER_DEEPSEEK_KEY"):
-        return "deepseek", "deepseek-chat"
+        return "deepseek", "deepseek-v4-flash"
     if os.getenv("THUNDER_ZHIPU_KEY"):
         return "zhipu", "glm-4-flash"
     if os.getenv("THUNDER_OPENAI_KEY"):
@@ -143,7 +155,7 @@ def select_available_llm(user: User | None = None):
 
     if user:
         if has_secret(user.deepseek_key):
-            return "deepseek", "deepseek-chat"
+            return "deepseek", "deepseek-v4-flash"
         if has_secret(user.zhipu_key):
             return "zhipu", "glm-4-flash"
         if has_secret(user.openai_key):
@@ -155,16 +167,16 @@ def select_available_llm(user: User | None = None):
         cfg = load_system()
         api_keys = cfg.get("api_keys", {})
         if api_keys.get("deepseek"):
-            return "deepseek", "deepseek-chat"
+            return "deepseek", "deepseek-v4-flash"
         if api_keys.get("zhipu"):
             return "zhipu", "glm-4-flash"
         if api_keys.get("openai"):
             return "openai", "gpt-4o-mini"
-    except Exception:
-        pass
+    except Exception as exc:
+        logging.getLogger("thunder.api.industries").debug("select_available_llm system.yaml check failed: %s", exc)
 
     # Default fallback
-    return "deepseek", "deepseek-chat"
+    return "deepseek", "deepseek-v4-flash"
 
 
 @router.post("/generate-config")
@@ -200,7 +212,8 @@ def generate_industry_config(
             temperature=0.7,
             max_tokens=1500,
         )
-        result = resp.choices[0].message.content.strip()
+        content = resp.choices[0].message.content
+        result = content.strip() if content else ""
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"LLM 接口调用异常: {str(e)}")
 
@@ -256,6 +269,60 @@ class IndustryGenerateBigDataConfigReq(BaseModel):
     seed_keyword: str
 
 
+def _slugify_seed(seed: str, fallback: str = "industry") -> str:
+    raw = re.sub(r"[^a-zA-Z0-9_-]+", "-", seed.strip().lower()).strip("-")
+    if not raw:
+        digest_source = seed.strip() or fallback
+        raw = f"ind-{hashlib.sha1(digest_source.encode('utf-8')).hexdigest()[:8]}"
+    if not raw[0].isalpha():
+        raw = f"ind-{raw}"
+    return raw[:32]
+
+
+def _build_bigdata_fallback_config(description: str, seed_keyword: str, user: User | None = None) -> dict:
+    seed = (seed_keyword or "").strip() or (description or "").strip()[:12] or "项目"
+    desc = (description or "").strip()
+    provider, model = select_available_llm(user)
+    base_terms = [
+        seed,
+        f"{seed}怎么学",
+        f"{seed}培训",
+        f"{seed}课程",
+        f"{seed}费用",
+        f"{seed}老师",
+        f"{seed}资料",
+        f"{seed}备考",
+        f"{seed}报名",
+        f"{seed}通过率",
+        f"{seed}提升",
+        f"{seed}规划",
+    ]
+    intent_terms = [
+        f"想了解{seed}",
+        f"{seed}怎么报名",
+        f"{seed}多少钱",
+        f"{seed}有推荐吗",
+        f"{seed}哪里好",
+    ]
+    name = seed[:10] or desc[:10] or "项目配置"
+    return {
+        "name": name,
+        "slug": _slugify_seed(seed),
+        "keywords": list(dict.fromkeys(base_terms)),
+        "reply_tone": f"{seed}顾问",
+        "reply_style": "以专业、简洁、亲和的方式回复，先确认需求，再引导私信沟通。",
+        "reply_hook": f"我这边可以先帮你整理一份{seed}参考方案。",
+        "categories": [f"{seed}咨询", "费用咨询", "课程咨询", "资料咨询", "其他"],
+        "intent_keywords": intent_terms,
+        "noise_keywords": ["无关", "广告", "表情", "路过", "互关", "抽奖"],
+        "target_users": [f"关注{seed}的人", f"咨询{seed}课程的人", f"需要{seed}方案的人"],
+        "llm_provider": provider,
+        "llm_model": model,
+        "bigdata_used": False,
+        "bigdata_note": "抖音热门大数据采集器尚未启用，已基于业务描述和种子词生成可用配置。",
+    }
+
+
 BIGDATA_SYSTEM_PROMPT = """你是一个专业的互联网数据分析师和获客配置专家。请根据用户提供的“业务描述”以及从抖音平台采集到的“热门视频描述与用户评论数据”（大数据文本池），分析用户的真实关注点、痛点以及搜索意图，并生成一套精准的行业匹配配置。
 
 输出的配置必须是 JSON 格式，且必须包含以下字段：
@@ -274,30 +341,37 @@ async def generate_industry_config_bigdata(
     req: IndustryGenerateBigDataConfigReq,
     current_user: User = Depends(get_current_user),
 ):
-    """Big-data config generation is not implemented yet.
-
-    The previous implementation depended on ``core.collectors.douyin.DouyinCollector``,
-    which no longer exists. Returning 501 until a replacement collector is available.
-    """
-    raise HTTPException(
-        status_code=501,
-        detail="Big-data config generation is not implemented yet",
-    )
+    """Generate a usable config without blocking on the retired big-data collector."""
+    return _build_bigdata_fallback_config(req.description, req.seed_keyword, current_user)
 
 
 
 
-@router.get("", response_model=list[IndustryOut])
+@router.get("")
 def list_industries(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    limit: int = Query(default=0, ge=0, le=500, description="0 returns the full list (backward compatible)"),
+    offset: int = Query(default=0, ge=0),
 ):
-    return (
+    """List industries for the current user.
+
+    Pass ``limit=0`` (the default) to receive the legacy flat list. Pass
+    ``limit > 0`` to receive a paginated ``{items, total, limit, offset}``
+    response.
+    """
+    query = (
         db.query(Industry)
-        .filter(Industry.user_id == current_user.id, Industry.is_active == True)
+        .filter(Industry.user_id == current_user.id, Industry.is_active.is_(True))
         .order_by(Industry.created_at.desc())
-        .all()
     )
+
+    if limit == 0:
+        return query.all()
+
+    total = query.count()
+    items = query.limit(limit).offset(offset).all()
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 
 @router.post("", response_model=IndustryOut, status_code=201)
@@ -335,7 +409,7 @@ def _industry_ready_state(ind: Industry, db: Session, user: User) -> dict:
         "has_api_key": _has_api_key(user),
         "has_device": db.query(Device).filter(
             Device.user_id == user.id,
-            Device.is_active == True,
+            Device.is_active.is_(True),
         ).first()
         is not None,
         "compliance_ready": not bool(ind.compliance_mode) or bool(ind.webhook_url),
@@ -425,8 +499,9 @@ def delete_industry(
         db.query(TargetBlogger).filter(TargetBlogger.industry_slug == slug).delete()
         # Note: collected_videos logic might need joining or simpler to ignore for now since it's just dedup memory.
         db.commit()
-    except Exception:
+    except Exception as exc:
         db.rollback()
+        logging.getLogger("thunder.api.industries").warning("delete_industry cleanup failed: %s", exc)
 
     ind.is_active = False
     db.commit()
@@ -525,7 +600,7 @@ def trigger_send(
             db.query(Device)
             .filter(
                 Device.user_id == current_user.id,
-                Device.is_active == True,
+                Device.is_active.is_(True),
                 Device.id.in_(device_ids),
             )
             .all()
@@ -619,18 +694,17 @@ def get_industry_tasks(
 ):
     ind = _get_owned_industry(industry_id, current_user, db)
     from server.models.task import TaskQueue
-    from sqlalchemy import or_
-    
+
     query = db.query(TaskQueue).filter(
         TaskQueue.industry_slug == ind.slug,
-        or_(TaskQueue.owner_user_id == current_user.id, TaskQueue.owner_user_id == "", TaskQueue.owner_user_id == None)
+        or_(TaskQueue.owner_user_id == current_user.id, TaskQueue.owner_user_id == "", TaskQueue.owner_user_id.is_(None))
     )
     
     now = datetime.now().isoformat()
     if status == "retry":
-        query = query.filter(TaskQueue.status == "pending", TaskQueue.retry_after != None, TaskQueue.retry_after != "", TaskQueue.retry_after > now)
+        query = query.filter(TaskQueue.status == "pending", TaskQueue.retry_after.is_not(None), TaskQueue.retry_after != "", TaskQueue.retry_after > now)
     elif status == "pending":
-        query = query.filter(TaskQueue.status == "pending", or_(TaskQueue.retry_after == None, TaskQueue.retry_after == "", TaskQueue.retry_after <= now))
+        query = query.filter(TaskQueue.status == "pending", or_(TaskQueue.retry_after.is_(None), TaskQueue.retry_after == "", TaskQueue.retry_after <= now))
     elif status:
         query = query.filter(TaskQueue.status == status)
         
@@ -657,7 +731,7 @@ def retry_failed_task(
         task = db.query(TaskQueue).filter(
             TaskQueue.id == task_id,
             TaskQueue.industry_slug == ind.slug,
-            or_(TaskQueue.owner_user_id == current_user.id, TaskQueue.owner_user_id == "", TaskQueue.owner_user_id == None)
+            or_(TaskQueue.owner_user_id == current_user.id, TaskQueue.owner_user_id == "", TaskQueue.owner_user_id.is_(None))
         ).first()
         
         if not task:
@@ -691,7 +765,7 @@ def retry_all_failed_tasks(
         tasks = db.query(TaskQueue).filter(
             TaskQueue.industry_slug == ind.slug,
             TaskQueue.status == "failed",
-            or_(TaskQueue.owner_user_id == current_user.id, TaskQueue.owner_user_id == "", TaskQueue.owner_user_id == None)
+            or_(TaskQueue.owner_user_id == current_user.id, TaskQueue.owner_user_id == "", TaskQueue.owner_user_id.is_(None))
         ).all()
         count = len(tasks)
         for task in tasks:
@@ -770,14 +844,16 @@ def get_industry_funnel(
         try:
             import json
             recent_payload = json.loads(recent_payload)
-        except Exception:
+        except Exception as exc:
+            logging.getLogger("thunder.api.industries").debug("Failed to parse collect payload: %s", exc)
             recent_payload = {}
     recent_send_payload = recent_send.payload if recent_send else {}
     if isinstance(recent_send_payload, str):
         try:
             import json
             recent_send_payload = json.loads(recent_send_payload)
-        except Exception:
+        except Exception as exc:
+            logging.getLogger("thunder.api.industries").debug("Failed to parse send payload: %s", exc)
             recent_send_payload = {}
     return {
         "industry_slug": ind.slug,
@@ -795,14 +871,14 @@ def get_industry_funnel(
             "status": recent_collect.status if recent_collect else "",
             "created_at": recent_collect.created_at.isoformat() if recent_collect and recent_collect.created_at else None,
             "completed_at": recent_collect.completed_at.isoformat() if recent_collect and recent_collect.completed_at else None,
-            "summary": (recent_payload or {}).get("collect_summary", {}),
+            "summary": (dict(recent_payload or {})).get("collect_summary", {}),
         },
         "latest_send": {
             "job_id": recent_send.id if recent_send else "",
             "status": recent_send.status if recent_send else "",
             "created_at": recent_send.created_at.isoformat() if recent_send and recent_send.created_at else None,
             "completed_at": recent_send.completed_at.isoformat() if recent_send and recent_send.completed_at else None,
-            "summary": (recent_send_payload or {}).get("send_summary", {}),
+            "summary": (dict(recent_send_payload or {})).get("send_summary", {}),
         },
         "source_types": source_type_funnel_stats(ind.slug),
         "bloggers": blogger_source_stats(ind.slug),
@@ -828,6 +904,7 @@ class ScheduleConfigUpdate(BaseModel):
     send_end_time: str | None = None
     pause_weekends: bool | None = None
     daily_send_max: int | None = None
+    hourly_send_limit: int | None = None
     effect_webhook_url: str | None = None
 
     @field_validator("effect_webhook_url")
@@ -967,6 +1044,8 @@ def update_schedule_config(
         ind.pause_weekends = body.pause_weekends
     if body.daily_send_max is not None:
         ind.daily_send_max = body.daily_send_max
+    if body.hourly_send_limit is not None:
+        ind.hourly_send_limit = body.hourly_send_limit
     if body.effect_webhook_url is not None:
         ind.effect_webhook_url = body.effect_webhook_url
     db.commit()

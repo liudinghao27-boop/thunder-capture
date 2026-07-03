@@ -1,30 +1,67 @@
-"""Reset: delete all users and create admin/admin123456"""
-import psycopg2
+"""Reset admin user password from environment variable.
 
-conn = psycopg2.connect(
-    "postgresql://thunder:thunder123@localhost:5432/thunder",
-    connect_timeout=5,
-)
-cur = conn.cursor()
+Usage:
+    THUNDER_ADMIN_PASSWORD=your-strong-password python scripts/smoke/reset_admin.py
 
-cur.execute("SELECT username FROM sa_users")
-rows = cur.fetchall()
-print(f"Existing: {len(rows)}")
+This script will delete all existing users and create a single admin user
+with the provided password. If THUNDER_ADMIN_PASSWORD is not set, it exits
+with an error.
+"""
 
-cur.execute("DELETE FROM sa_users")
+import os
+import sys
 
-# Verified bcrypt hash for "admin123456"
-PW_HASH = "$2b$12$8denfoUx1zbTO5j0ERWH0OYuyf1FbKwy7DWfD6dyid2Te.FG8bIVm"
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
-cur.execute(
-    "INSERT INTO sa_users (id, username, password_hash, is_active, created_at) "
-    "VALUES (gen_random_uuid(), 'admin', %s, true, now())",
-    (PW_HASH,),
-)
-conn.commit()
-cur.execute("SELECT username FROM sa_users")
-print(f"After reset: {[r[0] for r in cur.fetchall()]}")
-conn.close()
-print("Done. admin / admin123456")
+# Allow importing from project root
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
+
+from server.auth import hash_password
+from server.config import DATABASE_URL
+from server.models.user import User
 
 
+def main() -> int:
+    password = os.getenv("THUNDER_ADMIN_PASSWORD", "").strip()
+    if not password:
+        print(
+            "[ERROR] THUNDER_ADMIN_PASSWORD environment variable is required.",
+            file=sys.stderr,
+        )
+        print(
+            "Example: THUNDER_ADMIN_PASSWORD=your-strong-password python scripts/smoke/reset_admin.py",
+            file=sys.stderr,
+        )
+        return 1
+
+    engine = create_engine(DATABASE_URL)
+    SessionLocal = sessionmaker(bind=engine)
+    db = SessionLocal()
+    try:
+        existing = db.query(User.id).all()
+        print(f"Existing users: {len(existing)}")
+
+        db.query(User).delete()
+
+        admin = User(
+            username="admin",
+            password_hash=hash_password(password),
+        )
+        db.add(admin)
+        db.commit()
+
+        after = db.query(User.username).all()
+        print(f"After reset: {[r[0] for r in after]}")
+        print("Done. admin password set from THUNDER_ADMIN_PASSWORD.")
+        return 0
+    except Exception as exc:
+        db.rollback()
+        print(f"[ERROR] Failed to reset admin: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        db.close()
+
+
+if __name__ == "__main__":
+    sys.exit(main())

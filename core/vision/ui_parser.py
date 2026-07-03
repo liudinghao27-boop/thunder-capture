@@ -67,6 +67,18 @@ def _score(match_count: int, total: int, base: float = 0.2) -> float:
     return min(0.99, base + (match_count / total) * (1.0 - base))
 
 
+def _element_has(element: UIElement, *needles: str) -> bool:
+    haystack = " ".join(
+        [
+            element.text or "",
+            element.resource_id or "",
+            element.class_name or "",
+            element.content_desc or "",
+        ]
+    ).casefold()
+    return any(needle.casefold() in haystack for needle in needles)
+
+
 class UIParser:
     def dump_xml(self, serial: str) -> str:
         client = ADBClient(serial)
@@ -76,6 +88,9 @@ class UIParser:
 
     def parse(self, xml_text: str) -> list[UIElement]:
         elements: list[UIElement] = []
+        if not xml_text:
+            return elements
+        xml_text = self._extract_xml(xml_text)
         if not xml_text:
             return elements
         try:
@@ -97,6 +112,23 @@ class UIParser:
             )
         return elements
 
+    def _extract_xml(self, xml_text: str) -> str:
+        """Return the hierarchy XML even when adb prepends/appends vendor logs."""
+        start = xml_text.find("<hierarchy")
+        if start < 0:
+            declaration = xml_text.find("<?xml")
+            if declaration >= 0:
+                start = declaration
+        if start < 0:
+            return xml_text.strip()
+
+        end_tag = "</hierarchy>"
+        end = xml_text.find(end_tag, start)
+        if end < 0:
+            return xml_text[start:].strip()
+
+        return xml_text[start : end + len(end_tag)].strip()
+
     def infer_screen(
         self,
         elements: list[UIElement],
@@ -109,9 +141,23 @@ class UIParser:
         text = " ".join([labels, ocr_text or "", package_name or "", activity or ""])
         evidence: list[str] = []
 
+        home_packages = ("com.miui.home", "com.android.launcher", "com.google.android.apps.nexuslauncher")
+        if package_name in home_packages or (
+            "com.miui.home:id/" in text and not package_name.startswith("com.ss.android.ugc.aweme")
+        ):
+            return ScreenState(
+                "launcher",
+                0.9,
+                evidence=[f"package={package_name or 'launcher'}", "android launcher"],
+            )
+
         blocker = self._infer_blocker(text)
         if blocker:
             return ScreenState("blocked", 0.98, blocker=blocker, evidence=[blocker])
+
+        douyin_state = self._infer_douyin_state(elements, text=text, package_name=package_name, activity=activity)
+        if douyin_state:
+            return douyin_state
 
         rules: list[tuple[str, list[str], list[str]]] = [
             (
@@ -151,7 +197,7 @@ class UIParser:
             ),
             (
                 "dm_unavailable",
-                [r"对方设置了隐私", r"不能发私信", r"无法发送", r"消息发送失败"],
+                [r"对方设置了隐私", r"不能发私信", r"无法发送", r"消息发送失败", r"对方回复后才能发消息"],
                 ["dm unavailable text"],
             ),
         ]
@@ -173,12 +219,93 @@ class UIParser:
             return ScreenState("unknown", 0.25, evidence=evidence)
         return best
 
+    def _infer_douyin_state(
+        self,
+        elements: list[UIElement],
+        *,
+        text: str,
+        package_name: str = "",
+        activity: str = "",
+    ) -> ScreenState | None:
+        app_text = " ".join([package_name or "", activity or "", text or ""]).casefold()
+        if "com.ss.android.ugc.aweme" not in app_text:
+            return None
+
+        lowered = text.casefold()
+        message_buttons = [
+            e
+            for e in elements
+            if _element_has(e, "message", "private_message", "dm")
+            and ("button" in e.class_name.casefold() or e.clickable or "btn" in e.resource_id.casefold())
+        ]
+        editable_inputs = [
+            e
+            for e in elements
+            if "edittext" in e.class_name.casefold() or _element_has(e, "message_input", "input message")
+        ]
+        send_buttons = [e for e in elements if _element_has(e, "send", "send_button")]
+        message_bubbles = [e for e in elements if _element_has(e, "message_bubble", "chat_item") and (e.text or e.content_desc)]
+
+        if ("chat" in app_text or ".im." in app_text) and (
+            any(not e.enabled for e in editable_inputs) or any(not e.enabled for e in send_buttons)
+        ):
+            return ScreenState(
+                "chat_input_disabled",
+                0.92,
+                blocker="dm_unavailable",
+                evidence=["douyin chat input disabled"],
+            )
+
+        if message_bubbles and _has(lowered, r"\bsent\b", r"message_status", r"delivered"):
+            return ScreenState(
+                "message_sent",
+                0.92,
+                evidence=["douyin message bubble", "send status visible"],
+            )
+
+        if "search" in app_text and (
+            _has(lowered, r"user_name", r"tab_user", r"\busers\b")
+            and _has(lowered, r"follow_btn", r"\bfollow\b")
+        ):
+            return ScreenState(
+                "search_results",
+                0.9,
+                evidence=["douyin search result list", "user row controls"],
+            )
+
+        if "profile" in app_text and message_buttons:
+            if any(not e.enabled or not e.clickable or _element_has(e, "unavailable", "disabled", "privacy") for e in message_buttons):
+                return ScreenState(
+                    "dm_unavailable",
+                    0.93,
+                    blocker="dm_unavailable",
+                    evidence=["douyin profile dm button disabled"],
+                )
+            return ScreenState(
+                "profile_dm_ready",
+                0.91,
+                evidence=["douyin profile dm button ready"],
+            )
+
+        return None
+
     def _infer_blocker(self, text: str) -> str:
+        if _has(text, r"\blog\s*in\b", r"\blogin\b", r"\bsign\s*in\b", r"\bsession\s+(has\s+)?expired\b"):
+            return "login_required"
+        if _has(
+            text,
+            r"too\s+many\s+operations",
+            r"try\s+again\s+later",
+            r"account\s+restricted",
+            r"operation\s+frequent",
+        ):
+            return "risk_control"
         blockers = [
             ("real_name_verification", [r"实名认证", r"身份认证", r"刷脸", r"人脸识别"]),
             ("captcha", [r"验证码", r"安全验证", r"拖动滑块", r"验证"]),
             ("login_required", [r"登录", r"注册", r"手机号登录", r"获取验证码"]),
             ("risk_control", [r"操作频繁", r"账号异常", r"风控", r"暂时无法", r"限制"]),
+            ("dm_unavailable", [r"对方回复后才能发消息", r"对方设置了隐私", r"不能发私信", r"无法发送", r"消息发送失败"]),
             ("permission_dialog", [r"允许", r"权限", r"始终允许", r"仅使用期间允许"]),
             ("teen_mode", [r"青少年模式"]),
         ]

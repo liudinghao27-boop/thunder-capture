@@ -111,6 +111,7 @@ def db_session():
 
     db.close()
     Base.metadata.drop_all(bind=engine)
+    engine.dispose()
 
 
 @contextmanager
@@ -133,7 +134,8 @@ def _client(db_session, user_cls=FakeUser):
     monkeypatch.setattr(models_module, "SessionLocal", make_session)
     monkeypatch.setattr(task_stats_module, "SessionLocal", make_session)
     try:
-        yield TestClient(app)
+        with TestClient(app) as client:
+            yield client
     finally:
         app.dependency_overrides.clear()
         monkeypatch.undo()
@@ -168,7 +170,11 @@ def test_retry_failed_leads_filters_by_owner(db_session):
         resp = client.post("/api/leads/retry-failed?industry_slug=test-ind")
     assert resp.status_code == 200
     data = resp.json()
+    assert data["ok"] is True
+    assert data["code"] == "LEADS_REQUEUED"
+    assert data["requeued"] == 1
     assert data["retried"] == 1
+    assert data["skipped"] == 0
 
     db_session.expire_all()
     statuses = {

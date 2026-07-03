@@ -6,11 +6,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
+from core.agent.decision import decide_next_action
 from core.agent.memory import AgentMemoryStore
 from core.agent.perception import PerceptionService
 from core.agent.planner import Planner, build_douyin_dm_goal
+from core.agent.recovery import RecoveryPolicy
 from core.agent.state import ExecutionResult, Observation, utc_now
 from core.task.graph import douyin_dm_graph
+from core.task.send_verifier import SendEvidence, verify_send
 
 
 @dataclass
@@ -43,11 +46,13 @@ class TaskGraphRunner:
         planner: Planner | None = None,
         perception: PerceptionService | None = None,
         screenshot_dir: str | Path | None = None,
+        recovery_policy: RecoveryPolicy | None = None,
     ):
         self.memory = memory
         self.planner = planner or Planner()
         self.perception = perception or PerceptionService()
         self.screenshot_dir = screenshot_dir
+        self.recovery_policy = recovery_policy or RecoveryPolicy()
 
     def _observe_safe(
         self,
@@ -63,6 +68,7 @@ class TaskGraphRunner:
                 adb_serial=adb_serial,
                 screenshot_dir=self.screenshot_dir,
             )
+            decision = decide_next_action(observation, goal="send_dm")
             self.memory.save_observation(observation, job_id=job_id)
             self.memory.log_execution(
                 ExecutionResult(
@@ -84,6 +90,7 @@ class TaskGraphRunner:
                         "ocr_status": observation.ocr_status,
                         "ocr_provider": observation.ocr_provider,
                         "screenshot_path": observation.screenshot_path,
+                        "decision": decision.as_dict(),
                     },
                 ),
                 device_id=device_id,
@@ -104,11 +111,16 @@ class TaskGraphRunner:
                     "ocr_status": observation.ocr_status,
                     "ocr_provider": observation.ocr_provider,
                     "activity": observation.activity,
+                    "agent_decision": decision.as_dict(),
                 },
             )
             self.memory.remember(
                 "observation",
-                {"stage": stage, "observation": observation.as_dict()},
+                {
+                    "stage": stage,
+                    "observation": observation.as_dict(),
+                    "decision": decision.as_dict(),
+                },
                 device_id=device_id,
                 subject_id=job_id,
                 subject_type="job",
@@ -123,6 +135,50 @@ class TaskGraphRunner:
                 subject_type="job",
             )
             return None
+
+    def _preflight_observe(
+        self,
+        *,
+        device_id: str,
+        adb_serial: str,
+        job_id: str,
+    ) -> tuple[Observation | None, list[Observation], dict]:
+        observations: list[Observation] = []
+        attempt = 0
+        while True:
+            observation = self._observe_safe(
+                device_id=device_id,
+                adb_serial=adb_serial,
+                job_id=job_id,
+                stage="before_execute" if attempt == 0 else f"before_execute_retry_{attempt}",
+            )
+            if not observation:
+                return None, observations, {
+                    "action": "stop",
+                    "status": "observation_error",
+                    "terminal": True,
+                    "execute_goal": False,
+                    "reason": "Observation failed before execution.",
+                }
+            observations.append(observation)
+            decision = decide_next_action(observation, goal="send_dm")
+            recovery = self.recovery_policy.evaluate(decision, observe_attempt=attempt)
+            if recovery.action == "observe_again":
+                self.memory.remember(
+                    "recovery_retry",
+                    {
+                        "stage": "before_execute",
+                        "attempt": attempt,
+                        "decision": decision.as_dict(),
+                        "recovery": recovery.as_dict(),
+                    },
+                    device_id=device_id,
+                    subject_id=job_id,
+                    subject_type="job",
+                )
+                attempt += 1
+                continue
+            return observation, observations, recovery.as_dict()
 
     def run_douyin_dm(
         self,
@@ -169,20 +225,70 @@ class TaskGraphRunner:
             subject_type="job" if job_id else "task",
         )
 
-        observations: list[Observation] = []
-        before = self._observe_safe(
+        before, observations, before_recovery = self._preflight_observe(
             device_id=device_id,
             adb_serial=adb_serial,
             job_id=job_id,
-            stage="before_execute",
         )
+        if before is None and bool(before_recovery.get("terminal")):
+            observation_error_result = ExecutionResult(
+                ok=False,
+                status=str(before_recovery.get("status") or "observation_error"),
+                message=str(before_recovery.get("reason") or "Observation failed before execution."),
+                action="phone_agent_goal",
+                payload={
+                    "stage": "before_execute",
+                    "recovery": before_recovery,
+                },
+            )
+            self.memory.log_execution(
+                observation_error_result,
+                device_id=device_id,
+                job_id=job_id,
+                target=search_target or user_name,
+                payload={
+                    "graph_id": graph_id,
+                    "task_id": task_id,
+                    "plan": plan.as_dict(),
+                    "recovery": before_recovery,
+                },
+            )
+            self.memory.update_plan_status(
+                graph_id,
+                observation_error_result.status,
+                patch={
+                    "completed_at": utc_now(),
+                    "result": observation_error_result.as_dict(),
+                    "observation_count": len(observations),
+                },
+            )
+            self.memory.update_device_state(
+                device_id=device_id,
+                job_id=job_id,
+                status="error",
+                current_app="douyin",
+                current_screen="unknown",
+                error=observation_error_result.message,
+            )
+            return TaskRunResult(
+                ok=False,
+                status=observation_error_result.status,
+                message=observation_error_result.message,
+                graph_id=graph_id,
+                action_result=observation_error_result,
+                observations=observations,
+            )
         if before:
-            observations.append(before)
-            if before.blocker:
+            before_decision = decide_next_action(before, goal="send_dm")
+            if bool(before_recovery.get("terminal")):
                 blocked_result = ExecutionResult(
                     ok=False,
-                    status="blocked",
-                    message=f"Blocked before execution: {before.blocker}",
+                    status=str(before_recovery.get("status") or "blocked"),
+                    message=(
+                        f"Blocked before execution: {before.blocker}"
+                        if before.blocker
+                        else str(before_recovery.get("reason") or "Stopped before execution")
+                    ),
                     action="phone_agent_goal",
                     payload={
                         "stage": "before_execute",
@@ -192,6 +298,8 @@ class TaskGraphRunner:
                         "evidence": before.evidence,
                         "errors": before.errors,
                         "screenshot_path": before.screenshot_path,
+                        "decision": before_decision.as_dict(),
+                        "recovery": before_recovery,
                     },
                 )
                 self.memory.log_execution(
@@ -204,11 +312,12 @@ class TaskGraphRunner:
                         "task_id": task_id,
                         "plan": plan.as_dict(),
                         "blocked_by_observation": before.as_dict(),
+                        "recovery": before_recovery,
                     },
                 )
                 self.memory.update_plan_status(
                     graph_id,
-                    "blocked",
+                    str(before_recovery.get("status") or "blocked"),
                     patch={
                         "completed_at": utc_now(),
                         "result": blocked_result.as_dict(),
@@ -225,7 +334,7 @@ class TaskGraphRunner:
                 )
                 return TaskRunResult(
                     ok=False,
-                    status="blocked",
+                    status=blocked_result.status,
                     message=blocked_result.message,
                     graph_id=graph_id,
                     action_result=blocked_result,
@@ -255,19 +364,79 @@ class TaskGraphRunner:
         )
         if after:
             observations.append(after)
-            if after.blocker and action_result.ok:
+
+        if action_result.ok:
+            before_decision = decide_next_action(before, goal="send_dm").as_dict() if before else None
+            after_decision = decide_next_action(after, goal="send_dm").as_dict() if after else None
+            ui_texts = []
+            if after:
+                for element in after.elements:
+                    for key in ("text", "content_desc", "content-desc", "label"):
+                        value = element.get(key)
+                        if value:
+                            ui_texts.append(str(value))
+            send_verification = verify_send(
+                message,
+                SendEvidence(
+                    before_screen=before.screen if before else "unknown",
+                    after_screen=after.screen if after else "unknown",
+                    after_confidence=after.confidence if after else 0.0,
+                    ocr_text=after.ocr_text if after else "",
+                    ui_texts=ui_texts,
+                    blocker=after.blocker if after else "",
+                ),
+            )
+            verification_payload = {
+                "ok": send_verification.ok,
+                "reason": send_verification.reason,
+                "confidence": send_verification.confidence,
+                "before_screen": before.screen if before else "unknown",
+                "after_screen": after.screen if after else "unknown",
+                "screenshot_path": after.screenshot_path if after else "",
+            }
+            if send_verification.ok:
                 action_result = ExecutionResult(
-                    ok=False,
-                    status="blocked",
-                    message=f"Blocked after execution: {after.blocker}",
+                    ok=True,
+                    status=action_result.status,
+                    message=action_result.message,
                     action=action_result.action,
                     payload={
                         **(action_result.payload or {}),
-                        "original_result": action_result.as_dict(),
-                        "verification": after.as_dict(),
+                        "send_verification": verification_payload,
+                        "agent_decisions": {
+                            "before": before_decision,
+                            "after": after_decision,
+                        },
                     },
                     latency_ms=action_result.latency_ms,
                 )
+            else:
+                action_result = ExecutionResult(
+                    ok=False,
+                    status=send_verification.reason,
+                    message=send_verification.reason,
+                    action=action_result.action,
+                    payload={
+                        **(action_result.payload or {}),
+                        "send_verification": verification_payload,
+                        "agent_decisions": {
+                            "before": before_decision,
+                            "after": after_decision,
+                        },
+                    },
+                    latency_ms=action_result.latency_ms,
+                )
+            self.memory.log_execution(
+                action_result,
+                device_id=device_id,
+                job_id=job_id,
+                target=search_target or user_name,
+                payload={
+                    "graph_id": graph_id,
+                    "task_id": task_id,
+                    "send_verification": verification_payload,
+                },
+            )
 
         status = "done" if action_result.ok else action_result.status or "failed"
         verification = observations[-1].as_dict() if observations else {}

@@ -6,12 +6,13 @@ Usage:
 
 from __future__ import annotations
 
-import os
 from celery import Celery
 from celery.schedules import crontab
 
+from core.redis import get_redis_url
+
 # Redis URL — default for local dev
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+REDIS_URL = get_redis_url()
 
 app = Celery(
     "thunder",

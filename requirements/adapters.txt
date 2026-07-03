@@ -1,19 +1,7 @@
 # Thunder Capture — Adapter layer dependencies
-# Install: pip install -r requirements/adapters.txt
-#
-# These are optional dependencies for external service integration.
-# Core system works without them; install per your deployment needs.
+# Source of truth is pyproject.toml [project.optional-dependencies.adapters]
 
-# ── Dify AI Workflow (replaces hardcoded LLM prompts) ──
-# dify-client>=1.0.0   # Uncomment after Dify deployment
-
-# ── PostgreSQL (replaces SQLite for production) ──
 psycopg2-binary>=2.9.0
 alembic>=1.13.0
-
-# ── Celery + Redis (replaces threading for task scheduling) ──
 celery[redis]>=5.4.0
 redis>=5.0.0
-
-# ── Existing transport ──
-httpx>=0.27.0

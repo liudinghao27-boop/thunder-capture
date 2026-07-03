@@ -22,7 +22,7 @@ from functools import lru_cache
 import json_repair
 
 from .config import IndustryConfig
-from server.services.task_stats import enqueue_tasks_batch
+from server.services.task_stats import enqueue_tasks_batch, enqueue_tasks_batch_result
 
 log = logging.getLogger("thunder.classify")
 
@@ -252,7 +252,7 @@ class DirectLLMBackend(ClassificationBackend):
                     + _BATCH_CLASSIFY_FOOTER
                 )
                 resp = client.chat.completions.create(
-                    model=getattr(industry, "llm_model", "deepseek-chat"),
+                    model=getattr(industry, "llm_model", "deepseek-v4-flash"),
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=2048,
                     temperature=0,
@@ -537,3 +537,17 @@ def enqueue_classified(comments: list[dict]):
     count = enqueue_tasks_batch(normalized)
     log.info("  入队: %s 条", count)
     return count
+
+
+def enqueue_classified_result(comments: list[dict]) -> dict:
+    """Write classified target comments into the queue and return funnel metrics."""
+    normalized = []
+    for comment in comments:
+        matched = comment.get("matched_categories", {})
+        if isinstance(matched, dict):
+            comment = dict(comment)
+            comment["matched_categories"] = json.dumps(matched, ensure_ascii=False)
+        normalized.append(comment)
+    result = enqueue_tasks_batch_result(normalized)
+    log.info("  入队: %s 条(去重 %s)", result.get("inserted", 0), result.get("duplicates", 0))
+    return result

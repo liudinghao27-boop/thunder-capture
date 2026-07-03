@@ -133,6 +133,8 @@ def test_industry_ready_state_no_api_key(client, sample_industry, db, monkeypatc
     """Missing API key should be the highest-priority next step."""
     for key in ("THUNDER_DEEPSEEK_KEY", "THUNDER_ZHIPU_KEY", "THUNDER_OPENAI_KEY"):
         monkeypatch.delenv(key, raising=False)
+    # Force load_system() to re-read system.yaml after env vars change.
+    monkeypatch.setenv("THUNDER_RELOAD_CONFIG", "1")
     _make_ready_industry(db, sample_industry)
     device = Device(
         user_id=sample_industry.user_id,
@@ -220,3 +222,46 @@ def test_industry_ready_state_ok_reflects_score_threshold(
     data = resp.json()
     assert data["score"] >= 75
     assert data["ok"] is True
+
+
+def test_list_industries_default_returns_flat_list(client, sample_industry):
+    """Default GET /api/industries must keep returning a list for compatibility."""
+    resp = client.get("/api/industries")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, list)
+    assert any(i["id"] == sample_industry.id for i in data)
+
+
+def test_list_industries_paginated(client, sample_industry):
+    """GET /api/industries?limit=1 should return a paginated envelope."""
+    resp = client.get("/api/industries?limit=1&offset=0")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "items" in data
+    assert "total" in data
+    assert "limit" in data
+    assert "offset" in data
+    assert data["limit"] == 1
+    assert data["offset"] == 0
+    assert any(i["id"] == sample_industry.id for i in data["items"])
+
+
+def test_list_industries_pagination_offset(client, sample_industry, db, user):
+    """Offset should skip the first industry in creation-desc order."""
+    ind2 = Industry(
+        id=str(uuid.uuid4()),
+        user_id=user.id,
+        name="Second project",
+        slug=f"second-{uuid.uuid4()}",
+    )
+    db.add(ind2)
+    db.commit()
+    try:
+        resp = client.get("/api/industries?limit=1&offset=1")
+        data = resp.json()
+        # First page offset 0 should be the newest (ind2); offset 1 should be sample.
+        assert data["items"][0]["id"] == sample_industry.id
+    finally:
+        db.delete(ind2)
+        db.commit()

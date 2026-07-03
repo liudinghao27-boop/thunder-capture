@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from core.config import load_system
+from core.constants import DEFAULT_DAILY_LIMIT, DEFAULT_MIN_INTERVAL_SEC
 
 
 @dataclass(frozen=True)
@@ -14,8 +15,8 @@ class MatrixDevice:
     adb_serial: str
     name: str = ""
     user_id: str = ""
-    daily_limit: int = 15
-    min_interval_sec: int = 90
+    daily_limit: int = DEFAULT_DAILY_LIMIT
+    min_interval_sec: int = DEFAULT_MIN_INTERVAL_SEC
     runtime_status: str = "idle"
     consecutive_failures: int = 0
     cooldown_until: str = ""
@@ -28,8 +29,8 @@ class MatrixDevice:
             adb_serial=str(row.get("adb_serial") or ""),
             name=str(row.get("name") or row.get("id") or ""),
             user_id=str(row.get("user_id") or ""),
-            daily_limit=int(row.get("daily_limit") or 15),
-            min_interval_sec=int(row.get("min_interval_sec") or 90),
+            daily_limit=int(row.get("daily_limit") or DEFAULT_DAILY_LIMIT),
+            min_interval_sec=int(row.get("min_interval_sec") or DEFAULT_MIN_INTERVAL_SEC),
             runtime_status=str(row.get("runtime_status") or "idle"),
             consecutive_failures=int(row.get("consecutive_failures") or 0),
             cooldown_until=str(row.get("cooldown_until") or ""),
@@ -121,7 +122,5 @@ def load_active_devices(user_id: str = "", device_ids: list[str] | None = None) 
     try:
         devices = _load_from_server_db(user_id, requested)
     except Exception:
-        devices = []
-    if devices:
-        return [device for device in devices if device.is_available()]
-    return _load_from_system_yaml(requested)
+        return _load_from_system_yaml(requested)
+    return [device for device in devices if device.is_available()]

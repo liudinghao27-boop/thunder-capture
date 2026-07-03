@@ -2,8 +2,17 @@
 
 import json
 import logging
-from sqlalchemy import and_, func, or_, case
 from datetime import datetime, timedelta, timezone
+from typing import Any
+
+from sqlalchemy import and_, case, func, or_
+
+from core.constants import (
+    DEFAULT_DAILY_LIMIT,
+    DEFAULT_LEAD_INVENTORY_DAYS,
+    DEFAULT_MATRIX_TARGET_DEVICES,
+    DEFAULT_REPLENISH_THRESHOLD_DAYS,
+)
 
 from server.models import SessionLocal
 from server.models.task import TaskQueue, TargetBlogger
@@ -85,11 +94,11 @@ def funnel_stats(industry_slug: str = "", owner_user_id: str = "") -> dict:
 def replenishment_plan(
     industry_slug: str,
     *,
-    target_devices: int = 30,
-    per_device_daily_limit: int = 15,
-    inventory_days: int = 3,
+    target_devices: int = DEFAULT_MATRIX_TARGET_DEVICES,
+    per_device_daily_limit: int = DEFAULT_DAILY_LIMIT,
+    inventory_days: int = DEFAULT_LEAD_INVENTORY_DAYS,
     global_daily_limit: int = 0,
-    threshold_days: int = 1,
+    threshold_days: int = DEFAULT_REPLENISH_THRESHOLD_DAYS,
     source_limit: int = 5,
     owner_user_id: str = "",
 ) -> dict:
@@ -137,9 +146,9 @@ def replenishment_plan(
 
 def inventory_stats(
     industry_slug: str,
-    target_devices: int = 30,
-    per_device_daily_limit: int = 15,
-    inventory_days: int = 3,
+    target_devices: int = DEFAULT_MATRIX_TARGET_DEVICES,
+    per_device_daily_limit: int = DEFAULT_DAILY_LIMIT,
+    inventory_days: int = DEFAULT_LEAD_INVENTORY_DAYS,
     global_daily_limit: int = 0,
     owner_user_id: str = "",
 ) -> dict:
@@ -287,7 +296,8 @@ def keyword_funnel_stats(industry_slug: str, limit: int = 20, owner_user_id: str
                 continue
             try:
                 meta = json.loads(matched_categories or "{}")
-            except Exception:
+            except Exception as exc:
+                logging.getLogger("thunder.task_stats").debug("Failed to parse matched_categories: %s", exc)
                 meta = {}
             confidence = str(meta.get("confidence", "")).lower() if isinstance(meta, dict) else ""
             if confidence in {"high", "medium", "low"}:
@@ -331,7 +341,7 @@ def source_type_funnel_stats(industry_slug: str, owner_user_id: str = "") -> lis
             if owner_filter is not None:
                 agg_query = agg_query.filter(owner_filter)
 
-        buckets = {
+        buckets: dict[str, dict[str, Any]] = {
             "target": {"type": "target", "label": "对标账号", "total": 0, "pending": 0, "claimed": 0, "done": 0, "failed": 0, "high_confidence": 0},
             "keyword": {"type": "keyword", "label": "关键词", "total": 0, "pending": 0, "claimed": 0, "done": 0, "failed": 0, "high_confidence": 0},
             "unknown": {"type": "unknown", "label": "未标记", "total": 0, "pending": 0, "claimed": 0, "done": 0, "failed": 0, "high_confidence": 0},
@@ -630,7 +640,7 @@ def get_collector_state(industry_slug: str, platform: str, key: str, default=Non
         ).first()
         if s and s.value:
             try:
-                return json.loads(s.value)
+                return json.loads(str(s.value))
             except Exception:
                 return default
         return default
@@ -660,8 +670,8 @@ def set_collector_state(industry_slug: str, platform: str, key: str, value):
             )
             db.add(s)
         else:
-            s.value = json.dumps(value)
-            s.updated_at = datetime.now(timezone.utc).isoformat()
+            s.value = json.dumps(value)  # type: ignore[assignment]
+            s.updated_at = datetime.now(timezone.utc).isoformat()  # type: ignore[assignment]
         db.commit()
     finally:
         db.close()
@@ -696,6 +706,106 @@ def enqueue_task(industry_slug: str, text: str, source_name: str, source_sec_uid
             )
             db.add(t)
             db.commit()
+    finally:
+        db.close()
+
+
+def enqueue_tasks_batch_result(comments: list[dict]) -> dict:
+    """Bulk-insert classified comments and return insert/dedup metrics."""
+    from datetime import datetime, timezone
+    from uuid import uuid4
+    from server.models import SessionLocal, engine
+    from server.models.task import TaskQueue
+
+    if not comments:
+        return {"received": 0, "valid": 0, "inserted": 0, "duplicates": 0, "invalid": 0}
+
+    received = len(comments)
+    invalid = 0
+    values = []
+    for comment in comments:
+        text = str(comment.get("text", "")).strip()
+        source_sec_uid = str(comment.get("source_sec_uid", "")).strip()
+        source_video_id = str(comment.get("source_video_id", "")).strip()
+        if not text or not source_sec_uid:
+            invalid += 1
+            continue
+
+        matched = comment.get("matched_categories", {})
+        if isinstance(matched, dict):
+            matched = json.dumps(matched, ensure_ascii=False)
+
+        values.append({
+            "industry_slug": str(comment.get("industry_slug", "")),
+            "platform": str(comment.get("source_platform") or comment.get("platform") or "douyin"),
+            "text": text,
+            "user_name": str(comment.get("source_name", "")),
+            "user_id": source_sec_uid,
+            "short_id": str(comment.get("source_short_id", "")),
+            "video_id": source_video_id or "",
+            "comment_id": str(comment.get("source_short_id", "")) or str(uuid4())[:12],
+            "source_keyword": str(comment.get("source_keyword", "")),
+            "source_creator": str(comment.get("source_creator", "")),
+            "source_video_desc": str(comment.get("source_video_desc", "")),
+            "matched_categories": matched or "[]",
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
+            "status": "pending",
+            "owner_user_id": str(comment.get("owner_user_id", "")),
+            "job_id": str(comment.get("job_id", "")),
+        })
+
+    valid = len(values)
+    if not values:
+        return {"received": received, "valid": 0, "inserted": 0, "duplicates": 0, "invalid": invalid}
+
+    db = SessionLocal()
+    try:
+        dialect = engine.dialect.name
+        if dialect == "postgresql":
+            from sqlalchemy.dialects.postgresql import insert as pg_insert
+            stmt = pg_insert(TaskQueue).values(values).on_conflict_do_nothing(
+                index_elements=["comment_id", "video_id"]
+            )
+        elif dialect == "sqlite":
+            from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+            stmt = sqlite_insert(TaskQueue).values(values).on_conflict_do_nothing(
+                index_elements=["comment_id", "video_id"]
+            )
+        else:
+            db.close()
+            inserted = 0
+            seen_keys = set()
+            for comment in comments:
+                key = (str(comment.get("source_short_id", "")), str(comment.get("source_video_id", "")))
+                if key in seen_keys:
+                    continue
+                seen_keys.add(key)
+                matched = comment.get("matched_categories", {})
+                if isinstance(matched, dict):
+                    matched = json.dumps(matched, ensure_ascii=False)
+                enqueue_task(
+                    industry_slug=comment.get("industry_slug", ""),
+                    text=comment.get("text", ""),
+                    source_name=comment.get("source_name", ""),
+                    source_sec_uid=comment.get("source_sec_uid", ""),
+                    source_short_id=comment.get("source_short_id", ""),
+                    source_video_id=comment.get("source_video_id", ""),
+                    source_keyword=comment.get("source_keyword", ""),
+                    matched_categories=matched,
+                )
+                inserted += 1
+            return {"received": received, "valid": valid, "inserted": inserted, "duplicates": max(valid - inserted, 0), "invalid": invalid}
+
+        result = db.execute(stmt)
+        db.commit()
+        inserted = int(getattr(result, "rowcount", 0) or 0)
+        duplicates = max(valid - inserted, 0)
+        log.info("  批量入队: %s 条(去重 %s)", inserted, duplicates)
+        return {"received": received, "valid": valid, "inserted": inserted, "duplicates": duplicates, "invalid": invalid}
+    except Exception as e:
+        db.rollback()
+        log.warning("批量入队失败: %s", e)
+        return {"received": received, "valid": valid, "inserted": 0, "duplicates": valid, "invalid": invalid}
     finally:
         db.close()
 
@@ -745,6 +855,7 @@ def enqueue_tasks_batch(comments: list[dict]) -> int:
     db = SessionLocal()
     try:
         dialect = engine.dialect.name
+        stmt: Any
         if dialect == "postgresql":
             from sqlalchemy.dialects.postgresql import insert as pg_insert
             stmt = pg_insert(TaskQueue).values(values).on_conflict_do_nothing(
@@ -778,7 +889,7 @@ def enqueue_tasks_batch(comments: list[dict]) -> int:
 
         result = db.execute(stmt)
         db.commit()
-        inserted = result.rowcount
+        inserted = int(getattr(result, "rowcount", 0) or 0)
         log.info("  批量入队: %s 条 (去重后)", inserted)
         return inserted
     except Exception as e:
@@ -808,6 +919,11 @@ def enqueue_tasks_batch(comments: list[dict]) -> int:
         db.close()
 
 
+def enqueue_tasks_batch(comments: list[dict]) -> int:
+    """Backward-compatible wrapper returning only inserted count."""
+    return int(enqueue_tasks_batch_result(comments).get("inserted", 0))
+
+
 def mark_target_active(sec_uid: str, industry_slug: str):
     from server.models import SessionLocal
     from server.models.task import TargetBlogger
@@ -815,7 +931,7 @@ def mark_target_active(sec_uid: str, industry_slug: str):
     try:
         b = db.query(TargetBlogger).filter(TargetBlogger.sec_uid == sec_uid, TargetBlogger.industry_slug == industry_slug).first()
         if b:
-            b.status = "active"
+            b.status = "active"  # type: ignore[assignment]
             db.commit()
     finally:
         db.close()
@@ -828,7 +944,7 @@ def mark_target_inactive(sec_uid: str, industry_slug: str):
     try:
         b = db.query(TargetBlogger).filter(TargetBlogger.sec_uid == sec_uid, TargetBlogger.industry_slug == industry_slug).first()
         if b:
-            b.status = "paused"
+            b.status = "paused"  # type: ignore[assignment]
             db.commit()
     finally:
         db.close()
