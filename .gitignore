@@ -16,6 +16,7 @@
 # Thunder Capture local runtime state
 server.log
 logs/
+output/
 data/chrome_profile/
 data/profiles/
 data/checkpoints/

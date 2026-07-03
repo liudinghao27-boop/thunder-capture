@@ -1,0 +1,59 @@
+name: UI Sync E2E
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "15 2 * * *"
+  push:
+    branches: [main, master, 'feat/**', 'fix/**']
+    paths:
+      - "server/**"
+      - "core/**"
+      - "scripts/smoke/ui_sync_e2e.py"
+      - "tests/scripts/test_ui_sync_e2e_helpers.py"
+      - ".github/workflows/ui-sync-e2e.yml"
+  pull_request:
+    branches: [main, master]
+    paths:
+      - "server/**"
+      - "core/**"
+      - "scripts/smoke/ui_sync_e2e.py"
+      - "tests/scripts/test_ui_sync_e2e_helpers.py"
+
+jobs:
+  ui-sync-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      THUNDER_SECRET_KEY: ci-test-secret-key-do-not-use-in-production
+      THUNDER_DATABASE_URL: sqlite:///data/thunder.db
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: utf-8
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[adapters,dev]"
+          python -m playwright install --with-deps chromium
+
+      - name: Unit test UI sync helpers
+        run: python -m pytest tests/scripts/test_ui_sync_e2e_helpers.py -q
+
+      - name: Run UI/API synchronization E2E
+        run: python scripts/smoke/ui_sync_e2e.py
+
+      - name: Upload UI sync evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-sync-evidence
+          path: output/ui-sync/**
