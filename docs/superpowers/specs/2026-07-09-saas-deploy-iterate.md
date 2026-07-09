@@ -61,9 +61,48 @@ python -c "from server.main import app; ..."
 
 ---
 
-## 3. 真实 Docker 部署步骤（待执行）
+## 3. Docker Compose 实际启动尝试（当前环境受阻）
 
-### 3.1 环境准备
+尝试在当前 Windows 机器执行 `docker compose up -d --build` 时失败：
+
+```text
+failed to do request: Head "https://docker.mirrors.ustc.edu.cn/v2/library/python/manifests/3.12-slim?ns=docker.io":
+writing response to docker.mirrors.ustc.edu.cn:443: connecting to 127.0.0.1:7897:
+connectex: No connection could be made because the target machine actively refused it.
+```
+
+根因：**Docker Desktop 配置了 HTTP 代理 `127.0.0.1:7897`（本地 Clash/V2Ray 代理），但该代理当前未运行。** 这导致镜像拉取（包括 build 阶段）全部走代理失败。
+
+已尝试：
+
+1. 启动 Docker Desktop（成功）。
+2. 检查 Windows 系统代理注册表 `ProxyServer = 127.0.0.1:7897`，但 `ProxyEnable = 0`（系统代理实际未启用）。
+3. 备份并清空注册表 `ProxyServer`、重启 Docker Desktop，问题依旧 → 说明代理配置在 Docker Desktop 内部设置中，不在注册表。
+4. 已恢复注册表原值。
+
+**解决方案（需人工在 Docker Desktop GUI 操作）：**
+
+- 打开 **Docker Desktop → Settings → Resources → Proxies**，关闭 HTTP/HTTPS proxy；或
+- 启动你本地原本的代理客户端（如 Clash Verge / v2rayN / 快连等），使其监听 `127.0.0.1:7897`；或
+- 临时切换到手机热点/无代理网络后重新执行 `docker compose up -d --build`。
+
+### 3.1 静态配置验证
+
+在补齐 dummy env 后：
+
+```bash
+export THUNDER_POSTGRES_PASSWORD=dummy-password
+export THUNDER_SECRET_KEY=dummy-secret
+# ...（其余变量见 .env.example）
+docker compose config > /dev/null
+# 结果：Docker Compose config OK
+```
+
+配置本身无语法错误。
+
+---
+
+## 4. 生产环境 checklist
 
 ```bash
 cp .env.example .env
@@ -74,14 +113,14 @@ cp .env.example .env
 #   THUNDER_DEEPSEEK_KEY / THUNDER_ZHIPU_KEY (按需)
 ```
 
-### 3.2 启动服务
+### 4.2 启动服务
 
 ```bash
 make docker-up
 # 等价于：docker compose up -d --build
 ```
 
-### 3.3 验证健康检查
+### 4.3 验证健康检查
 
 ```bash
 make health
@@ -102,14 +141,14 @@ make health
 }
 ```
 
-### 3.4 验证 Celery Worker
+### 4.4 验证 Celery Worker
 
 ```bash
 docker compose logs -f celery
 # 应无重复 ImportError，且能成功连接到 postgres + redis
 ```
 
-### 3.5 首次注册管理员
+### 4.5 首次注册管理员
 
 ```bash
 curl -X POST http://localhost:8000/api/auth/register \
