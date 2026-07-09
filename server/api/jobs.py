@@ -722,7 +722,12 @@ def start_send_job(
         raise HTTPException(status_code=404, detail="Industry not found")
 
     try:
-        if queue_stats(body.industry_slug).get("pending", 0) == 0:
+        if (
+            queue_stats(body.industry_slug, owner_user_id=current_user.id).get(
+                "pending", 0
+            )
+            == 0
+        ):
             raise HTTPException(status_code=400, detail="No pending leads")
     except HTTPException:
         raise

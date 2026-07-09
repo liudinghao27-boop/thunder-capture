@@ -102,7 +102,12 @@ class TaskQueue(Base):
     job_id = Column(String(64), index=True, default="")
 
     __table_args__ = (
-        UniqueConstraint("comment_id", "video_id", name="uix_comment_video"),
+        UniqueConstraint(
+            "owner_user_id",
+            "comment_id",
+            "video_id",
+            name="uix_owner_comment_video",
+        ),
         Index("ix_task_queue_industry_status", "industry_slug", "status"),
         Index(
             "ix_task_queue_industry_status_owner",
@@ -132,6 +137,7 @@ class ConsumerState(Base):
     __tablename__ = "sa_consumer_state"
 
     consumer_id = Column(String(128), primary_key=True)
+    owner_user_id = Column(String(64), index=True, nullable=False, default="")
     daily_sent = Column(Integer, default=0)
     last_sent_date = Column(String(32))
     daily_limit = Column(Integer, default=15)
@@ -146,6 +152,14 @@ class ConsumerState(Base):
     adaptive_limit = Column(Integer, default=8)
     last_wave_date = Column(String(32), default="")
     nurture_done_today = Column(Integer, default=0)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "owner_user_id",
+            "consumer_id",
+            name="uix_owner_consumer_state",
+        ),
+    )
 
 
 class CollectorState(Base):

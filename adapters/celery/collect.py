@@ -24,18 +24,25 @@ log = logging.getLogger("thunder.celery.collect")
     soft_time_limit=600,  # 10 min hard timeout
     time_limit=900,
 )
-def run_mediacrawler(self, platform: str, keywords: list[str], industry_slug: str):
+def run_mediacrawler(
+    self,
+    platform: str,
+    keywords: list[str],
+    industry_slug: str,
+    user_id: str = "",
+):
     """Run MediaCrawler for a single platform.
 
     Args:
         platform: 'douyin' | 'xiaohongshu' | 'kuaishou'
         keywords: Search keywords
         industry_slug: Industry identifier for output routing
+        user_id: Optional tenant id for per-user cookie isolation.
     """
     from adapters.mediacrawler.runner import run_platform
 
     log.info("Collecting %s for %s with keywords=%s", platform, industry_slug, keywords)
-    comments = asyncio.run(run_platform(platform, keywords))
+    comments = asyncio.run(run_platform(platform, keywords, user_id=user_id or None))
     log.info("Collected %d comments for %s/%s", len(comments), platform, industry_slug)
     return {
         "platform": platform,
@@ -47,7 +54,11 @@ def run_mediacrawler(self, platform: str, keywords: list[str], industry_slug: st
 
 @app.task(bind=True, max_retries=2)
 def run_full_collection(
-    self, industry_slug: str, keywords: list[str], platforms: list[str] | None = None
+    self,
+    industry_slug: str,
+    keywords: list[str],
+    platforms: list[str] | None = None,
+    user_id: str = "",
 ):
     """Orchestrate full collection pipeline: discover → classify → enqueue.
 
@@ -58,7 +69,8 @@ def run_full_collection(
 
     # Fan-out: collect all platforms in parallel
     jobs = group(
-        run_mediacrawler.s(platform, keywords, industry_slug) for platform in platforms
+        run_mediacrawler.s(platform, keywords, industry_slug, user_id)
+        for platform in platforms
     )
 
     # Chain: collect all → classify batch → enqueue

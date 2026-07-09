@@ -28,8 +28,6 @@ dependencies = [
     "playwright>=1.45.0",
     "easyocr>=1.7.2",
     "openpyxl>=3.1.0",
-    "PyExecJS>=1.4",
-    "motor>=3.3.0",
     "tenacity>=8.0",
 ]
 
@@ -47,6 +45,16 @@ dev = [
     "pytest-asyncio>=0.24.0",
     "ruff>=0.5.0",
     "mypy>=1.10.0",
+]
+
+[tool.ruff]
+exclude = [
+    "deps/",
+    "data/",
+    "logs/",
+    "scripts/",
+    "docs/",
+    "installer/",
 ]
 
 [tool.mypy]
@@ -93,6 +101,7 @@ build-backend = "setuptools.build_meta"
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+testpaths = ["tests"]
 addopts = "--import-mode=importlib"
 markers = [
     "contract: frontend/backend API contract tests",

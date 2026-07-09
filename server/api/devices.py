@@ -269,7 +269,7 @@ async def device_heartbeat(
         # Check cooldown state
         from server.services.task_stats import get_wave_state
 
-        wave = get_wave_state(device.id) or {}
+        wave = get_wave_state(device.id, owner_user_id=current_user.id) or {}
         is_cooldown = False
         if wave.get("rate_limited_at"):
             try:

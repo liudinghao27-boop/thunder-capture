@@ -242,6 +242,7 @@ def test_claim_respects_device_daily_limit(scheduler_db):
     db.add(
         ConsumerState(
             consumer_id="d1",
+            owner_user_id="u1",
             daily_sent=2,
             daily_limit=2,
             last_sent_date=today,
@@ -301,6 +302,7 @@ def test_mark_task_done_increments_device_daily_sent(scheduler_db):
     db.add(
         ConsumerState(
             consumer_id="d1",
+            owner_user_id="u1",
             daily_sent=1,
             daily_limit=3,
             last_sent_date=today,
@@ -343,6 +345,7 @@ def test_claim_respects_device_hourly_limit(scheduler_db):
     db.add(
         ConsumerState(
             consumer_id="d1",
+            owner_user_id="u1",
             daily_sent=2,
             daily_limit=10,
             last_sent_date=today,
@@ -384,6 +387,7 @@ def test_claim_resets_expired_device_hourly_window(scheduler_db):
     db.add(
         ConsumerState(
             consumer_id="d1",
+            owner_user_id="u1",
             daily_sent=2,
             daily_limit=10,
             last_sent_date=old_window.strftime("%Y-%m-%d"),
@@ -445,6 +449,7 @@ def test_mark_task_done_increments_device_hourly_window(scheduler_db):
     db.add(
         ConsumerState(
             consumer_id="d1",
+            owner_user_id="u1",
             daily_sent=0,
             daily_limit=10,
             wave_sent=1,

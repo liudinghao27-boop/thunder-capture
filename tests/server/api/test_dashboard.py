@@ -169,6 +169,7 @@ def test_dashboard_state_includes_device_capacity_and_cooldown(db_session):
     )
     state = ConsumerState(
         consumer_id="dev-1",
+        owner_user_id=FakeUser.id,
         daily_sent=4,
         daily_limit=10,
         total_sent=20,

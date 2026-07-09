@@ -15,7 +15,7 @@ def test_run_mediacrawler_calls_runner_and_returns_count():
     ) as mock_run:
         result = run_mediacrawler.run("douyin", ["征兵"], "recruitment")
 
-    mock_run.assert_called_once_with("douyin", ["征兵"])
+    mock_run.assert_called_once_with("douyin", ["征兵"], user_id=None)
     assert result["platform"] == "douyin"
     assert result["industry_slug"] == "recruitment"
     assert result["status"] == "collected"
@@ -29,5 +29,5 @@ def test_run_mediacrawler_returns_zero_on_empty_result():
     ) as mock_run:
         result = run_mediacrawler.run("douyin", ["none"], "recruitment")
 
-    mock_run.assert_called_once_with("douyin", ["none"])
+    mock_run.assert_called_once_with("douyin", ["none"], user_id=None)
     assert result["count"] == 0

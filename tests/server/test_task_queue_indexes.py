@@ -16,10 +16,15 @@ def test_task_queue_has_composite_indexes():
 
 
 def test_task_queue_has_unique_constraint():
-    """Original unique constraint on comment_id + video_id should remain."""
+    """Unique constraint must be tenant-scoped (owner, comment_id, video_id)."""
     from sqlalchemy import UniqueConstraint
 
     table_args = TaskQueue.__table_args__
     constraints = [arg for arg in table_args if isinstance(arg, UniqueConstraint)]
     assert len(constraints) == 1
-    assert constraints[0].name == "uix_comment_video"
+    assert constraints[0].name == "uix_owner_comment_video"
+    assert set(constraints[0].columns.keys()) == {
+        "owner_user_id",
+        "comment_id",
+        "video_id",
+    }

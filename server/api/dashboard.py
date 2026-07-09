@@ -288,7 +288,10 @@ def dashboard_state(
         row.consumer_id: row
         for row in (
             db.query(ConsumerState)
-            .filter(ConsumerState.consumer_id.in_(device_ids))
+            .filter(
+                ConsumerState.consumer_id.in_(device_ids),
+                ConsumerState.owner_user_id == uid,
+            )
             .all()
             if device_ids
             else []

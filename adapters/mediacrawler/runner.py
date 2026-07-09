@@ -21,6 +21,19 @@ log = logging.getLogger("thunder.mediacrawler")
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 MC_DIR = BASE_DIR / "deps" / "MediaCrawler"
 
+
+def _user_cookie_path(user_id: str | None = None) -> Path:
+    """Return the per-user Douyin cookie file path.
+
+    When ``user_id`` is empty/None, fall back to the legacy shared path so
+    existing single-tenant deployments keep working until they migrate.
+    Multi-tenant callers should always pass a real user id.
+    """
+    if user_id:
+        return BASE_DIR / "data" / "cookies" / str(user_id) / "douyin_cookies.json"
+    return BASE_DIR / "data" / "douyin_cookies.json"
+
+
 PLATFORM_MAP = {
     "douyin": "dy",
     "xiaohongshu": "xhs",
@@ -578,6 +591,7 @@ async def run_platform(
     workspace: Path | None = None,
     target_users: list[str] | None = None,
     cdp_port: int = 61850,
+    user_id: str | None = None,
 ) -> list[dict]:
     """Run MediaCrawler for one platform and parse JSONL results.
 
@@ -634,7 +648,7 @@ async def run_platform(
         "max_comments": 50,
         "max_notes": 8,
         "cdp_port": cdp_port,
-        "cookie_path": BASE_DIR / "data" / "douyin_cookies.json",
+        "cookie_path": _user_cookie_path(user_id),
     }
     log.info(
         "[run_platform] cdp_port=%s configure_kwargs=%r", cdp_port, configure_kwargs
@@ -678,6 +692,7 @@ async def run_target_accounts(
     max_videos: int | None = None,
     workspace: Path | None = None,
     cdp_port: int = 61850,
+    user_id: str | None = None,
 ) -> list[dict]:
     """Collect comments from configured target accounts.
 
@@ -770,7 +785,7 @@ async def run_target_accounts(
         "max_comments": 50,
         "max_notes": max_notes,
         "cdp_port": cdp_port,
-        "cookie_path": BASE_DIR / "data" / "douyin_cookies.json",
+        "cookie_path": _user_cookie_path(user_id),
     }
     try:
         stdout_text, stderr_text = await _run_mediacrawler_process_with_retry(

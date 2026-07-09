@@ -578,8 +578,9 @@ def _collect_failure_summary(
     elif is_login_failure:
         empty_reason = "crawler_login_required"
         warning = (
-            "MediaCrawler stopped at Douyin login. Refresh data/douyin_cookies.json "
-            "or complete QR/session login, then retry collection."
+            "MediaCrawler stopped at Douyin login. Refresh the per-user cookie file "
+            "(data/cookies/{user_id}/douyin_cookies.json) or complete QR/session login, "
+            "then retry collection."
         )
     else:
         empty_reason = "collect_failed"
@@ -755,12 +756,13 @@ def run_collect_job(industry_cfg, skip_discover: bool = False) -> str:
                 return
             heartbeat_task = asyncio.create_task(_discovery_heartbeat())
             _set_job(job_id_local, progress=12, phase="discover")
+            owner_user_id = getattr(industry_cfg, "user_id", "") or ""
             comments = await run_discovery(
                 industry_cfg,
                 skip_discover=skip_discover,
                 should_stop=lambda: _is_cancel_requested(job_id_local),
+                user_id=owner_user_id or None,
             )
-            owner_user_id = getattr(industry_cfg, "user_id", "") or ""
             if owner_user_id and comments:
                 comments = [
                     {
@@ -844,7 +846,8 @@ def run_collect_job(industry_cfg, skip_discover: bool = False) -> str:
                     "MediaCrawler completed but produced no source comments. "
                     "Likely causes: Douyin login/Cookie invalid, platform risk-control/CAPTCHA, "
                     "IP restriction, or the target account/keyword has no public comments. "
-                    "Check data/douyin_cookies.json, proxy/network status, and MediaCrawler stderr logs."
+                    "Check the per-user cookie file (data/cookies/{user_id}/douyin_cookies.json), "
+                    "proxy/network status, and MediaCrawler stderr logs."
                 )
                 log.warning(
                     "Collect job %s completed with zero source comments: industry=%s platforms=%s keywords=%s targets=%s",

@@ -441,7 +441,9 @@ def _build_bigdata_prompt(
     )
 
 
-async def _collect_douyin_bigdata_text_pool(seed_keyword: str) -> dict:
+async def _collect_douyin_bigdata_text_pool(
+    seed_keyword: str, user_id: str = ""
+) -> dict:
     """Collect a small Douyin text pool for project-config AI generation."""
     import shutil
 
@@ -454,10 +456,13 @@ async def _collect_douyin_bigdata_text_pool(seed_keyword: str) -> dict:
 
     workspace = prepare_mediacrawler_workspace()
     base_cfg_path = workspace / "config" / "base_config.py"
-    cookie_path = Path(__file__).resolve().parents[2] / "data" / "douyin_cookies.json"
-    shadow_browser = ShadowBrowser(
-        user_data_dir=str(Path(__file__).resolve().parents[2] / "data" / "chrome_data")
+    data_dir = Path(__file__).resolve().parents[2] / "data"
+    cookie_path = (
+        data_dir / "cookies" / user_id / "douyin_cookies.json"
+        if user_id
+        else data_dir / "douyin_cookies.json"
     )
+    shadow_browser = ShadowBrowser(user_data_dir=str(data_dir / "chrome_data"))
     try:
         configure_mediacrawler(base_cfg_path, max_comments=80, max_notes=12)
         shadow_browser.start()
@@ -473,6 +478,7 @@ async def _collect_douyin_bigdata_text_pool(seed_keyword: str) -> dict:
             [seed_keyword],
             workspace=workspace,
             cdp_port=shadow_browser.port,
+            user_id=user_id or None,
         )
         texts = _clean_string_list(
             [
@@ -509,7 +515,9 @@ async def generate_industry_config_bigdata(
     """Generate config from a Douyin text pool; fall back only when collection/LLM is unavailable."""
     log = logging.getLogger("thunder.api.industries")
     try:
-        text_pool = await _collect_douyin_bigdata_text_pool(req.seed_keyword)
+        text_pool = await _collect_douyin_bigdata_text_pool(
+            req.seed_keyword, user_id=current_user.id
+        )
     except Exception as exc:
         log.warning("big-data collection failed; falling back to seed config: %s", exc)
         fallback = _build_bigdata_fallback_config(

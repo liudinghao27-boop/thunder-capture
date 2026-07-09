@@ -184,14 +184,20 @@ def inventory_stats(
     }
 
 
-def get_wave_state(consumer_id: str):
+def get_wave_state(consumer_id: str, owner_user_id: str = ""):
     from server.models.task import ConsumerState
+
+    if owner_user_id is None:
+        return None
 
     db = SessionLocal()
     try:
         state = (
             db.query(ConsumerState)
-            .filter(ConsumerState.consumer_id == consumer_id)
+            .filter(
+                ConsumerState.consumer_id == consumer_id,
+                ConsumerState.owner_user_id == owner_user_id,
+            )
             .first()
         )
         if not state:
@@ -859,12 +865,13 @@ def enqueue_task(
 
     db = SessionLocal()
     try:
-        # Dedup: check by user_id (=source_sec_uid) + industry
+        # Dedup: check by user_id (=source_sec_uid) + industry + owner
         t = (
             db.query(TaskQueue)
             .filter(
                 TaskQueue.user_id == source_sec_uid,
                 TaskQueue.industry_slug == industry_slug,
+                TaskQueue.owner_user_id == owner_user_id,
                 TaskQueue.status == "pending",
             )
             .first()
@@ -961,7 +968,9 @@ def enqueue_tasks_batch_result(comments: list[dict]) -> dict:
             stmt = (
                 pg_insert(TaskQueue)
                 .values(values)
-                .on_conflict_do_nothing(index_elements=["comment_id", "video_id"])
+                .on_conflict_do_nothing(
+                    index_elements=["owner_user_id", "comment_id", "video_id"]
+                )
             )
         elif dialect == "sqlite":
             from sqlalchemy.dialects.sqlite import insert as sqlite_insert
@@ -969,7 +978,9 @@ def enqueue_tasks_batch_result(comments: list[dict]) -> dict:
             stmt = (
                 sqlite_insert(TaskQueue)
                 .values(values)
-                .on_conflict_do_nothing(index_elements=["comment_id", "video_id"])
+                .on_conflict_do_nothing(
+                    index_elements=["owner_user_id", "comment_id", "video_id"]
+                )
             )
         else:
             db.close()
@@ -977,6 +988,7 @@ def enqueue_tasks_batch_result(comments: list[dict]) -> dict:
             seen_keys = set()
             for comment in comments:
                 key = (
+                    str(comment.get("owner_user_id", "")),
                     str(comment.get("source_short_id", "")),
                     str(comment.get("source_video_id", "")),
                 )

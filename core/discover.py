@@ -117,6 +117,7 @@ async def run_discovery(
     skip_discover=False,
     crawldir: str | None = None,
     should_stop=None,
+    user_id: str | None = None,
 ):
     if skip_discover:
         return []
@@ -125,7 +126,9 @@ async def run_discovery(
     base_cfg_path = workspace / "config" / "base_config.py"
     configure_mediacrawler(base_cfg_path, max_comments=50)
 
-    cookie_path = BASE_DIR / "data" / "douyin_cookies.json"
+    cookie_path = (
+        BASE_DIR / "data" / "cookies" / str(user_id or "shared") / "douyin_cookies.json"
+    )
     shadow_browser = ShadowBrowser(user_data_dir=str(BASE_DIR / "data" / "chrome_data"))
     try:
         shadow_browser.start()
@@ -172,6 +175,7 @@ async def run_discovery(
                             cdp_port=shadow_browser.port,
                             max_authors=getattr(industry, "collect_authors_per_run", 12)
                             or 12,
+                            user_id=user_id,
                         )
                     except TimeoutError as exc:
                         log.warning(
@@ -219,6 +223,7 @@ async def run_discovery(
                     max_videos=getattr(industry, "collect_video_limit", None),
                     workspace=workspace,
                     cdp_port=shadow_browser.port,
+                    user_id=user_id,
                 )
                 for c in target_comments:
                     creator = str(

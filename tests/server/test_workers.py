@@ -407,7 +407,7 @@ def test_run_collect_job_classifies_douyin_login_failure(db_session):
     status = get_job_status(job_id, user_id="u1")
     assert status["status"] == "failed"
     assert status["collect_summary"]["empty_reason"] == "crawler_login_required"
-    assert "data/douyin_cookies.json" in status["collect_summary"]["warning"]
+    assert "per-user cookie file" in status["collect_summary"]["warning"]
 
 
 def test_cancel_job_persists_cancel_request(db_session):

@@ -219,7 +219,10 @@ class MatrixTaskScheduler:
         today = self._today()
         state = (
             db.query(ConsumerState)
-            .filter(ConsumerState.consumer_id == device_id)
+            .filter(
+                ConsumerState.consumer_id == device_id,
+                ConsumerState.owner_user_id == self.owner_user_id,
+            )
             .first()
         )
         if state is None:
@@ -233,7 +236,10 @@ class MatrixTaskScheduler:
             return False
         state = (
             db.query(ConsumerState)
-            .filter(ConsumerState.consumer_id == device_id)
+            .filter(
+                ConsumerState.consumer_id == device_id,
+                ConsumerState.owner_user_id == self.owner_user_id,
+            )
             .first()
         )
         if state is None:
@@ -255,12 +261,16 @@ class MatrixTaskScheduler:
         now = self._now_dt()
         state = (
             db.query(ConsumerState)
-            .filter(ConsumerState.consumer_id == device_id)
+            .filter(
+                ConsumerState.consumer_id == device_id,
+                ConsumerState.owner_user_id == self.owner_user_id,
+            )
             .first()
         )
         if state is None:
             state = ConsumerState(
                 consumer_id=device_id,
+                owner_user_id=self.owner_user_id,
                 daily_limit=self.device_daily_limit or 0,
                 daily_sent=0,
                 total_sent=0,

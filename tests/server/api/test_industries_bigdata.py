@@ -10,7 +10,7 @@ from server.api.industries import generate_industry_config_bigdata
 
 
 def _user_without_keys():
-    return SimpleNamespace(deepseek_key="", zhipu_key="", openai_key="")
+    return SimpleNamespace(id="user-1", deepseek_key="", zhipu_key="", openai_key="")
 
 
 @pytest.mark.asyncio
@@ -54,8 +54,9 @@ async def test_generate_config_bigdata_uses_collected_text_pool_and_llm(monkeypa
     req.seed_keyword = "军考"
     captured = {}
 
-    async def fake_collect(seed_keyword: str) -> dict:
+    async def fake_collect(seed_keyword: str, user_id: str = "") -> dict:
         captured["seed_keyword"] = seed_keyword
+        captured["user_id"] = user_id
         return {
             "sample_count": 2,
             "texts": [
