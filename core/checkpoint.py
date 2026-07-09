@@ -12,6 +12,7 @@ log = logging.getLogger("thunder.checkpoint")
 @dataclass
 class CheckpointData:
     """采集检查点数据 — 保存当前进度以便中断后恢复"""
+
     industry_slug: str = ""
     phase: str = "discover"  # "discover" | "collect" | "classify"
     keywords_processed: list[str] = field(default_factory=list)
@@ -73,8 +74,13 @@ class CheckpointManager:
         try:
             text = self._checkpoint_path.read_text(encoding="utf-8")
             raw = json.loads(text)
-            return CheckpointData(**{k: v for k, v in raw.items()
-                                     if k in CheckpointData.__dataclass_fields__})
+            return CheckpointData(
+                **{
+                    k: v
+                    for k, v in raw.items()
+                    if k in CheckpointData.__dataclass_fields__
+                }
+            )
         except (json.JSONDecodeError, FileNotFoundError, TypeError) as e:
             log.warning(f"Checkpoint 加载失败（将重新开始）: {e}")
             return None

@@ -19,10 +19,13 @@ from server.models.task import TaskQueue, TargetBlogger
 
 log = logging.getLogger("thunder.task_stats")
 
+
 def queue_stats(industry_slug: str = "", owner_user_id: str = "") -> dict:
     db = SessionLocal()
     try:
-        query = db.query(TaskQueue.status, func.count(TaskQueue.id)).group_by(TaskQueue.status)
+        query = db.query(TaskQueue.status, func.count(TaskQueue.id)).group_by(
+            TaskQueue.status
+        )
         if industry_slug:
             query = query.filter(TaskQueue.industry_slug == industry_slug)
         owner_filter = _owner_filter(TaskQueue, owner_user_id)
@@ -35,33 +38,33 @@ def queue_stats(industry_slug: str = "", owner_user_id: str = "") -> dict:
             "pending": stats.get("pending", 0),
             "claimed": stats.get("claimed", 0),
             "done": stats.get("done", 0),
-            "failed": stats.get("failed", 0)
+            "failed": stats.get("failed", 0),
         }
     finally:
         db.close()
 
 
 def _owner_filter(model, owner_user_id: str):
-    """Build an OR filter for owner isolation (owner matches or unowned)."""
+    """Build an exact filter for owner isolation."""
     if not owner_user_id:
         return None
     column = getattr(model, "owner_user_id", None)
     if column is None:
         return None
-    return or_(
-        column == owner_user_id,
-        column == "",
-        column.is_(None),
-    )
+    return column == owner_user_id
 
 
 def funnel_stats(industry_slug: str = "", owner_user_id: str = "") -> dict:
     db = SessionLocal()
     try:
         # 1. Monitored bloggers
-        bloggers_query = db.query(func.count(TargetBlogger.sec_uid)).filter(TargetBlogger.status == "active")
+        bloggers_query = db.query(func.count(TargetBlogger.sec_uid)).filter(
+            TargetBlogger.status == "active"
+        )
         if industry_slug:
-            bloggers_query = bloggers_query.filter(TargetBlogger.industry_slug == industry_slug)
+            bloggers_query = bloggers_query.filter(
+                TargetBlogger.industry_slug == industry_slug
+            )
         if owner_user_id:
             owner_filter = _owner_filter(TargetBlogger, owner_user_id)
             if owner_filter is not None:
@@ -85,7 +88,7 @@ def funnel_stats(industry_slug: str = "", owner_user_id: str = "") -> dict:
             "pending_leads": pending,
             "sent_success": sent_success,
             "sent_failed": sent_failed,
-            "conversion_rate": round((sent_success / max(total_leads, 1)) * 100, 2)
+            "conversion_rate": round((sent_success / max(total_leads, 1)) * 100, 2),
         }
     finally:
         db.close()
@@ -103,8 +106,11 @@ def replenishment_plan(
     owner_user_id: str = "",
 ) -> dict:
     inv = inventory_stats(
-        industry_slug, target_devices=target_devices, per_device_daily_limit=per_device_daily_limit,
-        inventory_days=inventory_days, global_daily_limit=global_daily_limit,
+        industry_slug,
+        target_devices=target_devices,
+        per_device_daily_limit=per_device_daily_limit,
+        inventory_days=inventory_days,
+        global_daily_limit=global_daily_limit,
         owner_user_id=owner_user_id,
     )
     daily_capacity = max(1, int(inv.get("daily_send_capacity") or 1))
@@ -114,9 +120,12 @@ def replenishment_plan(
     pending_deficit = max(0, target_pending - available)
     threshold_deficit = max(0, threshold_pending - available)
     should_replenish = available < threshold_pending or pending_deficit > 0
-    recommended_sources = source_performance_stats(industry_slug, limit=source_limit, owner_user_id=owner_user_id)
+    recommended_sources = source_performance_stats(
+        industry_slug, limit=source_limit, owner_user_id=owner_user_id
+    )
     source_names = [
-        item["source"] for item in recommended_sources
+        item["source"]
+        for item in recommended_sources
         if item.get("source") and item.get("source") != "unknown"
     ]
     skip_discover = not (available < threshold_pending)
@@ -177,9 +186,14 @@ def inventory_stats(
 
 def get_wave_state(consumer_id: str):
     from server.models.task import ConsumerState
+
     db = SessionLocal()
     try:
-        state = db.query(ConsumerState).filter(ConsumerState.consumer_id == consumer_id).first()
+        state = (
+            db.query(ConsumerState)
+            .filter(ConsumerState.consumer_id == consumer_id)
+            .first()
+        )
         if not state:
             return None
         return {
@@ -199,7 +213,9 @@ def get_wave_state(consumer_id: str):
         db.close()
 
 
-def get_bloggers(status: str = "active", industry_slug: str = "", owner_user_id: str = "") -> list[dict]:
+def get_bloggers(
+    status: str = "active", industry_slug: str = "", owner_user_id: str = ""
+) -> list[dict]:
     db = SessionLocal()
     try:
         query = db.query(TargetBlogger)
@@ -221,14 +237,17 @@ def get_bloggers(status: str = "active", industry_slug: str = "", owner_user_id:
                 "source_keyword": b.source_keyword,
                 "source_video_id": b.source_video_id,
                 "discovered_at": b.discovered_at,
-                "status": b.status
-            } for b in query.all()
+                "status": b.status,
+            }
+            for b in query.all()
         ]
     finally:
         db.close()
 
 
-def keyword_funnel_stats(industry_slug: str, limit: int = 20, owner_user_id: str = "") -> list[dict]:
+def keyword_funnel_stats(
+    industry_slug: str, limit: int = 20, owner_user_id: str = ""
+) -> list[dict]:
     since = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
     key_expr = func.coalesce(
         func.nullif(TaskQueue.source_keyword, ""),
@@ -239,17 +258,27 @@ def keyword_funnel_stats(industry_slug: str, limit: int = 20, owner_user_id: str
     db = SessionLocal()
     try:
         # Aggregate status counts in the database, scoped to a rolling window.
-        agg_query = db.query(
-            key_expr.label("key"),
-            func.count(TaskQueue.id).label("total"),
-            func.sum(case((TaskQueue.status == "pending", 1), else_=0)).label("pending"),
-            func.sum(case((TaskQueue.status == "claimed", 1), else_=0)).label("claimed"),
-            func.sum(case((TaskQueue.status == "done", 1), else_=0)).label("done"),
-            func.sum(case((TaskQueue.status == "failed", 1), else_=0)).label("failed"),
-        ).filter(
-            TaskQueue.industry_slug == industry_slug,
-            TaskQueue.fetched_at >= since,
-        ).group_by(key_expr)
+        agg_query = (
+            db.query(
+                key_expr.label("key"),
+                func.count(TaskQueue.id).label("total"),
+                func.sum(case((TaskQueue.status == "pending", 1), else_=0)).label(
+                    "pending"
+                ),
+                func.sum(case((TaskQueue.status == "claimed", 1), else_=0)).label(
+                    "claimed"
+                ),
+                func.sum(case((TaskQueue.status == "done", 1), else_=0)).label("done"),
+                func.sum(case((TaskQueue.status == "failed", 1), else_=0)).label(
+                    "failed"
+                ),
+            )
+            .filter(
+                TaskQueue.industry_slug == industry_slug,
+                TaskQueue.fetched_at >= since,
+            )
+            .group_by(key_expr)
+        )
         if owner_user_id:
             owner_filter = _owner_filter(TaskQueue, owner_user_id)
             if owner_filter is not None:
@@ -297,9 +326,15 @@ def keyword_funnel_stats(industry_slug: str, limit: int = 20, owner_user_id: str
             try:
                 meta = json.loads(matched_categories or "{}")
             except Exception as exc:
-                logging.getLogger("thunder.task_stats").debug("Failed to parse matched_categories: %s", exc)
+                logging.getLogger("thunder.task_stats").debug(
+                    "Failed to parse matched_categories: %s", exc
+                )
                 meta = {}
-            confidence = str(meta.get("confidence", "")).lower() if isinstance(meta, dict) else ""
+            confidence = (
+                str(meta.get("confidence", "")).lower()
+                if isinstance(meta, dict)
+                else ""
+            )
             if confidence in {"high", "medium", "low"}:
                 bucket[f"{confidence}_confidence"] += 1
 
@@ -328,23 +363,54 @@ def source_type_funnel_stats(industry_slug: str, owner_user_id: str = "") -> lis
 
     db = SessionLocal()
     try:
-        agg_query = db.query(
-            source_expr.label("source"),
-            TaskQueue.status,
-            func.count(TaskQueue.id).label("total"),
-        ).filter(
-            TaskQueue.industry_slug == industry_slug,
-            TaskQueue.fetched_at >= since,
-        ).group_by(source_expr, TaskQueue.status)
+        agg_query = (
+            db.query(
+                source_expr.label("source"),
+                TaskQueue.status,
+                func.count(TaskQueue.id).label("total"),
+            )
+            .filter(
+                TaskQueue.industry_slug == industry_slug,
+                TaskQueue.fetched_at >= since,
+            )
+            .group_by(source_expr, TaskQueue.status)
+        )
         if owner_user_id:
             owner_filter = _owner_filter(TaskQueue, owner_user_id)
             if owner_filter is not None:
                 agg_query = agg_query.filter(owner_filter)
 
         buckets: dict[str, dict[str, Any]] = {
-            "target": {"type": "target", "label": "对标账号", "total": 0, "pending": 0, "claimed": 0, "done": 0, "failed": 0, "high_confidence": 0},
-            "keyword": {"type": "keyword", "label": "关键词", "total": 0, "pending": 0, "claimed": 0, "done": 0, "failed": 0, "high_confidence": 0},
-            "unknown": {"type": "unknown", "label": "未标记", "total": 0, "pending": 0, "claimed": 0, "done": 0, "failed": 0, "high_confidence": 0},
+            "target": {
+                "type": "target",
+                "label": "对标账号",
+                "total": 0,
+                "pending": 0,
+                "claimed": 0,
+                "done": 0,
+                "failed": 0,
+                "high_confidence": 0,
+            },
+            "keyword": {
+                "type": "keyword",
+                "label": "关键词",
+                "total": 0,
+                "pending": 0,
+                "claimed": 0,
+                "done": 0,
+                "failed": 0,
+                "high_confidence": 0,
+            },
+            "unknown": {
+                "type": "unknown",
+                "label": "未标记",
+                "total": 0,
+                "pending": 0,
+                "claimed": 0,
+                "done": 0,
+                "failed": 0,
+                "high_confidence": 0,
+            },
         }
         for source, status, total in agg_query:
             source = source or ""
@@ -385,7 +451,10 @@ def source_type_funnel_stats(industry_slug: str, owner_user_id: str = "") -> lis
                 meta = json.loads(matched_categories or "{}")
             except Exception:
                 meta = {}
-            if isinstance(meta, dict) and str(meta.get("confidence", "")).lower() == "high":
+            if (
+                isinstance(meta, dict)
+                and str(meta.get("confidence", "")).lower() == "high"
+            ):
                 bucket["high_confidence"] += 1
 
         return [b for b in buckets.values() if b["total"] > 0]
@@ -399,10 +468,18 @@ def blogger_source_stats(industry_slug: str, owner_user_id: str = "") -> dict:
     try:
         query = db.query(
             func.count(TargetBlogger.sec_uid).label("total"),
-            func.sum(case((TargetBlogger.status == "active", 1), else_=0)).label("active"),
+            func.sum(case((TargetBlogger.status == "active", 1), else_=0)).label(
+                "active"
+            ),
             func.sum(case((source_expr.like("对标:%"), 1), else_=0)).label("target"),
-            func.sum(case((and_(source_expr != "", source_expr.notlike("对标:%")), 1), else_=0)).label("keyword"),
-            func.sum(case((or_(source_expr == "", source_expr.is_(None)), 1), else_=0)).label("unknown"),
+            func.sum(
+                case(
+                    (and_(source_expr != "", source_expr.notlike("对标:%")), 1), else_=0
+                )
+            ).label("keyword"),
+            func.sum(
+                case((or_(source_expr == "", source_expr.is_(None)), 1), else_=0)
+            ).label("unknown"),
         ).filter(TargetBlogger.industry_slug == industry_slug)
         if owner_user_id:
             owner_filter = _owner_filter(TargetBlogger, owner_user_id)
@@ -429,7 +506,9 @@ def _source_type(source: str) -> str:
     return "unknown"
 
 
-def source_performance_stats(industry_slug: str, limit: int = 20, owner_user_id: str = "") -> list[dict]:
+def source_performance_stats(
+    industry_slug: str, limit: int = 20, owner_user_id: str = ""
+) -> list[dict]:
     since = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
     source_expr = func.coalesce(
         func.nullif(TaskQueue.source_keyword, ""),
@@ -439,17 +518,27 @@ def source_performance_stats(industry_slug: str, limit: int = 20, owner_user_id:
 
     db = SessionLocal()
     try:
-        agg_query = db.query(
-            source_expr.label("source"),
-            func.count(TaskQueue.id).label("total"),
-            func.sum(case((TaskQueue.status == "pending", 1), else_=0)).label("pending"),
-            func.sum(case((TaskQueue.status == "claimed", 1), else_=0)).label("claimed"),
-            func.sum(case((TaskQueue.status == "done", 1), else_=0)).label("done"),
-            func.sum(case((TaskQueue.status == "failed", 1), else_=0)).label("failed"),
-        ).filter(
-            TaskQueue.industry_slug == industry_slug,
-            TaskQueue.fetched_at >= since,
-        ).group_by(source_expr)
+        agg_query = (
+            db.query(
+                source_expr.label("source"),
+                func.count(TaskQueue.id).label("total"),
+                func.sum(case((TaskQueue.status == "pending", 1), else_=0)).label(
+                    "pending"
+                ),
+                func.sum(case((TaskQueue.status == "claimed", 1), else_=0)).label(
+                    "claimed"
+                ),
+                func.sum(case((TaskQueue.status == "done", 1), else_=0)).label("done"),
+                func.sum(case((TaskQueue.status == "failed", 1), else_=0)).label(
+                    "failed"
+                ),
+            )
+            .filter(
+                TaskQueue.industry_slug == industry_slug,
+                TaskQueue.fetched_at >= since,
+            )
+            .group_by(source_expr)
+        )
         if owner_user_id:
             owner_filter = _owner_filter(TaskQueue, owner_user_id)
             if owner_filter is not None:
@@ -500,7 +589,11 @@ def source_performance_stats(industry_slug: str, limit: int = 20, owner_user_id:
                 meta = json.loads(matched_categories or "{}")
             except Exception:
                 meta = {}
-            confidence = str(meta.get("confidence", "")).lower() if isinstance(meta, dict) else ""
+            confidence = (
+                str(meta.get("confidence", "")).lower()
+                if isinstance(meta, dict)
+                else ""
+            )
             if confidence in {"high", "medium", "low"}:
                 bucket[f"{confidence}_confidence"] += 1
 
@@ -541,12 +634,13 @@ def source_performance_stats(industry_slug: str, limit: int = 20, owner_user_id:
 
 def industry_daily_quota_state(industry_slug: str, owner_user_id: str = "") -> dict:
     from server.models.task import IndustryDailyQuota
+
     day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     db = SessionLocal()
     try:
         query = db.query(IndustryDailyQuota).filter(
             IndustryDailyQuota.industry_slug == industry_slug,
-            IndustryDailyQuota.day == day
+            IndustryDailyQuota.day == day,
         )
         if owner_user_id:
             owner_filter = _owner_filter(IndustryDailyQuota, owner_user_id)
@@ -555,23 +649,48 @@ def industry_daily_quota_state(industry_slug: str, owner_user_id: str = "") -> d
         quota = query.first()
         sent = quota.sent if quota else 0
         reserved = quota.reserved if quota else 0
-        return {"industry_slug": industry_slug, "day": day, "sent": sent, "reserved": reserved}
+        return {
+            "industry_slug": industry_slug,
+            "day": day,
+            "sent": sent,
+            "reserved": reserved,
+        }
     finally:
         db.close()
 
 
-def add_blogger(sec_uid: str, short_id: str, nickname: str, industry_slug: str, source_keyword: str = "", metadata: str = ""):
+def add_blogger(
+    sec_uid: str,
+    short_id: str,
+    nickname: str,
+    industry_slug: str,
+    source_keyword: str = "",
+    metadata: str = "",
+    owner_user_id: str = "",
+):
     from server.models import SessionLocal
     from server.models.task import TargetBlogger
     from datetime import datetime, timezone
+
     db = SessionLocal()
     try:
-        b = db.query(TargetBlogger).filter(TargetBlogger.sec_uid == sec_uid, TargetBlogger.industry_slug == industry_slug).first()
+        b = (
+            db.query(TargetBlogger)
+            .filter(
+                TargetBlogger.sec_uid == sec_uid,
+                TargetBlogger.industry_slug == industry_slug,
+                TargetBlogger.owner_user_id == owner_user_id,
+            )
+            .first()
+        )
         if not b:
             b = TargetBlogger(
-                sec_uid=sec_uid, nickname=nickname,
-                industry_slug=industry_slug, source_keyword=source_keyword,
-                discovered_at=datetime.now(timezone.utc).isoformat()
+                sec_uid=sec_uid,
+                nickname=nickname,
+                industry_slug=industry_slug,
+                source_keyword=source_keyword,
+                owner_user_id=owner_user_id,
+                discovered_at=datetime.now(timezone.utc).isoformat(),
             )
             db.add(b)
             db.commit()
@@ -581,6 +700,7 @@ def add_blogger(sec_uid: str, short_id: str, nickname: str, industry_slug: str, 
 
 def _parse_dt(value) -> "datetime | None":
     from datetime import datetime, timezone
+
     if not value:
         return None
     if isinstance(value, datetime):
@@ -592,52 +712,83 @@ def _parse_dt(value) -> "datetime | None":
         return None
 
 
-def is_video_collected(aweme_id: str, sec_uid: str = "", within_hours: int = 48) -> bool:
+def is_video_collected(
+    aweme_id: str, sec_uid: str = "", within_hours: int = 48, owner_user_id: str = ""
+) -> bool:
     from server.models import SessionLocal
     from server.models.task import CollectedVideo
     from datetime import datetime, timezone, timedelta
+
     db = SessionLocal()
     try:
         query = db.query(CollectedVideo).filter(CollectedVideo.aweme_id == aweme_id)
         if sec_uid:
             query = query.filter(CollectedVideo.source_sec_uid == sec_uid)
+        if owner_user_id:
+            owner_filter = _owner_filter(CollectedVideo, owner_user_id)
+            if owner_filter is not None:
+                query = query.filter(owner_filter)
         v = query.first()
         if not v:
             return False
         v_collected_at = _parse_dt(v.collected_at)
         if v_collected_at is None:
             return False
-        return (datetime.now(timezone.utc) - v_collected_at) < timedelta(hours=within_hours)
+        return (datetime.now(timezone.utc) - v_collected_at) < timedelta(
+            hours=within_hours
+        )
     finally:
         db.close()
 
 
-def mark_video_collected(aweme_id: str, sec_uid: str):
+def mark_video_collected(aweme_id: str, sec_uid: str, owner_user_id: str = ""):
     from server.models import SessionLocal
     from server.models.task import CollectedVideo
     from datetime import datetime, timezone
+
     db = SessionLocal()
     try:
-        v = db.query(CollectedVideo).filter(CollectedVideo.aweme_id == aweme_id).first()
+        query = db.query(CollectedVideo).filter(
+            CollectedVideo.aweme_id == aweme_id,
+            CollectedVideo.source_sec_uid == sec_uid,
+        )
+        if owner_user_id:
+            owner_filter = _owner_filter(CollectedVideo, owner_user_id)
+            if owner_filter is not None:
+                query = query.filter(owner_filter)
+        v = query.first()
         if not v:
-            v = CollectedVideo(aweme_id=aweme_id, source_sec_uid=sec_uid, collected_at=datetime.now(timezone.utc).isoformat())
+            v = CollectedVideo(
+                aweme_id=aweme_id,
+                source_sec_uid=sec_uid,
+                owner_user_id=owner_user_id,
+                collected_at=datetime.now(timezone.utc).isoformat(),
+            )
             db.add(v)
             db.commit()
     finally:
         db.close()
 
 
-def get_collector_state(industry_slug: str, platform: str, key: str, default=None):
+def get_collector_state(
+    industry_slug: str, platform: str, key: str, default=None, owner_user_id: str = ""
+):
     import json
     from server.models import SessionLocal
     from server.models.task import CollectorState
+
     db = SessionLocal()
     try:
-        s = db.query(CollectorState).filter(
+        query = db.query(CollectorState).filter(
             CollectorState.industry_slug == industry_slug,
             CollectorState.platform == platform,
             CollectorState.key == key,
-        ).first()
+        )
+        if owner_user_id:
+            owner_filter = _owner_filter(CollectorState, owner_user_id)
+            if owner_filter is not None:
+                query = query.filter(owner_filter)
+        s = query.first()
         if s and s.value:
             try:
                 return json.loads(str(s.value))
@@ -648,23 +799,36 @@ def get_collector_state(industry_slug: str, platform: str, key: str, default=Non
         db.close()
 
 
-def set_collector_state(industry_slug: str, platform: str, key: str, value):
+def set_collector_state(
+    industry_slug: str,
+    platform: str,
+    key: str,
+    value,
+    owner_user_id: str = "",
+):
     import json
     from server.models import SessionLocal
     from server.models.task import CollectorState
     from datetime import datetime, timezone
+
     db = SessionLocal()
     try:
-        s = db.query(CollectorState).filter(
+        query = db.query(CollectorState).filter(
             CollectorState.industry_slug == industry_slug,
             CollectorState.platform == platform,
             CollectorState.key == key,
-        ).first()
+        )
+        if owner_user_id:
+            owner_filter = _owner_filter(CollectorState, owner_user_id)
+            if owner_filter is not None:
+                query = query.filter(owner_filter)
+        s = query.first()
         if not s:
             s = CollectorState(
                 industry_slug=industry_slug,
                 platform=platform,
                 key=key,
+                owner_user_id=owner_user_id,
                 value=json.dumps(value),
                 updated_at=datetime.now(timezone.utc).isoformat(),
             )
@@ -677,19 +841,34 @@ def set_collector_state(industry_slug: str, platform: str, key: str, value):
         db.close()
 
 
-def enqueue_task(industry_slug: str, text: str, source_name: str, source_sec_uid: str, source_short_id: str, source_video_id: str, source_keyword: str = "", matched_categories: str = ""):
+def enqueue_task(
+    industry_slug: str,
+    text: str,
+    source_name: str,
+    source_sec_uid: str,
+    source_short_id: str,
+    source_video_id: str,
+    source_keyword: str = "",
+    matched_categories: str = "",
+    owner_user_id: str = "",
+):
     from server.models import SessionLocal
     from server.models.task import TaskQueue
     from datetime import datetime, timezone
     import uuid
+
     db = SessionLocal()
     try:
         # Dedup: check by user_id (=source_sec_uid) + industry
-        t = db.query(TaskQueue).filter(
-            TaskQueue.user_id == source_sec_uid,
-            TaskQueue.industry_slug == industry_slug,
-            TaskQueue.status == "pending"
-        ).first()
+        t = (
+            db.query(TaskQueue)
+            .filter(
+                TaskQueue.user_id == source_sec_uid,
+                TaskQueue.industry_slug == industry_slug,
+                TaskQueue.status == "pending",
+            )
+            .first()
+        )
         if not t:
             t = TaskQueue(
                 industry_slug=industry_slug,
@@ -703,6 +882,7 @@ def enqueue_task(industry_slug: str, text: str, source_name: str, source_sec_uid
                 matched_categories=matched_categories,
                 fetched_at=datetime.now(timezone.utc).isoformat(),
                 status="pending",
+                owner_user_id=owner_user_id,
             )
             db.add(t)
             db.commit()
@@ -735,48 +915,71 @@ def enqueue_tasks_batch_result(comments: list[dict]) -> dict:
         if isinstance(matched, dict):
             matched = json.dumps(matched, ensure_ascii=False)
 
-        values.append({
-            "industry_slug": str(comment.get("industry_slug", "")),
-            "platform": str(comment.get("source_platform") or comment.get("platform") or "douyin"),
-            "text": text,
-            "user_name": str(comment.get("source_name", "")),
-            "user_id": source_sec_uid,
-            "short_id": str(comment.get("source_short_id", "")),
-            "video_id": source_video_id or "",
-            "comment_id": str(comment.get("source_short_id", "")) or str(uuid4())[:12],
-            "source_keyword": str(comment.get("source_keyword", "")),
-            "source_creator": str(comment.get("source_creator", "")),
-            "source_video_desc": str(comment.get("source_video_desc", "")),
-            "matched_categories": matched or "[]",
-            "fetched_at": datetime.now(timezone.utc).isoformat(),
-            "status": "pending",
-            "owner_user_id": str(comment.get("owner_user_id", "")),
-            "job_id": str(comment.get("job_id", "")),
-        })
+        values.append(
+            {
+                "industry_slug": str(comment.get("industry_slug", "")),
+                "platform": str(
+                    comment.get("source_platform")
+                    or comment.get("platform")
+                    or "douyin"
+                ),
+                "text": text,
+                "user_name": str(comment.get("source_name", "")),
+                "user_id": source_sec_uid,
+                "short_id": str(comment.get("source_short_id", "")),
+                "video_id": source_video_id or "",
+                "comment_id": str(comment.get("source_short_id", ""))
+                or str(uuid4())[:12],
+                "source_keyword": str(comment.get("source_keyword", "")),
+                "source_creator": str(comment.get("source_creator", "")),
+                "source_video_desc": str(comment.get("source_video_desc", "")),
+                "matched_categories": matched or "[]",
+                "fetched_at": datetime.now(timezone.utc).isoformat(),
+                "status": "pending",
+                "owner_user_id": str(comment.get("owner_user_id", "")),
+                "job_id": str(comment.get("job_id", "")),
+            }
+        )
 
     valid = len(values)
     if not values:
-        return {"received": received, "valid": 0, "inserted": 0, "duplicates": 0, "invalid": invalid}
+        return {
+            "received": received,
+            "valid": 0,
+            "inserted": 0,
+            "duplicates": 0,
+            "invalid": invalid,
+        }
 
     db = SessionLocal()
     try:
         dialect = engine.dialect.name
+        stmt: Any = None
         if dialect == "postgresql":
             from sqlalchemy.dialects.postgresql import insert as pg_insert
-            stmt = pg_insert(TaskQueue).values(values).on_conflict_do_nothing(
-                index_elements=["comment_id", "video_id"]
+
+            stmt = (
+                pg_insert(TaskQueue)
+                .values(values)
+                .on_conflict_do_nothing(index_elements=["comment_id", "video_id"])
             )
         elif dialect == "sqlite":
             from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-            stmt = sqlite_insert(TaskQueue).values(values).on_conflict_do_nothing(
-                index_elements=["comment_id", "video_id"]
+
+            stmt = (
+                sqlite_insert(TaskQueue)
+                .values(values)
+                .on_conflict_do_nothing(index_elements=["comment_id", "video_id"])
             )
         else:
             db.close()
             inserted = 0
             seen_keys = set()
             for comment in comments:
-                key = (str(comment.get("source_short_id", "")), str(comment.get("source_video_id", "")))
+                key = (
+                    str(comment.get("source_short_id", "")),
+                    str(comment.get("source_video_id", "")),
+                )
                 if key in seen_keys:
                     continue
                 seen_keys.add(key)
@@ -792,129 +995,39 @@ def enqueue_tasks_batch_result(comments: list[dict]) -> dict:
                     source_video_id=comment.get("source_video_id", ""),
                     source_keyword=comment.get("source_keyword", ""),
                     matched_categories=matched,
+                    owner_user_id=str(comment.get("owner_user_id", "")),
                 )
                 inserted += 1
-            return {"received": received, "valid": valid, "inserted": inserted, "duplicates": max(valid - inserted, 0), "invalid": invalid}
+            return {
+                "received": received,
+                "valid": valid,
+                "inserted": inserted,
+                "duplicates": max(valid - inserted, 0),
+                "invalid": invalid,
+            }
 
         result = db.execute(stmt)
         db.commit()
         inserted = int(getattr(result, "rowcount", 0) or 0)
         duplicates = max(valid - inserted, 0)
         log.info("  批量入队: %s 条(去重 %s)", inserted, duplicates)
-        return {"received": received, "valid": valid, "inserted": inserted, "duplicates": duplicates, "invalid": invalid}
+        return {
+            "received": received,
+            "valid": valid,
+            "inserted": inserted,
+            "duplicates": duplicates,
+            "invalid": invalid,
+        }
     except Exception as e:
         db.rollback()
         log.warning("批量入队失败: %s", e)
-        return {"received": received, "valid": valid, "inserted": 0, "duplicates": valid, "invalid": invalid}
-    finally:
-        db.close()
-
-
-def enqueue_tasks_batch(comments: list[dict]) -> int:
-    """Bulk-insert classified comments into the task queue.
-
-    Uses a single transaction and dialect-specific ``INSERT ... ON CONFLICT
-    DO NOTHING`` against the ``(comment_id, video_id)`` unique constraint.
-    Falls back to one-by-one enqueue_task when the dialect is unsupported.
-    """
-    from datetime import datetime, timezone
-    from uuid import uuid4
-    from server.models import SessionLocal, engine
-    from server.models.task import TaskQueue
-
-    if not comments:
-        return 0
-
-    values = []
-    for comment in comments:
-        text = str(comment.get("text", "")).strip()
-        source_sec_uid = str(comment.get("source_sec_uid", "")).strip()
-        source_video_id = str(comment.get("source_video_id", "")).strip()
-        if not text or not source_sec_uid:
-            continue
-        matched = comment.get("matched_categories", {})
-        if isinstance(matched, dict):
-            matched = json.dumps(matched, ensure_ascii=False)
-        values.append({
-            "industry_slug": str(comment.get("industry_slug", "")),
-            "text": text,
-            "user_name": str(comment.get("source_name", "")),
-            "user_id": source_sec_uid,
-            "short_id": str(comment.get("source_short_id", "")),
-            "video_id": source_video_id or "",
-            "comment_id": str(comment.get("source_short_id", "")) or str(uuid4())[:12],
-            "source_keyword": str(comment.get("source_keyword", "")),
-            "matched_categories": matched or "[]",
-            "fetched_at": datetime.now(timezone.utc).isoformat(),
-            "status": "pending",
-        })
-
-    if not values:
-        return 0
-
-    db = SessionLocal()
-    try:
-        dialect = engine.dialect.name
-        stmt: Any
-        if dialect == "postgresql":
-            from sqlalchemy.dialects.postgresql import insert as pg_insert
-            stmt = pg_insert(TaskQueue).values(values).on_conflict_do_nothing(
-                index_elements=["comment_id", "video_id"]
-            )
-        elif dialect == "sqlite":
-            from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-            stmt = sqlite_insert(TaskQueue).values(values).on_conflict_do_nothing(
-                index_elements=["comment_id", "video_id"]
-            )
-        else:
-            # Fallback for other databases; slower but correct.
-            db.close()
-            count = 0
-            for comment in comments:
-                matched = comment.get("matched_categories", {})
-                if isinstance(matched, dict):
-                    matched = json.dumps(matched, ensure_ascii=False)
-                enqueue_task(
-                    industry_slug=comment.get("industry_slug", ""),
-                    text=comment.get("text", ""),
-                    source_name=comment.get("source_name", ""),
-                    source_sec_uid=comment.get("source_sec_uid", ""),
-                    source_short_id=comment.get("source_short_id", ""),
-                    source_video_id=comment.get("source_video_id", ""),
-                    source_keyword=comment.get("source_keyword", ""),
-                    matched_categories=matched,
-                )
-                count += 1
-            return count
-
-        result = db.execute(stmt)
-        db.commit()
-        inserted = int(getattr(result, "rowcount", 0) or 0)
-        log.info("  批量入队: %s 条 (去重后)", inserted)
-        return inserted
-    except Exception as e:
-        db.rollback()
-        log.warning("批量入队失败，回退到逐条入队: %s", e)
-        count = 0
-        for comment in comments:
-            try:
-                matched = comment.get("matched_categories", {})
-                if isinstance(matched, dict):
-                    matched = json.dumps(matched, ensure_ascii=False)
-                enqueue_task(
-                    industry_slug=comment.get("industry_slug", ""),
-                    text=comment.get("text", ""),
-                    source_name=comment.get("source_name", ""),
-                    source_sec_uid=comment.get("source_sec_uid", ""),
-                    source_short_id=comment.get("source_short_id", ""),
-                    source_video_id=comment.get("source_video_id", ""),
-                    source_keyword=comment.get("source_keyword", ""),
-                    matched_categories=matched,
-                )
-                count += 1
-            except Exception:
-                continue
-        return count
+        return {
+            "received": received,
+            "valid": valid,
+            "inserted": 0,
+            "duplicates": valid,
+            "invalid": invalid,
+        }
     finally:
         db.close()
 
@@ -924,12 +1037,21 @@ def enqueue_tasks_batch(comments: list[dict]) -> int:
     return int(enqueue_tasks_batch_result(comments).get("inserted", 0))
 
 
-def mark_target_active(sec_uid: str, industry_slug: str):
+def mark_target_active(sec_uid: str, industry_slug: str, owner_user_id: str = ""):
     from server.models import SessionLocal
     from server.models.task import TargetBlogger
+
     db = SessionLocal()
     try:
-        b = db.query(TargetBlogger).filter(TargetBlogger.sec_uid == sec_uid, TargetBlogger.industry_slug == industry_slug).first()
+        b = (
+            db.query(TargetBlogger)
+            .filter(
+                TargetBlogger.sec_uid == sec_uid,
+                TargetBlogger.industry_slug == industry_slug,
+                TargetBlogger.owner_user_id == owner_user_id,
+            )
+            .first()
+        )
         if b:
             b.status = "active"  # type: ignore[assignment]
             db.commit()
@@ -937,12 +1059,21 @@ def mark_target_active(sec_uid: str, industry_slug: str):
         db.close()
 
 
-def mark_target_inactive(sec_uid: str, industry_slug: str):
+def mark_target_inactive(sec_uid: str, industry_slug: str, owner_user_id: str = ""):
     from server.models import SessionLocal
     from server.models.task import TargetBlogger
+
     db = SessionLocal()
     try:
-        b = db.query(TargetBlogger).filter(TargetBlogger.sec_uid == sec_uid, TargetBlogger.industry_slug == industry_slug).first()
+        b = (
+            db.query(TargetBlogger)
+            .filter(
+                TargetBlogger.sec_uid == sec_uid,
+                TargetBlogger.industry_slug == industry_slug,
+                TargetBlogger.owner_user_id == owner_user_id,
+            )
+            .first()
+        )
         if b:
             b.status = "paused"  # type: ignore[assignment]
             db.commit()

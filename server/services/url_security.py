@@ -19,7 +19,13 @@ def is_safe_webhook_url(url: str) -> bool:
     # block IP addresses in hostname
     try:
         ip = ipaddress.ip_address(hostname)
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved:
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+        ):
             return False
     except ValueError:
         pass
@@ -27,7 +33,13 @@ def is_safe_webhook_url(url: str) -> bool:
     try:
         resolved = socket.gethostbyname(hostname)
         ip = ipaddress.ip_address(resolved)
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved:
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+        ):
             return False
     except (socket.gaierror, ValueError):
         return False

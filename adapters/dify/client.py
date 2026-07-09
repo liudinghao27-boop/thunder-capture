@@ -43,6 +43,7 @@ DIFY_TIMEOUT = float(os.getenv("DIFY_TIMEOUT", "120.0"))
 @dataclass
 class DifyResult:
     """Normalized classification result, backend-agnostic."""
+
     index: int
     is_target: bool = False
     confidence: str = "low"
@@ -128,7 +129,9 @@ class DifyClient:
 
         log.info(
             "Dify classify: %d comments → %d batches (batch_size=%d)",
-            len(comments), total_batches, self.batch_size,
+            len(comments),
+            total_batches,
+            self.batch_size,
         )
 
         for batch_num in range(total_batches):
@@ -159,14 +162,20 @@ class DifyClient:
                         all_targets.append(r)
 
             except Exception as exc:
-                log.warning("Dify batch %d/%d failed: %s", batch_num + 1, total_batches, exc)
+                log.warning(
+                    "Dify batch %d/%d failed: %s", batch_num + 1, total_batches, exc
+                )
                 # Continue with next batch — don't lose other batches
                 continue
 
             if progress_callback:
                 progress_callback(batch_num + 1, total_batches)
 
-        log.info("Dify classify done: %d targets from %d comments", len(all_targets), len(comments))
+        log.info(
+            "Dify classify done: %d targets from %d comments",
+            len(all_targets),
+            len(comments),
+        )
         return all_targets
 
     # ── Internal ────────────────────────────────────────
@@ -219,27 +228,45 @@ class DifyClient:
             except httpx.TimeoutException:
                 last_error = "timeout"
                 if attempt < self.max_retries:
-                    wait = 2 ** attempt
-                    log.warning("Dify timeout, retry %d/%d in %ds", attempt + 1, self.max_retries, wait)
+                    wait = 2**attempt
+                    log.warning(
+                        "Dify timeout, retry %d/%d in %ds",
+                        attempt + 1,
+                        self.max_retries,
+                        wait,
+                    )
                     time.sleep(wait)
             except httpx.HTTPStatusError as exc:
                 last_error = f"HTTP {exc.response.status_code}"
                 if exc.response.status_code >= 500 and attempt < self.max_retries:
-                    wait = 2 ** attempt
-                    log.warning("Dify 5xx, retry %d/%d in %ds", attempt + 1, self.max_retries, wait)
+                    wait = 2**attempt
+                    log.warning(
+                        "Dify 5xx, retry %d/%d in %ds",
+                        attempt + 1,
+                        self.max_retries,
+                        wait,
+                    )
                     time.sleep(wait)
                 else:
                     raise
             except Exception as exc:
                 last_error = str(exc)[:100]
                 if attempt < self.max_retries:
-                    wait = 2 ** attempt
-                    log.warning("Dify error, retry %d/%d in %ds: %s", attempt + 1, self.max_retries, wait, exc)
+                    wait = 2**attempt
+                    log.warning(
+                        "Dify error, retry %d/%d in %ds: %s",
+                        attempt + 1,
+                        self.max_retries,
+                        wait,
+                        exc,
+                    )
                     time.sleep(wait)
                 else:
                     raise
 
-        raise RuntimeError(f"Dify batch failed after {self.max_retries} retries: {last_error}")
+        raise RuntimeError(
+            f"Dify batch failed after {self.max_retries} retries: {last_error}"
+        )
 
     def _parse_response(self, data: dict) -> list[DifyResult]:
         """Normalize Dify workflow output to DifyResult list.
@@ -255,7 +282,9 @@ class DifyClient:
             try:
                 raw_results = json.loads(raw_results)
             except json.JSONDecodeError:
-                log.error("Dify returned unparseable result string: %s", raw_results[:200])
+                log.error(
+                    "Dify returned unparseable result string: %s", raw_results[:200]
+                )
                 return []
 
         if not isinstance(raw_results, list):
@@ -269,16 +298,18 @@ class DifyClient:
             if not isinstance(idx, int) or idx < 0:
                 continue
 
-            parsed.append(DifyResult(
-                index=idx,
-                is_target=bool(item.get("is_target", False)),
-                confidence=str(item.get("confidence", "low")).lower(),
-                category=str(item.get("category", "")),
-                question=str(item.get("question", "")),
-                suggested_reply_topic=str(item.get("suggested_reply_topic", "")),
-                evidence=str(item.get("evidence", "")),
-                raw=item,
-            ))
+            parsed.append(
+                DifyResult(
+                    index=idx,
+                    is_target=bool(item.get("is_target", False)),
+                    confidence=str(item.get("confidence", "low")).lower(),
+                    category=str(item.get("category", "")),
+                    question=str(item.get("question", "")),
+                    suggested_reply_topic=str(item.get("suggested_reply_topic", "")),
+                    evidence=str(item.get("evidence", "")),
+                    raw=item,
+                )
+            )
 
         return parsed
 

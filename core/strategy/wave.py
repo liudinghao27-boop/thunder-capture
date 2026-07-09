@@ -16,7 +16,8 @@ log = logging.getLogger("thunder.strategy.wave")
 @dataclass
 class WaveDecision:
     """Output of wave strategy for the next action."""
-    action: str          # "send" | "wait" | "nurture" | "wave_break" | "stop"
+
+    action: str  # "send" | "wait" | "nurture" | "wave_break" | "stop"
     wait_seconds: int = 0
     reason: str = ""
     meta: dict[str, Any] | None = None
@@ -70,7 +71,9 @@ class WaveStrategy:
         """
         base = self.base_interval_sec
         if total_sent <= self.warmup_send_count:
-            return base + random.randint(self.warmup_extra_sec // 2, self.warmup_extra_sec)
+            return base + random.randint(
+                self.warmup_extra_sec // 2, self.warmup_extra_sec
+            )
         return base + random.randint(0, 30)
 
     def wave_decision(

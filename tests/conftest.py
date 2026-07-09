@@ -9,7 +9,9 @@ import pytest
 os.environ.setdefault("THUNDER_DATABASE_URL", "sqlite:///./data/test_thunder.db")
 
 # Ensure a clean test database for each test run
-_test_db_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data", "test_thunder.db"))
+_test_db_path = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "data", "test_thunder.db")
+)
 for suffix in ("", "-shm", "-wal"):
     try:
         os.remove(_test_db_path + suffix)
@@ -26,6 +28,7 @@ if PROJECT_ROOT not in sys.path:
 def _mock_socket_gethostbyname(monkeypatch):
     """Provide deterministic public DNS resolution for webhook URL tests."""
     import socket
+
     monkeypatch.setattr(socket, "gethostbyname", lambda _hostname: "8.8.8.8")
 
 

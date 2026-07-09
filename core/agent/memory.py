@@ -42,9 +42,7 @@ class AgentMemoryStore:
                 memory_type=memory_type,
                 content=content,
             )
-            db.add(
-                row
-            )
+            db.add(row)
             db.commit()
             return row.id
         except Exception:
@@ -80,9 +78,7 @@ class AgentMemoryStore:
                 status=status,
                 graph=graph,
             )
-            db.add(
-                row
-            )
+            db.add(row)
             db.commit()
             return row.id
         except Exception:
@@ -153,11 +149,16 @@ class AgentMemoryStore:
             )
             state = (
                 db.query(DeviceState)
-                .filter(DeviceState.user_id == self.user_id, DeviceState.device_id == observation.device_id)
+                .filter(
+                    DeviceState.user_id == self.user_id,
+                    DeviceState.device_id == observation.device_id,
+                )
                 .first()
             )
             if not state:
-                state = DeviceState(user_id=self.user_id, device_id=observation.device_id)
+                state = DeviceState(
+                    user_id=self.user_id, device_id=observation.device_id
+                )
                 db.add(state)
             state.current_screen = observation.screen
             state.current_app = observation.package_name or state.current_app
@@ -198,7 +199,10 @@ class AgentMemoryStore:
         try:
             state = (
                 db.query(DeviceState)
-                .filter(DeviceState.user_id == self.user_id, DeviceState.device_id == device_id)
+                .filter(
+                    DeviceState.user_id == self.user_id,
+                    DeviceState.device_id == device_id,
+                )
                 .first()
             )
             if not state:

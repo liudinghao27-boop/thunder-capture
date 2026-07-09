@@ -30,7 +30,9 @@ class DeviceSupervisor:
         self.industry_slug = industry_slug
         self.memory = AgentMemoryStore(user_id=user_id, industry_slug=industry_slug)
 
-    def preflight(self, *, device_id: str, adb_serial: str, job_id: str = "") -> DeviceGate:
+    def preflight(
+        self, *, device_id: str, adb_serial: str, job_id: str = ""
+    ) -> DeviceGate:
         cooldown_gate = self._cooldown_gate(device_id)
         if cooldown_gate is not None:
             return cooldown_gate
@@ -60,10 +62,14 @@ class DeviceSupervisor:
 
         db = SessionLocal()
         try:
-            device = db.query(Device).filter(
-                Device.id == device_id,
-                Device.user_id == self.user_id,
-            ).first()
+            device = (
+                db.query(Device)
+                .filter(
+                    Device.id == device_id,
+                    Device.user_id == self.user_id,
+                )
+                .first()
+            )
             if not device or not device.cooldown_until:
                 return None
             cooldown_until = device.cooldown_until
@@ -85,7 +91,9 @@ class DeviceSupervisor:
         finally:
             db.close()
 
-    def mark_started(self, *, device_id: str, job_id: str = "", health: dict | None = None) -> None:
+    def mark_started(
+        self, *, device_id: str, job_id: str = "", health: dict | None = None
+    ) -> None:
         self._update_device(
             device_id=device_id,
             status="running",
@@ -101,8 +109,12 @@ class DeviceSupervisor:
             health=health or {},
         )
 
-    def heartbeat(self, *, device_id: str, job_id: str = "", health: dict | None = None) -> None:
-        self._update_device(device_id=device_id, status="running", job_id=job_id, health=health)
+    def heartbeat(
+        self, *, device_id: str, job_id: str = "", health: dict | None = None
+    ) -> None:
+        self._update_device(
+            device_id=device_id, status="running", job_id=job_id, health=health
+        )
         self.memory.update_device_state(
             device_id=device_id,
             job_id=job_id,
@@ -110,7 +122,9 @@ class DeviceSupervisor:
             health=health or {},
         )
 
-    def mark_success(self, *, device_id: str, job_id: str = "", health: dict | None = None) -> None:
+    def mark_success(
+        self, *, device_id: str, job_id: str = "", health: dict | None = None
+    ) -> None:
         self._update_device(
             device_id=device_id,
             status="running",
@@ -136,7 +150,9 @@ class DeviceSupervisor:
         health: dict | None = None,
         cooldown_minutes: int = 0,
     ) -> None:
-        cooldown_until = utcnow() + timedelta(minutes=cooldown_minutes) if cooldown_minutes else None
+        cooldown_until = (
+            utcnow() + timedelta(minutes=cooldown_minutes) if cooldown_minutes else None
+        )
         self._update_device(
             device_id=device_id,
             status=status,
@@ -159,7 +175,9 @@ class DeviceSupervisor:
             error=error,
         )
 
-    def mark_cooldown(self, *, device_id: str, job_id: str = "", error: str = "", hours: int = 4) -> None:
+    def mark_cooldown(
+        self, *, device_id: str, job_id: str = "", error: str = "", hours: int = 4
+    ) -> None:
         self.mark_failure(
             device_id=device_id,
             job_id=job_id,
@@ -168,7 +186,15 @@ class DeviceSupervisor:
             cooldown_minutes=max(1, int(hours * 60)),
         )
 
-    def mark_finished(self, *, device_id: str, job_id: str = "", status: str = "idle", error: str = "", force: bool = False) -> None:
+    def mark_finished(
+        self,
+        *,
+        device_id: str,
+        job_id: str = "",
+        status: str = "idle",
+        error: str = "",
+        force: bool = False,
+    ) -> None:
         # Worker cleanup must not reopen a device that another path already quarantined.
         current = self._get_current_status(device_id)
         terminal_statuses = {"isolated", "cooldown", "offline", "keyboard_error"}
@@ -197,9 +223,14 @@ class DeviceSupervisor:
             return ""
         db = SessionLocal()
         try:
-            device = db.query(Device).filter(
-                Device.id == device_id, Device.user_id == self.user_id,
-            ).first()
+            device = (
+                db.query(Device)
+                .filter(
+                    Device.id == device_id,
+                    Device.user_id == self.user_id,
+                )
+                .first()
+            )
             return device.runtime_status or "" if device else ""
         finally:
             db.close()
@@ -247,7 +278,9 @@ class DeviceSupervisor:
             if health is not None:
                 device.keyboard_ready = bool(health.get("adb_keyboard_active"))
                 device.keyboard_message = (
-                    "ADB Keyboard active" if device.keyboard_ready else "ADB Keyboard not active"
+                    "ADB Keyboard active"
+                    if device.keyboard_ready
+                    else "ADB Keyboard not active"
                 )
             if failure_delta:
                 current = int(device.consecutive_failures or 0)

@@ -14,7 +14,11 @@ from server.models.job import Job
 from server.models.task import TaskQueue
 from server.models.user import User
 from server.secret_store import has_secret
-from server.services.analytics import aggregate_by_keyword, aggregate_by_device, query_task_rows
+from server.services.analytics import (
+    aggregate_by_keyword,
+    aggregate_by_device,
+    query_task_rows,
+)
 from server.services.migrations import verify_matrix_schema
 from server.workers import (
     cancel_job,
@@ -58,7 +62,9 @@ def get_effect_stats(
         TaskQueue.owner_user_id == current_user.id,
         TaskQueue.fetched_at >= since,
     )
-    sent = base_query.filter(TaskQueue.status.in_(["sent", "done", "replied", "converted"])).count()
+    sent = base_query.filter(
+        TaskQueue.status.in_(["sent", "done", "replied", "converted"])
+    ).count()
     replied = base_query.filter(TaskQueue.status.in_(["replied", "converted"])).count()
     converted = base_query.filter(TaskQueue.status == "converted").count()
 
@@ -204,6 +210,7 @@ def system_health(
     try:
         from server.models.task import TaskQueue
         from server.models import SessionLocal
+
         health_db = SessionLocal()
         health_db.query(TaskQueue).first()
         health_db.close()
@@ -215,9 +222,12 @@ def system_health(
     add("adb", bool(adb_path), adb_path or "未在 PATH 中找到 adb")
 
     llm_keys = {
-        "deepseek": bool(os.getenv("THUNDER_DEEPSEEK_KEY")) or has_secret(current_user.deepseek_key),
-        "zhipu": bool(os.getenv("THUNDER_ZHIPU_KEY")) or has_secret(current_user.zhipu_key),
-        "openai": bool(os.getenv("THUNDER_OPENAI_KEY")) or has_secret(current_user.openai_key),
+        "deepseek": bool(os.getenv("THUNDER_DEEPSEEK_KEY"))
+        or has_secret(current_user.deepseek_key),
+        "zhipu": bool(os.getenv("THUNDER_ZHIPU_KEY"))
+        or has_secret(current_user.zhipu_key),
+        "openai": bool(os.getenv("THUNDER_OPENAI_KEY"))
+        or has_secret(current_user.openai_key),
     }
     add(
         "llm_keys",

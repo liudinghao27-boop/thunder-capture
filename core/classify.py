@@ -59,7 +59,9 @@ def _compile_word_pattern(words: tuple[str, ...]) -> str:
 
 
 @lru_cache(maxsize=64)
-def _compile_patterns(intent_words: tuple[str, ...] = (), noise_words: tuple[str, ...] = ()) -> tuple[re.Pattern, re.Pattern]:
+def _compile_patterns(
+    intent_words: tuple[str, ...] = (), noise_words: tuple[str, ...] = ()
+) -> tuple[re.Pattern, re.Pattern]:
     intent_parts = list(_DEFAULT_INTENT_PATTERNS)
     custom_intent = _compile_word_pattern(intent_words)
     if custom_intent:
@@ -73,7 +75,9 @@ def _compile_patterns(intent_words: tuple[str, ...] = (), noise_words: tuple[str
     return re.compile("|".join(intent_parts)), re.compile("|".join(noise_parts))
 
 
-def prefilter_comments(comments: list[dict], intent_words=None, noise_words=None) -> tuple[list[dict], list[dict]]:
+def prefilter_comments(
+    comments: list[dict], intent_words=None, noise_words=None
+) -> tuple[list[dict], list[dict]]:
     """Fast deterministic filter before AI classification."""
     intent_tuple = tuple(intent_words or ())
     noise_tuple = tuple(noise_words or ())
@@ -99,9 +103,11 @@ def prefilter_comments(comments: list[dict], intent_words=None, noise_words=None
 #  Classification Backend Abstraction
 # ═══════════════════════════════════════════════════════════
 
+
 @dataclass
 class ClassifiedComment:
     """Backend-agnostic classification result for one comment."""
+
     index: int
     is_target: bool
     confidence: str  # high / medium / low
@@ -198,6 +204,7 @@ class DirectLLMBackend(ClassificationBackend):
             return self._client
         try:
             from server.services.llm import get_deepseek_client
+
             self._client = get_deepseek_client()
             return self._client
         except ImportError:
@@ -206,6 +213,7 @@ class DirectLLMBackend(ClassificationBackend):
             import httpx
             from openai import OpenAI
             from core.config import load_system
+
             cfg = load_system()
             self._client = OpenAI(
                 base_url="https://api.deepseek.com",
@@ -275,19 +283,23 @@ class DirectLLMBackend(ClassificationBackend):
                     if not isinstance(idx, int) or not (0 <= idx < len(chunk)):
                         continue
                     classified = ClassifiedComment(
-                        index=idx,
+                        index=start + idx,
                         is_target=bool(item.get("is_target", False)),
                         confidence=str(item.get("confidence", "low")).lower(),
                         category=str(item.get("category", "")),
                         question=str(item.get("question", "")),
-                        suggested_reply_topic=str(item.get("suggested_reply_topic", "")),
+                        suggested_reply_topic=str(
+                            item.get("suggested_reply_topic", "")
+                        ),
                         evidence=str(item.get("evidence", "")),
                     )
                     if classified.is_target:
                         results.append(classified)
 
             except Exception as exc:
-                log.warning("DirectLLM batch %d/%d failed: %s", batch_num + 1, batches, exc)
+                log.warning(
+                    "DirectLLM batch %d/%d failed: %s", batch_num + 1, batches, exc
+                )
                 continue
 
             if progress_callback:
@@ -299,6 +311,7 @@ class DirectLLMBackend(ClassificationBackend):
 # ═══════════════════════════════════════════════════════════
 #  Backend: Dify Workflow
 # ═══════════════════════════════════════════════════════════
+
 
 class DifyBackend(ClassificationBackend):
     """Dify Workflow API classification backend.
@@ -317,6 +330,7 @@ class DifyBackend(ClassificationBackend):
     def available(self) -> bool:
         try:
             from adapters.dify.client import DifyClient
+
             client = DifyClient()
             return client.available
         except Exception:
@@ -325,6 +339,7 @@ class DifyBackend(ClassificationBackend):
     def _get_client(self):
         if self._client is None:
             from adapters.dify.client import DifyClient
+
             self._client = DifyClient()
         return self._client
 
@@ -367,6 +382,7 @@ class DifyBackend(ClassificationBackend):
 # ═══════════════════════════════════════════════════════════
 #  Classification Router — auto-detect which backend to use
 # ═══════════════════════════════════════════════════════════
+
 
 class ClassificationRouter:
     """Auto-detecting classification router.
@@ -414,6 +430,7 @@ class ClassificationRouter:
 # ═══════════════════════════════════════════════════════════
 #  Quality gate — shared across all backends
 # ═══════════════════════════════════════════════════════════
+
 
 def _passes_quality_gate(item: ClassifiedComment, comment: dict) -> bool:
     """Filter classification results by confidence threshold."""
@@ -486,7 +503,9 @@ def classify_batch(
 
     # ── Stage 1: Regex prefilter (always) ──
     candidates, skipped = prefilter_comments(comments, intent_words, noise_words)
-    log.info("  意向预筛: %s/%s 进入 AI (%s 跳过)", len(candidates), total, len(skipped))
+    log.info(
+        "  意向预筛: %s/%s 进入 AI (%s 跳过)", len(candidates), total, len(skipped)
+    )
     if not candidates:
         return passed
 
@@ -519,7 +538,10 @@ def classify_batch(
 
     log.info(
         "  AI 通过: %s/%s (总入队候选 %s/%s) [via %s]",
-        len(passed), len(candidates), len(passed), total,
+        len(passed),
+        len(candidates),
+        len(passed),
+        total,
         _router.active_backend.name,
     )
     return passed
@@ -549,5 +571,7 @@ def enqueue_classified_result(comments: list[dict]) -> dict:
             comment["matched_categories"] = json.dumps(matched, ensure_ascii=False)
         normalized.append(comment)
     result = enqueue_tasks_batch_result(normalized)
-    log.info("  入队: %s 条(去重 %s)", result.get("inserted", 0), result.get("duplicates", 0))
+    log.info(
+        "  入队: %s 条(去重 %s)", result.get("inserted", 0), result.get("duplicates", 0)
+    )
     return result

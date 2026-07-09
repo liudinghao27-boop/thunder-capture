@@ -35,7 +35,9 @@ def _calc_rates(sent: int, replied: int, converted: int) -> tuple[float, float]:
     return reply_rate, conversion_rate
 
 
-def aggregate_by_keyword(_industry_slug: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def aggregate_by_keyword(
+    _industry_slug: str, rows: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
     """Aggregate TaskQueue-like rows by source_keyword.
 
     Sent metrics count rows whose status is ``sent``, ``done``, ``replied``,
@@ -52,24 +54,33 @@ def aggregate_by_keyword(_industry_slug: str, rows: list[dict[str, Any]]) -> lis
             continue
         counts = _status_counts(group)
         collected = len(group)
-        sent = counts.get("sent", 0) + counts.get("done", 0) + counts.get("replied", 0) + counts.get("converted", 0)
+        sent = (
+            counts.get("sent", 0)
+            + counts.get("done", 0)
+            + counts.get("replied", 0)
+            + counts.get("converted", 0)
+        )
         replied = counts.get("replied", 0) + counts.get("converted", 0)
         converted = counts.get("converted", 0)
         reply_rate, conversion_rate = _calc_rates(sent, replied, converted)
-        results.append({
-            "keyword": keyword,
-            "collected": collected,
-            "sent": sent,
-            "replied": replied,
-            "converted": converted,
-            "reply_rate": reply_rate,
-            "conversion_rate": conversion_rate,
-        })
+        results.append(
+            {
+                "keyword": keyword,
+                "collected": collected,
+                "sent": sent,
+                "replied": replied,
+                "converted": converted,
+                "reply_rate": reply_rate,
+                "conversion_rate": conversion_rate,
+            }
+        )
 
     return sorted(results, key=lambda r: r["conversion_rate"], reverse=True)
 
 
-def aggregate_by_device(_industry_slug: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def aggregate_by_device(
+    _industry_slug: str, rows: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
     """Aggregate TaskQueue-like rows by consumer_id (device).
 
     Sent metrics count rows whose status is ``sent``, ``done``, ``replied``,
@@ -85,25 +96,34 @@ def aggregate_by_device(_industry_slug: str, rows: list[dict[str, Any]]) -> list
         if not device_id:
             continue
         counts = _status_counts(group)
-        sent = counts.get("sent", 0) + counts.get("done", 0) + counts.get("replied", 0) + counts.get("converted", 0)
+        sent = (
+            counts.get("sent", 0)
+            + counts.get("done", 0)
+            + counts.get("replied", 0)
+            + counts.get("converted", 0)
+        )
         replied = counts.get("replied", 0) + counts.get("converted", 0)
         converted = counts.get("converted", 0)
         failed = counts.get("failed", 0)
         reply_rate, conversion_rate = _calc_rates(sent, replied, converted)
-        results.append({
-            "device_id": device_id,
-            "sent": sent,
-            "replied": replied,
-            "converted": converted,
-            "failed": failed,
-            "reply_rate": reply_rate,
-            "conversion_rate": conversion_rate,
-        })
+        results.append(
+            {
+                "device_id": device_id,
+                "sent": sent,
+                "replied": replied,
+                "converted": converted,
+                "failed": failed,
+                "reply_rate": reply_rate,
+                "conversion_rate": conversion_rate,
+            }
+        )
 
     return sorted(results, key=lambda r: r["reply_rate"], reverse=True)
 
 
-def query_task_rows(db: Session, industry_slug: str, days: int = 7, owner_user_id: str = "") -> list[dict[str, Any]]:
+def query_task_rows(
+    db: Session, industry_slug: str, days: int = 7, owner_user_id: str = ""
+) -> list[dict[str, Any]]:
     """Query TaskQueue rows for analytics within the last N days.
 
     ``fetched_at`` is stored as an ISO-8601 string, which is lexicographically

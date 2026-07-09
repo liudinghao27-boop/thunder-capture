@@ -2,7 +2,9 @@ from core.device.manager import MatrixDevice, load_active_devices
 
 
 def test_web_user_does_not_fallback_to_yaml_when_no_db_devices(monkeypatch):
-    monkeypatch.setattr("core.device.manager._load_from_server_db", lambda user_id, device_ids: [])
+    monkeypatch.setattr(
+        "core.device.manager._load_from_server_db", lambda user_id, device_ids: []
+    )
     monkeypatch.setattr(
         "core.device.manager._load_from_system_yaml",
         lambda device_ids: [MatrixDevice(id="yaml-1", adb_serial="serial-yaml")],

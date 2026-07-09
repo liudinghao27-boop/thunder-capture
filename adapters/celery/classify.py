@@ -21,7 +21,9 @@ log = logging.getLogger("thunder.celery.classify")
     default_retry_delay=30,
     soft_time_limit=120,
 )
-def classify_batch_task(self, comments: list[dict], industry_name: str, categories: list[str]):
+def classify_batch_task(
+    self, comments: list[dict], industry_name: str, categories: list[str]
+):
     """Classify a batch of comments via LLM (or Dify if configured).
 
     This is the Celery-ified version of core/classify.py classify_batch().
@@ -34,6 +36,7 @@ def classify_batch_task(self, comments: list[dict], industry_name: str, categori
     # Try Dify first if configured
     try:
         from adapters.dify.client import DifyClient
+
         client = DifyClient()
         if client.available:
             log.info("Using Dify for classification (%d comments)", len(comments))
@@ -67,6 +70,7 @@ def classify_batch_task(self, comments: list[dict], industry_name: str, categori
 def enqueue_classified_task(self, classified: list[dict]):
     """Enqueue classified comments into the sending queue."""
     from core.classify import enqueue_classified
+
     count = enqueue_classified(classified)
     log.info("Enqueued %d leads", count)
     return {"enqueued": count}

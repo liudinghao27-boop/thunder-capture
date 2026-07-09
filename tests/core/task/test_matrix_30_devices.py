@@ -81,9 +81,11 @@ def test_combined_limits_reserve_one_slot_per_claim(matrix_db):
 
     db = matrix_db()
     try:
-        quota = db.query(IndustryDailyQuota).filter(
-            IndustryDailyQuota.industry_slug == "matrix-test"
-        ).one()
+        quota = (
+            db.query(IndustryDailyQuota)
+            .filter(IndustryDailyQuota.industry_slug == "matrix-test")
+            .one()
+        )
         assert quota.reserved == 1
     finally:
         db.close()

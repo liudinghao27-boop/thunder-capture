@@ -113,3 +113,19 @@ def test_static_ui_job_evidence_drawer_contract():
     assert "renderJobEvidenceTimeline" in html
     assert "renderJobEvidenceLog" in html
     assert "/api/agent/execution-logs?job_id=" in html
+
+
+def test_static_ui_lead_center_uses_industry_slug_for_lead_queries():
+    """TaskQueue rows are keyed by industry_slug, so the UI must not query leads by DB id."""
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+
+    dropdown_start = html.index("async function populateTaskIndustryDropdown")
+    dropdown_end = html.index("function renderLeadStatus", dropdown_start)
+    dropdown_source = html[dropdown_start:dropdown_end]
+    load_start = html.index("async function loadTasksView")
+    load_end = html.index("async function retryTask", load_start)
+    load_source = html[load_start:load_end]
+
+    assert "opt.value = ind.slug" in dropdown_source
+    assert "opt.dataset.industryId = ind.id" in dropdown_source
+    assert "`/api/leads?industry_slug=${industrySlug}" in load_source

@@ -90,6 +90,7 @@ def _release_claimed_tasks_for_job(job: dict) -> int:
         return 0
 
     job_id = job.get("job_id") or job.get("id", "")
+    owner_user_id = job.get("user_id", "")
     db = SessionLocal()
     released = 0
 
@@ -97,50 +98,77 @@ def _release_claimed_tasks_for_job(job: dict) -> int:
         if not industry_slug or count <= 0:
             return
         day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        quota = db.query(IndustryDailyQuota).filter(
-            IndustryDailyQuota.industry_slug == industry_slug,
-            IndustryDailyQuota.day == day,
-        ).first()
+        quota = (
+            db.query(IndustryDailyQuota)
+            .filter(
+                IndustryDailyQuota.industry_slug == industry_slug,
+                IndustryDailyQuota.owner_user_id == owner_user_id,
+                IndustryDailyQuota.day == day,
+            )
+            .first()
+        )
         if quota is None:
             return
         quota.reserved = max(int(quota.reserved or 0) - count, 0)
 
     try:
         if job_id:
-            released = db.query(TaskQueue).filter(
-                TaskQueue.status == "claimed",
-                TaskQueue.claim_token.like(f"{job_id}:%")
-            ).update({
-                TaskQueue.status: "pending",
-                TaskQueue.consumer_id: None,
-                TaskQueue.claim_token: None,
-                TaskQueue.claimed_at: None,
-                TaskQueue.retry_after: None,
-                TaskQueue.error: None
-            }, synchronize_session=False)
+            released = (
+                db.query(TaskQueue)
+                .filter(
+                    TaskQueue.status == "claimed",
+                    TaskQueue.claim_token.like(f"{job_id}:%"),
+                )
+                .update(
+                    {
+                        TaskQueue.status: "pending",
+                        TaskQueue.consumer_id: None,
+                        TaskQueue.claim_token: None,
+                        TaskQueue.claimed_at: None,
+                        TaskQueue.retry_after: None,
+                        TaskQueue.error: None,
+                    },
+                    synchronize_session=False,
+                )
+            )
             release_quota_reservations(released)
             db.commit()
             if released:
-                log.warning("Released %s claimed task(s) for cancelled/orphaned job %s", released, job_id)
+                log.warning(
+                    "Released %s claimed task(s) for cancelled/orphaned job %s",
+                    released,
+                    job_id,
+                )
                 return released
 
         if industry_slug and devices:
-            released = db.query(TaskQueue).filter(
-                TaskQueue.status == "claimed",
-                TaskQueue.industry_slug == industry_slug,
-                TaskQueue.consumer_id.in_(devices)
-            ).update({
-                TaskQueue.status: "pending",
-                TaskQueue.consumer_id: None,
-                TaskQueue.claim_token: None,
-                TaskQueue.claimed_at: None,
-                TaskQueue.retry_after: None,
-                TaskQueue.error: None
-            }, synchronize_session=False)
+            released = (
+                db.query(TaskQueue)
+                .filter(
+                    TaskQueue.status == "claimed",
+                    TaskQueue.industry_slug == industry_slug,
+                    TaskQueue.consumer_id.in_(devices),
+                )
+                .update(
+                    {
+                        TaskQueue.status: "pending",
+                        TaskQueue.consumer_id: None,
+                        TaskQueue.claim_token: None,
+                        TaskQueue.claimed_at: None,
+                        TaskQueue.retry_after: None,
+                        TaskQueue.error: None,
+                    },
+                    synchronize_session=False,
+                )
+            )
             release_quota_reservations(released)
             db.commit()
             if released:
-                log.warning("Released %s claimed task(s) for cancelled/orphaned job %s", released, job.get("job_id") or job.get("id", ""))
+                log.warning(
+                    "Released %s claimed task(s) for cancelled/orphaned job %s",
+                    released,
+                    job.get("job_id") or job.get("id", ""),
+                )
     finally:
         db.close()
     return released
@@ -173,7 +201,9 @@ def reconcile_stale_cancellations(user_id: str = "") -> int:
                 or job.updated_at
                 or job.created_at
             )
-            if not requested_at or now - requested_at <= timedelta(seconds=_CANCELLING_GRACE_SECONDS):
+            if not requested_at or now - requested_at <= timedelta(
+                seconds=_CANCELLING_GRACE_SECONDS
+            ):
                 continue
             snapshot = {
                 **payload,
@@ -339,7 +369,8 @@ def _persist_job(job_id: str, fields: dict):
                 user_id=user_id,
                 type=fields.get("type", "unknown"),
                 status=fields.get("status", "running"),
-                created_at=_parse_dt(fields.get("created_at")) or datetime.now(timezone.utc),
+                created_at=_parse_dt(fields.get("created_at"))
+                or datetime.now(timezone.utc),
             )
             db.add(job)
 
@@ -348,8 +379,14 @@ def _persist_job(job_id: str, fields: dict):
             transition(job.status, target_status)
 
         for attr in (
-            "user_id", "type", "status", "progress", "industry_slug",
-            "industry_name", "error", "cancel_requested",
+            "user_id",
+            "type",
+            "status",
+            "progress",
+            "industry_slug",
+            "industry_name",
+            "error",
+            "cancel_requested",
         ):
             if attr in fields:
                 setattr(job, attr, fields[attr])
@@ -360,9 +397,19 @@ def _persist_job(job_id: str, fields: dict):
         payload = dict(job.payload or {})
         for key, value in fields.items():
             if key not in {
-                "user_id", "type", "status", "progress", "industry_slug",
-                "industry_name", "error", "created_at", "updated_at",
-                "completed_at", "cancel_requested", "job_id", "payload",
+                "user_id",
+                "type",
+                "status",
+                "progress",
+                "industry_slug",
+                "industry_name",
+                "error",
+                "created_at",
+                "updated_at",
+                "completed_at",
+                "cancel_requested",
+                "job_id",
+                "payload",
             }:
                 payload[key] = value
         job.payload = payload
@@ -402,7 +449,8 @@ def _set_job(job_id: str, **fields):
         # Prune old jobs to prevent memory leak.
         if len(_jobs) > _MAX_JOB_HISTORY + 50:
             finished = [
-                jid for jid, j in _jobs.items()
+                jid
+                for jid, j in _jobs.items()
                 if j.get("status") in ("done", "failed", "cancelled")
             ]
             if finished:
@@ -479,6 +527,7 @@ def cancel_job(job_id: str, user_id: str) -> dict | None:
 
 def _run_async(coro):
     """Run an async coroutine in a background thread with its own event loop."""
+
     def _runner():
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -488,6 +537,7 @@ def _run_async(coro):
             log.exception(f"Background async task failed: {e}")
         finally:
             loop.close()
+
     t = threading.Thread(target=_runner, daemon=True)
     t.start()
 
@@ -500,6 +550,61 @@ def _collect_source_breakdown(comments: list[dict] | None) -> dict:
             breakdown[source_type] = 0
         breakdown[source_type] += 1
     return breakdown
+
+
+def _collect_failure_summary(
+    industry_cfg,
+    *,
+    job_id: str,
+    phase: str,
+    error: Exception,
+) -> dict:
+    is_timeout = isinstance(error, TimeoutError) or "timed out" in str(error).lower()
+    error_text = str(error)
+    error_text_lower = error_text.lower()
+    is_login_failure = (
+        "login" in error_text_lower
+        or "登录" in error_text
+        or "LOGIN_STATUS" in error_text
+        or "popup_login_dialog" in error_text
+        or "qrcode" in error_text_lower
+    )
+    if is_timeout:
+        empty_reason = "discovery_timeout"
+        warning = (
+            "Discovery timed out before MediaCrawler returned source comments. "
+            "Check Douyin login, page load, network/proxy status, and MediaCrawler stderr logs."
+        )
+    elif is_login_failure:
+        empty_reason = "crawler_login_required"
+        warning = (
+            "MediaCrawler stopped at Douyin login. Refresh data/douyin_cookies.json "
+            "or complete QR/session login, then retry collection."
+        )
+    else:
+        empty_reason = "collect_failed"
+        warning = "Collect job failed before source comments could be enqueued."
+    return {
+        "candidate_comments": 0,
+        "keyword_candidates": 0,
+        "target_candidates": 0,
+        "deduped_candidates": 0,
+        "source_breakdown": {"keyword": 0, "target_account": 0},
+        "classified_passed": 0,
+        "enqueued": 0,
+        "queue_received": 0,
+        "queue_valid": 0,
+        "queue_duplicates": 0,
+        "queue_invalid": 0,
+        "platforms": list(getattr(industry_cfg, "platforms", []) or []),
+        "target_user_count": len(getattr(industry_cfg, "target_users", []) or []),
+        "keyword_count": len(getattr(industry_cfg, "keywords", []) or []),
+        "empty_reason": empty_reason,
+        "phase": phase,
+        "job_id": job_id,
+        "error": error_text[:1000],
+        "warning": warning,
+    }
 
 
 def _trigger_auto_export(slug: str, user_id: str, passed: list[dict]) -> None:
@@ -517,11 +622,19 @@ def _trigger_auto_export(slug: str, user_id: str, passed: list[dict]) -> None:
 
         db = SessionLocal()
         try:
-            industry = db.query(Industry).filter(
-                Industry.slug == slug,
-                Industry.user_id == user_id,
-            ).first()
-            if not industry or not industry.auto_export_enabled or not industry.webhook_url:
+            industry = (
+                db.query(Industry)
+                .filter(
+                    Industry.slug == slug,
+                    Industry.user_id == user_id,
+                )
+                .first()
+            )
+            if (
+                not industry
+                or not industry.auto_export_enabled
+                or not industry.webhook_url
+            ):
                 return
             threading.Thread(
                 target=push_leads_to_webhook,
@@ -546,24 +659,42 @@ def run_collect_job(industry_cfg, skip_discover: bool = False) -> str:
     slug = getattr(industry_cfg, "slug", "")
     try:
         from core.config import load_industry_yaml
+
         yaml_cfg = load_industry_yaml(slug)
-        for field in ("keywords", "reply_tone", "reply_style", "categories",
-                      "video_max_age_days", "comment_max_age_hours",
-                      "intent_keywords", "noise_keywords"):
+        for field in (
+            "keywords",
+            "reply_tone",
+            "reply_style",
+            "categories",
+            "video_max_age_days",
+            "comment_max_age_hours",
+            "intent_keywords",
+            "noise_keywords",
+        ):
             yaml_val = getattr(yaml_cfg, field, None)
             db_val = getattr(industry_cfg, field, None)
             # Always sync keywords and categories (critical for classification)
-            if yaml_val and (not db_val or field in ("keywords", "categories", "intent_keywords", "noise_keywords")):
+            if yaml_val and (
+                not db_val
+                or field
+                in ("keywords", "categories", "intent_keywords", "noise_keywords")
+            ):
                 setattr(industry_cfg, field, yaml_val)
     except Exception as exc:
         log.warning("Failed to merge YAML industry config for %s: %s", slug, exc)
 
     job_id = str(uuid.uuid4())
-    _set_job(job_id, status="running", progress=0, created_at=_now(),
-             type="collect", skip_discover=skip_discover,
-             user_id=getattr(industry_cfg, "user_id", ""),
-             industry_slug=slug,
-             industry_name=getattr(industry_cfg, "name", ""))
+    _set_job(
+        job_id,
+        status="running",
+        progress=0,
+        created_at=_now(),
+        type="collect",
+        skip_discover=skip_discover,
+        user_id=getattr(industry_cfg, "user_id", ""),
+        industry_slug=slug,
+        industry_name=getattr(industry_cfg, "name", ""),
+    )
 
     async def _collect():
         job_id_local = job_id  # capture for closure safety
@@ -589,12 +720,17 @@ def run_collect_job(industry_cfg, skip_discover: bool = False) -> str:
             noise_words: Optional[list] = None
 
             if _is_cancel_requested(job_id_local):
-                _set_job(job_id_local, status="cancelled", progress=0,
-                         completed_at=_now(), type="collect")
+                _set_job(
+                    job_id_local,
+                    status="cancelled",
+                    progress=0,
+                    completed_at=_now(),
+                    type="collect",
+                )
                 return
 
             try:
-                provider = getattr(industry_cfg, 'llm_provider', 'deepseek')
+                provider = getattr(industry_cfg, "llm_provider", "deepseek")
                 api_key_override = ""
                 if provider == "deepseek":
                     api_key_override = getattr(industry_cfg, "deepseek_key", "") or ""
@@ -604,11 +740,11 @@ def run_collect_job(industry_cfg, skip_discover: bool = False) -> str:
                     api_key_override = getattr(industry_cfg, "openai_key", "") or ""
                 client = get_llm_client(
                     provider,
-                    model=getattr(industry_cfg, 'llm_model', 'deepseek-v4-flash'),
+                    model=getattr(industry_cfg, "llm_model", "deepseek-v4-flash"),
                     api_key=api_key_override or None,
                 )
-                intent_words = getattr(industry_cfg, 'intent_keywords', None) or None
-                noise_words = getattr(industry_cfg, 'noise_keywords', None) or None
+                intent_words = getattr(industry_cfg, "intent_keywords", None) or None
+                noise_words = getattr(industry_cfg, "noise_keywords", None) or None
             except Exception as e:
                 log.warning(f"LLM client init failed for job {job_id_local}: {e}")
                 # Continue without LLM hints — classify_batch can still do regex pre-filter
@@ -625,10 +761,15 @@ def run_collect_job(industry_cfg, skip_discover: bool = False) -> str:
                 should_stop=lambda: _is_cancel_requested(job_id_local),
             )
             owner_user_id = getattr(industry_cfg, "user_id", "") or ""
-            if owner_user_id:
-                for comment in comments or []:
-                    comment.setdefault("owner_user_id", owner_user_id)
-                    comment.setdefault("job_id", job_id_local)
+            if owner_user_id and comments:
+                comments = [
+                    {
+                        **comment,
+                        "owner_user_id": comment.get("owner_user_id") or owner_user_id,
+                        "job_id": comment.get("job_id") or job_id_local,
+                    }
+                    for comment in comments
+                ]
             if heartbeat_task:
                 heartbeat_task.cancel()
                 try:
@@ -641,21 +782,28 @@ def run_collect_job(industry_cfg, skip_discover: bool = False) -> str:
                 _set_job(job_id_local, status="cancelled", completed_at=_now())
                 return
             if comments:
+
                 def _classify_progress(done_batches, total_batches):
                     pct = 50 + int(30 * done_batches / max(total_batches, 1))
-                    _set_job(job_id_local, progress=min(pct, 80),
-                             phase="classify")
+                    _set_job(job_id_local, progress=min(pct, 80), phase="classify")
 
-                passed = classify_batch(comments, industry_cfg,
-                                       llm_client=client,
-                                       intent_words=intent_words,
-                                       noise_words=noise_words,
-                                       progress_callback=_classify_progress)
+                passed = classify_batch(
+                    comments,
+                    industry_cfg,
+                    llm_client=client,
+                    intent_words=intent_words,
+                    noise_words=noise_words,
+                    progress_callback=_classify_progress,
+                )
                 _set_job(job_id_local, progress=80)
                 enqueue_result = enqueue_classified_result(passed)
                 enqueued = int(enqueue_result.get("inserted", 0))
                 # Auto-export high-intent leads to webhook if enabled
-                if passed and getattr(industry_cfg, "auto_export_enabled", False) and getattr(industry_cfg, "webhook_url", ""):
+                if (
+                    passed
+                    and getattr(industry_cfg, "auto_export_enabled", False)
+                    and getattr(industry_cfg, "webhook_url", "")
+                ):
                     _trigger_auto_export(
                         slug,
                         getattr(industry_cfg, "user_id", ""),
@@ -664,7 +812,13 @@ def run_collect_job(industry_cfg, skip_discover: bool = False) -> str:
             else:
                 passed = []
                 enqueued = 0
-                enqueue_result = {"received": 0, "valid": 0, "inserted": 0, "duplicates": 0, "invalid": 0}
+                enqueue_result = {
+                    "received": 0,
+                    "valid": 0,
+                    "inserted": 0,
+                    "duplicates": 0,
+                    "invalid": 0,
+                }
             source_breakdown = _collect_source_breakdown(comments)
             collect_summary = {
                 "candidate_comments": len(comments or []),
@@ -679,14 +833,18 @@ def run_collect_job(industry_cfg, skip_discover: bool = False) -> str:
                 "queue_duplicates": int(enqueue_result.get("duplicates", 0)),
                 "queue_invalid": int(enqueue_result.get("invalid", 0)),
                 "platforms": list(getattr(industry_cfg, "platforms", []) or []),
-                "target_user_count": len(getattr(industry_cfg, "target_users", []) or []),
+                "target_user_count": len(
+                    getattr(industry_cfg, "target_users", []) or []
+                ),
                 "keyword_count": len(getattr(industry_cfg, "keywords", []) or []),
             }
             if not comments:
                 collect_summary["empty_reason"] = "no_source_comments"
                 collect_summary["warning"] = (
                     "MediaCrawler completed but produced no source comments. "
-                    "Check Douyin login status, keyword quality, platform search results, and crawler stdout/stderr logs."
+                    "Likely causes: Douyin login/Cookie invalid, platform risk-control/CAPTCHA, "
+                    "IP restriction, or the target account/keyword has no public comments. "
+                    "Check data/douyin_cookies.json, proxy/network status, and MediaCrawler stderr logs."
                 )
                 log.warning(
                     "Collect job %s completed with zero source comments: industry=%s platforms=%s keywords=%s targets=%s",
@@ -696,13 +854,42 @@ def run_collect_job(industry_cfg, skip_discover: bool = False) -> str:
                     len(getattr(industry_cfg, "keywords", []) or []),
                     len(getattr(industry_cfg, "target_users", []) or []),
                 )
-            _set_job(job_id_local, status="done", progress=100,
-                     completed_at=_now(), type="collect",
-                     collect_summary=collect_summary)
+            _set_job(
+                job_id_local,
+                status="done",
+                progress=100,
+                completed_at=_now(),
+                type="collect",
+                collect_summary=collect_summary,
+            )
         except Exception as e:
-            log.exception(f"Collect job {job_id_local} failed")
-            _set_job(job_id_local, status="failed", error=str(e),
-                     completed_at=_now(), type="collect")
+            phase = (
+                "discover_timeout"
+                if isinstance(e, TimeoutError) or "timed out" in str(e).lower()
+                else "collect_failed"
+            )
+            collect_summary = _collect_failure_summary(
+                industry_cfg,
+                job_id=job_id_local,
+                phase=phase,
+                error=e,
+            )
+            log.exception(
+                "Collect job %s failed phase=%s summary=%s",
+                job_id_local,
+                phase,
+                collect_summary,
+            )
+            _set_job(
+                job_id_local,
+                status="failed",
+                progress=100,
+                phase=phase,
+                error=str(e),
+                completed_at=_now(),
+                type="collect",
+                collect_summary=collect_summary,
+            )
         finally:
             if heartbeat_task:
                 heartbeat_task.cancel()
@@ -715,14 +902,66 @@ def run_collect_job(industry_cfg, skip_discover: bool = False) -> str:
     return job_id
 
 
+def _recent_collect_failures(
+    industry_slug: str, user_id: str, window: int = 3
+) -> tuple[int, list[str]]:
+    """Check recent collect jobs for the same industry to avoid replenishment loops.
+
+    Returns (failure_count, reasons) where failure_count is the number of recent
+    collect jobs that produced zero source comments or failed outright.
+    """
+    try:
+        from server.models import SessionLocal
+        from server.models.job import Job
+    except Exception as exc:
+        log.debug("Cannot check recent collect failures: %s", exc)
+        return 0, []
+
+    db = SessionLocal()
+    try:
+        recent = (
+            db.query(Job)
+            .filter(
+                Job.user_id == user_id,
+                Job.industry_slug == industry_slug,
+                Job.type == "collect",
+            )
+            .order_by(Job.created_at.desc())
+            .limit(window)
+            .all()
+        )
+        failures = 0
+        reasons = []
+        for job in recent:
+            payload = job.payload or {}
+            summary = payload.get("collect_summary") or {}
+            if job.status == "failed":
+                failures += 1
+                reasons.append(f"failed:{job.error or 'unknown'}")
+            elif summary.get("candidate_comments", 0) == 0 or summary.get(
+                "empty_reason"
+            ):
+                failures += 1
+                reasons.append(f"empty:{summary.get('empty_reason', 'unknown')}")
+        return failures, reasons
+    finally:
+        db.close()
+
+
 def run_send_job(industry_cfg, device_ids: list[str] | None = None) -> str:
     """Trigger a background send job. Returns job_id."""
     job_id = str(uuid.uuid4())
-    _set_job(job_id, status="running", progress=0, created_at=_now(),
-             type="send", devices=device_ids,
-             user_id=getattr(industry_cfg, "user_id", ""),
-             industry_slug=getattr(industry_cfg, "slug", ""),
-             industry_name=getattr(industry_cfg, "name", ""))
+    _set_job(
+        job_id,
+        status="running",
+        progress=0,
+        created_at=_now(),
+        type="send",
+        devices=device_ids,
+        user_id=getattr(industry_cfg, "user_id", ""),
+        industry_slug=getattr(industry_cfg, "slug", ""),
+        industry_name=getattr(industry_cfg, "name", ""),
+    )
 
     def _maybe_auto_replenish(send_summary: dict | None) -> dict | None:
         if not bool(getattr(industry_cfg, "auto_replenish_enabled", False)):
@@ -731,13 +970,54 @@ def run_send_job(industry_cfg, device_ids: list[str] | None = None) -> str:
             return None
         try:
             from server.services.task_stats import replenishment_plan
+
+            slug = getattr(industry_cfg, "slug", "")
+            user_id = getattr(industry_cfg, "user_id", "")
+            recent_failures, reasons = _recent_collect_failures(slug, user_id, window=3)
+            if recent_failures >= 3:
+                log.warning(
+                    "Auto replenishment skipped for %s: %d recent collect failures (%s)",
+                    slug,
+                    recent_failures,
+                    "; ".join(reasons),
+                )
+                return {
+                    "started": False,
+                    "reason": f"最近 {recent_failures} 次采集均未获得源评论，暂停自动补充以避免无效循环",
+                    "recent_failures": recent_failures,
+                    "failure_reasons": reasons,
+                }
             plan = replenishment_plan(
-                getattr(industry_cfg, "slug", ""),
-                target_devices=int(getattr(industry_cfg, "matrix_target_devices", DEFAULT_MATRIX_TARGET_DEVICES) or DEFAULT_MATRIX_TARGET_DEVICES),
-                per_device_daily_limit=int(getattr(industry_cfg, "daily_limit", DEFAULT_DAILY_LIMIT) or DEFAULT_DAILY_LIMIT),
-                inventory_days=int(getattr(industry_cfg, "lead_inventory_days", DEFAULT_LEAD_INVENTORY_DAYS) or DEFAULT_LEAD_INVENTORY_DAYS),
-                global_daily_limit=int(getattr(industry_cfg, "global_daily_limit", 0) or 0),
-                threshold_days=int(getattr(industry_cfg, "replenish_threshold_days", DEFAULT_REPLENISH_THRESHOLD_DAYS) or DEFAULT_REPLENISH_THRESHOLD_DAYS),
+                slug,
+                target_devices=int(
+                    getattr(
+                        industry_cfg,
+                        "matrix_target_devices",
+                        DEFAULT_MATRIX_TARGET_DEVICES,
+                    )
+                    or DEFAULT_MATRIX_TARGET_DEVICES
+                ),
+                per_device_daily_limit=int(
+                    getattr(industry_cfg, "daily_limit", DEFAULT_DAILY_LIMIT)
+                    or DEFAULT_DAILY_LIMIT
+                ),
+                inventory_days=int(
+                    getattr(
+                        industry_cfg, "lead_inventory_days", DEFAULT_LEAD_INVENTORY_DAYS
+                    )
+                    or DEFAULT_LEAD_INVENTORY_DAYS
+                ),
+                global_daily_limit=int(
+                    getattr(industry_cfg, "global_daily_limit", 0) or 0
+                ),
+                threshold_days=int(
+                    getattr(
+                        industry_cfg,
+                        "replenish_threshold_days",
+                        DEFAULT_REPLENISH_THRESHOLD_DAYS,
+                    )
+                    or DEFAULT_REPLENISH_THRESHOLD_DAYS
+                ),
             )
             if not plan.get("should_replenish"):
                 return {"started": False, "reason": "库存充足", "plan": plan}
@@ -753,7 +1033,11 @@ def run_send_job(industry_cfg, device_ids: list[str] | None = None) -> str:
                 "plan": plan,
             }
         except Exception as e:
-            log.warning("Auto replenishment failed for %s: %s", getattr(industry_cfg, "slug", ""), e)
+            log.warning(
+                "Auto replenishment failed for %s: %s",
+                getattr(industry_cfg, "slug", ""),
+                e,
+            )
             return {"started": False, "error": str(e)[:500]}
 
     def _send():
@@ -768,13 +1052,20 @@ def run_send_job(industry_cfg, device_ids: list[str] | None = None) -> str:
                     return
                 _set_job(job_id_local, heartbeat_at=_now())
 
-        heartbeat_thread = threading.Thread(target=_heartbeat, daemon=True, name=f"send-hb-{job_id_local}")
+        heartbeat_thread = threading.Thread(
+            target=_heartbeat, daemon=True, name=f"send-hb-{job_id_local}"
+        )
         heartbeat_thread.start()
 
         try:
             if _is_cancel_requested(job_id_local):
-                _set_job(job_id_local, status="cancelled", progress=0,
-                         completed_at=_now(), type="send")
+                _set_job(
+                    job_id_local,
+                    status="cancelled",
+                    progress=0,
+                    completed_at=_now(),
+                    type="send",
+                )
                 return
             send_summary = run_senders(
                 industry_cfg,
@@ -782,7 +1073,9 @@ def run_send_job(industry_cfg, device_ids: list[str] | None = None) -> str:
                 should_stop=lambda: _is_cancel_requested(job_id_local),
                 job_id=job_id_local,
             )
-            if isinstance(send_summary, dict) and not _is_cancel_requested(job_id_local):
+            if isinstance(send_summary, dict) and not _is_cancel_requested(
+                job_id_local
+            ):
                 auto_replenish = _maybe_auto_replenish(send_summary)
                 if auto_replenish:
                     send_summary = dict(send_summary)
@@ -792,27 +1085,43 @@ def run_send_job(industry_cfg, device_ids: list[str] | None = None) -> str:
                     send_summary = dict(send_summary)
                     send_summary["status"] = "cancelled"
                     send_summary["cancel_requested"] = True
-                _set_job(job_id_local, status="cancelled", progress=100,
-                         completed_at=_now(), type="send",
-                         send_summary=send_summary)
+                _set_job(
+                    job_id_local,
+                    status="cancelled",
+                    progress=100,
+                    completed_at=_now(),
+                    type="send",
+                    send_summary=send_summary,
+                )
             elif not send_summary or not send_summary.get("ok"):
                 _set_job(
                     job_id_local,
                     status="failed",
                     progress=100,
-                    error=(send_summary or {}).get("error") or "Send job did not execute on any device.",
+                    error=(send_summary or {}).get("error")
+                    or "Send job did not execute on any device.",
                     completed_at=_now(),
                     type="send",
                     send_summary=send_summary,
                 )
             else:
-                _set_job(job_id_local, status="done", progress=100,
-                         completed_at=_now(), type="send",
-                         send_summary=send_summary)
+                _set_job(
+                    job_id_local,
+                    status="done",
+                    progress=100,
+                    completed_at=_now(),
+                    type="send",
+                    send_summary=send_summary,
+                )
         except Exception as e:
             log.exception(f"Send job {job_id_local} failed")
-            _set_job(job_id_local, status="failed", error=str(e),
-                     completed_at=_now(), type="send")
+            _set_job(
+                job_id_local,
+                status="failed",
+                error=str(e),
+                completed_at=_now(),
+                type="send",
+            )
         finally:
             stop_heartbeat.set()
 
@@ -885,6 +1194,7 @@ def _auto_recovery_loop():
         except Exception as exc:
             log.warning("Auto-recovery loop error: %s", exc)
         import time
+
         time.sleep(_AUTO_RECOVERY_INTERVAL_SEC)
 
 
@@ -897,4 +1207,7 @@ def start_auto_recovery():
         _auto_recovery_started = True
     t = threading.Thread(target=_auto_recovery_loop, name="auto-recovery", daemon=True)
     t.start()
-    log.info("Auto-recovery background timer started (%ss interval)", _AUTO_RECOVERY_INTERVAL_SEC)
+    log.info(
+        "Auto-recovery background timer started (%ss interval)",
+        _AUTO_RECOVERY_INTERVAL_SEC,
+    )

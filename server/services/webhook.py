@@ -46,10 +46,20 @@ def push_leads_to_webhook(
     background threads). Do not call directly from async handlers.
     """
     if not webhook_url:
-        return {"ok": False, "status_code": None, "response_preview": "", "error": "webhook_url empty"}
+        return {
+            "ok": False,
+            "status_code": None,
+            "response_preview": "",
+            "error": "webhook_url empty",
+        }
 
     if not is_safe_webhook_url(webhook_url):
-        return {"ok": False, "status_code": None, "response_preview": "", "error": "Webhook URL 不安全，禁止访问私有/本地网络地址"}
+        return {
+            "ok": False,
+            "status_code": None,
+            "response_preview": "",
+            "error": "Webhook URL 不安全，禁止访问私有/本地网络地址",
+        }
 
     payload = WebhookPayload(
         industry_slug=industry_slug,
@@ -76,7 +86,17 @@ def push_leads_to_webhook(
         return result
     except httpx.HTTPError as e:
         log.warning("Webhook push HTTP error: %s", e)
-        return {"ok": False, "status_code": None, "response_preview": "", "error": str(e)[:500]}
+        return {
+            "ok": False,
+            "status_code": None,
+            "response_preview": "",
+            "error": str(e)[:500],
+        }
     except Exception as e:
         log.exception("Webhook push unexpected error: %s", e)
-        return {"ok": False, "status_code": None, "response_preview": "", "error": str(e)[:500]}
+        return {
+            "ok": False,
+            "status_code": None,
+            "response_preview": "",
+            "error": str(e)[:500],
+        }

@@ -79,7 +79,9 @@ def _auth_client(db_session):
 
 
 def test_add_variant_requires_auth():
-    resp = client.post("/api/industries/ind-1/variants", json={"name": "测试", "weight": 1})
+    resp = client.post(
+        "/api/industries/ind-1/variants", json={"name": "测试", "weight": 1}
+    )
     assert resp.status_code in (401, 403)
 
 
@@ -95,7 +97,9 @@ def test_abtest_results_requires_auth():
 
 def test_add_variant_success(db_session):
     with _auth_client(db_session) as client:
-        resp = client.post("/api/industries/ind-1/variants", json={"name": "测试变体", "weight": 2})
+        resp = client.post(
+            "/api/industries/ind-1/variants", json={"name": "测试变体", "weight": 2}
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert len(data["reply_variants"]) == 1
@@ -108,19 +112,25 @@ def test_add_variant_success(db_session):
 
 def test_add_variant_rejects_empty_name(db_session):
     with _auth_client(db_session) as client:
-        resp = client.post("/api/industries/ind-1/variants", json={"name": "  ", "weight": 1})
+        resp = client.post(
+            "/api/industries/ind-1/variants", json={"name": "  ", "weight": 1}
+        )
         assert resp.status_code == 422
 
 
 def test_add_variant_rejects_negative_weight(db_session):
     with _auth_client(db_session) as client:
-        resp = client.post("/api/industries/ind-1/variants", json={"name": "测试", "weight": -1})
+        resp = client.post(
+            "/api/industries/ind-1/variants", json={"name": "测试", "weight": -1}
+        )
         assert resp.status_code == 422
 
 
 def test_list_variants_success(db_session):
     with _auth_client(db_session) as client:
-        client.post("/api/industries/ind-1/variants", json={"name": "测试变体", "weight": 1})
+        client.post(
+            "/api/industries/ind-1/variants", json={"name": "测试变体", "weight": 1}
+        )
         resp = client.get("/api/industries/ind-1/variants")
         assert resp.status_code == 200
         data = resp.json()
@@ -131,9 +141,14 @@ def test_list_variants_success(db_session):
 
 def test_update_variant_success(db_session):
     with _auth_client(db_session) as client:
-        add_resp = client.post("/api/industries/ind-1/variants", json={"name": "测试变体", "weight": 1})
+        add_resp = client.post(
+            "/api/industries/ind-1/variants", json={"name": "测试变体", "weight": 1}
+        )
         variant_id = add_resp.json()["reply_variants"][0]["id"]
-        resp = client.put(f"/api/industries/ind-1/variants/{variant_id}", json={"weight": 5, "enabled": False})
+        resp = client.put(
+            f"/api/industries/ind-1/variants/{variant_id}",
+            json={"weight": 5, "enabled": False},
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert len(data["reply_variants"]) == 1
@@ -143,29 +158,41 @@ def test_update_variant_success(db_session):
 
 def test_update_variant_not_found(db_session):
     with _auth_client(db_session) as client:
-        resp = client.put("/api/industries/ind-1/variants/nonexistent", json={"weight": 5})
+        resp = client.put(
+            "/api/industries/ind-1/variants/nonexistent", json={"weight": 5}
+        )
         assert resp.status_code == 404
 
 
 def test_update_variant_rejects_empty_name(db_session):
     with _auth_client(db_session) as client:
-        add_resp = client.post("/api/industries/ind-1/variants", json={"name": "测试变体", "weight": 1})
+        add_resp = client.post(
+            "/api/industries/ind-1/variants", json={"name": "测试变体", "weight": 1}
+        )
         variant_id = add_resp.json()["reply_variants"][0]["id"]
-        resp = client.put(f"/api/industries/ind-1/variants/{variant_id}", json={"name": "  "})
+        resp = client.put(
+            f"/api/industries/ind-1/variants/{variant_id}", json={"name": "  "}
+        )
         assert resp.status_code == 422
 
 
 def test_update_variant_rejects_negative_weight(db_session):
     with _auth_client(db_session) as client:
-        add_resp = client.post("/api/industries/ind-1/variants", json={"name": "测试变体", "weight": 1})
+        add_resp = client.post(
+            "/api/industries/ind-1/variants", json={"name": "测试变体", "weight": 1}
+        )
         variant_id = add_resp.json()["reply_variants"][0]["id"]
-        resp = client.put(f"/api/industries/ind-1/variants/{variant_id}", json={"weight": -1})
+        resp = client.put(
+            f"/api/industries/ind-1/variants/{variant_id}", json={"weight": -1}
+        )
         assert resp.status_code == 422
 
 
 def test_delete_variant_success(db_session):
     with _auth_client(db_session) as client:
-        add_resp = client.post("/api/industries/ind-1/variants", json={"name": "测试变体", "weight": 1})
+        add_resp = client.post(
+            "/api/industries/ind-1/variants", json={"name": "测试变体", "weight": 1}
+        )
         variant_id = add_resp.json()["reply_variants"][0]["id"]
         resp = client.delete(f"/api/industries/ind-1/variants/{variant_id}")
         assert resp.status_code == 200
@@ -175,7 +202,9 @@ def test_delete_variant_success(db_session):
 
 def test_abtest_results_success(db_session):
     with _auth_client(db_session) as client:
-        add_resp = client.post("/api/industries/ind-1/variants", json={"name": "赢家变体", "weight": 1})
+        add_resp = client.post(
+            "/api/industries/ind-1/variants", json={"name": "赢家变体", "weight": 1}
+        )
         variant_id = add_resp.json()["reply_variants"][0]["id"]
 
         now = datetime.now(timezone.utc).isoformat()

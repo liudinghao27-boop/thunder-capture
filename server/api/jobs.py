@@ -12,7 +12,10 @@ from server.models import get_db
 from server.models.job import Job
 from server.models.matrix import DeviceState, ExecutionLog, ScreenSnapshot
 from server.models.user import User
-from server.services.agent_decision import extract_agent_decision, extract_agent_decisions
+from server.services.agent_decision import (
+    extract_agent_decision,
+    extract_agent_decisions,
+)
 from server.workers import (
     cancel_job,
     get_job_status,
@@ -40,6 +43,8 @@ _NORMALIZED_STATUS_LABELS = {
     "unconfirmed": "未确认",
     "done": "已完成",
     "failed": "失败",
+    "no_data": "完成但未采集到数据",
+    "needs_attention": "完成但需关注",
 }
 
 _RESTRICTED_MARKERS = (
@@ -53,6 +58,11 @@ _RESTRICTED_MARKERS = (
     "刷脸",
     "人脸识别",
     "验证",
+    "no_source_comments",
+    "discovery_timeout",
+    "collect_failed",
+    "aweme_list",
+    "account blocked",
 )
 
 
@@ -138,7 +148,9 @@ def _extract_sent_count(send_summary: dict | None) -> int:
         except (TypeError, ValueError):
             return 0
     devices = send_summary.get("devices") or []
-    return sum(int(device.get("sent") or 0) for device in devices if isinstance(device, dict))
+    return sum(
+        int(device.get("sent") or 0) for device in devices if isinstance(device, dict)
+    )
 
 
 def _extract_failed_count(send_summary: dict | None) -> int:
@@ -153,7 +165,9 @@ def _extract_failed_count(send_summary: dict | None) -> int:
         except (TypeError, ValueError):
             return 0
     devices = send_summary.get("devices") or []
-    return sum(int(device.get("failed") or 0) for device in devices if isinstance(device, dict))
+    return sum(
+        int(device.get("failed") or 0) for device in devices if isinstance(device, dict)
+    )
 
 
 def _match_restricted_reason(*values: str | None) -> str:
@@ -170,6 +184,7 @@ def _normalize_job_status(
     job_type: str,
     raw_status: str,
     send_summary: dict | None,
+    collect_summary: dict | None,
     error: str | None,
     latest_execution: dict | None,
     latest_snapshot: dict | None,
@@ -178,6 +193,52 @@ def _normalize_job_status(
         return raw_status, _NORMALIZED_STATUS_LABELS[raw_status], ""
 
     if job_type != "send":
+        # Collect jobs: surface empty result / platform restriction explicitly.
+        empty_reason = _clean_text((collect_summary or {}).get("empty_reason"))
+        warning = _clean_text((collect_summary or {}).get("warning"))
+        candidate_comments = int((collect_summary or {}).get("candidate_comments") or 0)
+        enqueued = int((collect_summary or {}).get("enqueued") or 0)
+        phase = _clean_text((collect_summary or {}).get("phase"))
+
+        if raw_status == "failed":
+            return (
+                raw_status or "unknown",
+                _RAW_STATUS_LABELS.get(raw_status or "unknown", "未知"),
+                _clean_text(error)
+                or warning
+                or empty_reason
+                or phase
+                or "采集任务失败",
+            )
+
+        if raw_status == "done":
+            if candidate_comments == 0:
+                # Distinguish platform restriction from simple empty keyword.
+                if (
+                    empty_reason in ("no_source_comments", "discovery_timeout")
+                    or "风控" in warning
+                    or "验证码" in warning
+                ):
+                    return (
+                        "needs_attention",
+                        _NORMALIZED_STATUS_LABELS["needs_attention"],
+                        warning
+                        or empty_reason
+                        or "平台未返回任何评论数据，建议检查登录态、网络/代理或目标站点风控状态",
+                    )
+                return (
+                    "no_data",
+                    _NORMALIZED_STATUS_LABELS["no_data"],
+                    warning or empty_reason or "完成但未采集到匹配评论",
+                )
+            if enqueued == 0 and candidate_comments > 0:
+                return (
+                    "needs_attention",
+                    _NORMALIZED_STATUS_LABELS["needs_attention"],
+                    warning or "采集到候选评论但全部被过滤/重复",
+                )
+            return "done", _NORMALIZED_STATUS_LABELS["done"], ""
+
         return (
             raw_status or "unknown",
             _RAW_STATUS_LABELS.get(raw_status or "unknown", "未知"),
@@ -207,28 +268,76 @@ def _normalize_job_status(
                 final_reason = f"{final_reason}；后置页面提示：{snapshot_blocker}"
             return "sent", _NORMALIZED_STATUS_LABELS["sent"], final_reason
         if restricted_reason:
-            return "restricted", _NORMALIZED_STATUS_LABELS["restricted"], f"执行受限：{restricted_reason}"
+            return (
+                "restricted",
+                _NORMALIZED_STATUS_LABELS["restricted"],
+                f"执行受限：{restricted_reason}",
+            )
         if verification_reason == "unconfirmed_send":
-            return "unconfirmed", _NORMALIZED_STATUS_LABELS["unconfirmed"], "消息动作完成，但未能确认已发送"
+            return (
+                "unconfirmed",
+                _NORMALIZED_STATUS_LABELS["unconfirmed"],
+                "消息动作完成，但未能确认已发送",
+            )
         return "done", _NORMALIZED_STATUS_LABELS["done"], ""
 
-    if verification_reason == "unconfirmed_send" or execution_status == "unconfirmed_send" or _clean_text(error) == "unconfirmed_send":
-        return "unconfirmed", _NORMALIZED_STATUS_LABELS["unconfirmed"], "消息动作已执行，但未能确认已发送"
+    if (
+        verification_reason == "unconfirmed_send"
+        or execution_status == "unconfirmed_send"
+        or _clean_text(error) == "unconfirmed_send"
+    ):
+        return (
+            "unconfirmed",
+            _NORMALIZED_STATUS_LABELS["unconfirmed"],
+            "消息动作已执行，但未能确认已发送",
+        )
     if restricted_reason:
-        return "restricted", _NORMALIZED_STATUS_LABELS["restricted"], f"执行受限：{restricted_reason}"
+        return (
+            "restricted",
+            _NORMALIZED_STATUS_LABELS["restricted"],
+            f"执行受限：{restricted_reason}",
+        )
     if sent_count > 0 and failed_count == 0:
         return "sent", _NORMALIZED_STATUS_LABELS["sent"], "发送确认成功"
-    return "failed", _NORMALIZED_STATUS_LABELS["failed"], _clean_text(error) or execution_detail
+    return (
+        "failed",
+        _NORMALIZED_STATUS_LABELS["failed"],
+        _clean_text(error) or execution_detail,
+    )
 
 
-def _job_operational_flags(*, raw_status: str, normalized_status: str, error: str | None, final_reason: str | None) -> dict:
-    retryable_statuses = {"failed", "cancelled", "restricted", "unconfirmed"}
-    terminal_statuses = {"done", "failed", "cancelled", "sent", "restricted", "unconfirmed"}
+def _job_operational_flags(
+    *,
+    raw_status: str,
+    normalized_status: str,
+    error: str | None,
+    final_reason: str | None,
+) -> dict:
+    retryable_statuses = {
+        "failed",
+        "cancelled",
+        "restricted",
+        "unconfirmed",
+        "no_data",
+        "needs_attention",
+    }
+    terminal_statuses = {
+        "done",
+        "failed",
+        "cancelled",
+        "sent",
+        "restricted",
+        "unconfirmed",
+        "no_data",
+        "needs_attention",
+    }
     return {
         "can_cancel": raw_status in {"queued", "running", "cancelling"},
-        "can_retry": raw_status in retryable_statuses or normalized_status in retryable_statuses,
+        "can_retry": raw_status in retryable_statuses
+        or normalized_status in retryable_statuses,
         "failure_reason": _clean_text(final_reason) or _clean_text(error),
-        "quota_released": raw_status in terminal_statuses or normalized_status in terminal_statuses,
+        "quota_released": raw_status in terminal_statuses
+        or normalized_status in terminal_statuses,
     }
 
 
@@ -255,6 +364,7 @@ def _build_job_payload(
         job_type=job_type,
         raw_status=raw_status,
         send_summary=send_summary,
+        collect_summary=collect_summary,
         error=error,
         latest_execution=latest_execution,
         latest_snapshot=latest_snapshot,
@@ -376,19 +486,28 @@ def list_jobs(
         query = query.filter(Job.type == job_type)
 
     jobs_query = query.order_by(Job.created_at.desc())
-    jobs = jobs_query.all() if normalized_status_filter else jobs_query.limit(limit).all()
+    jobs = (
+        jobs_query.all() if normalized_status_filter else jobs_query.limit(limit).all()
+    )
     rows = []
     for job in jobs:
         latest_execution = _serialize_execution(
             db.query(ExecutionLog)
-            .filter(ExecutionLog.user_id == current_user.id, ExecutionLog.job_id == job.id)
+            .filter(
+                ExecutionLog.user_id == current_user.id, ExecutionLog.job_id == job.id
+            )
             .order_by(ExecutionLog.created_at.desc())
             .first()
         )
         latest_snapshot = _serialize_snapshot(
             db.query(ScreenSnapshot)
-            .filter(ScreenSnapshot.user_id == current_user.id, ScreenSnapshot.job_id == job.id)
-            .order_by(ScreenSnapshot.captured_at.desc(), ScreenSnapshot.created_at.desc())
+            .filter(
+                ScreenSnapshot.user_id == current_user.id,
+                ScreenSnapshot.job_id == job.id,
+            )
+            .order_by(
+                ScreenSnapshot.captured_at.desc(), ScreenSnapshot.created_at.desc()
+            )
             .first()
         )
         rows.append(
@@ -439,7 +558,9 @@ def get_job(
     )
     latest_snapshot = _serialize_snapshot(
         db.query(ScreenSnapshot)
-        .filter(ScreenSnapshot.user_id == current_user.id, ScreenSnapshot.job_id == job_id)
+        .filter(
+            ScreenSnapshot.user_id == current_user.id, ScreenSnapshot.job_id == job_id
+        )
         .order_by(ScreenSnapshot.captured_at.desc(), ScreenSnapshot.created_at.desc())
         .first()
     )
@@ -552,16 +673,24 @@ def start_collect_job(
     from server.models.industry import Industry
     from server.workers import run_collect_job
 
-    industry = db.query(Industry).filter(
-        Industry.slug == body.industry_slug,
-        Industry.user_id == current_user.id,
-    ).first()
+    industry = (
+        db.query(Industry)
+        .filter(
+            Industry.slug == body.industry_slug,
+            Industry.user_id == current_user.id,
+        )
+        .first()
+    )
     if not industry:
         raise HTTPException(status_code=404, detail="Industry not found")
 
     job_id = run_collect_job(industry, skip_discover=body.skip_discover)
     status = get_job_status(job_id, current_user.id)
-    return {"ok": True, "job_id": job_id, "status": status.get("status") if status else "unknown"}
+    return {
+        "ok": True,
+        "job_id": job_id,
+        "status": status.get("status") if status else "unknown",
+    }
 
 
 class StartSendRequest(BaseModel):
@@ -581,10 +710,14 @@ def start_send_job(
     from server.services.task_stats import queue_stats
     from server.workers import run_send_job
 
-    industry = db.query(Industry).filter(
-        Industry.slug == body.industry_slug,
-        Industry.user_id == current_user.id,
-    ).first()
+    industry = (
+        db.query(Industry)
+        .filter(
+            Industry.slug == body.industry_slug,
+            Industry.user_id == current_user.id,
+        )
+        .first()
+    )
     if not industry:
         raise HTTPException(status_code=404, detail="Industry not found")
 
@@ -596,21 +729,33 @@ def start_send_job(
     except Exception as exc:
         logging.getLogger("thunder.api.jobs").debug("Queue stats check failed: %s", exc)
 
-    idle_count = db.query(Device).filter(
-        Device.user_id == current_user.id,
-        Device.runtime_status == "idle",
-    ).count()
+    idle_count = (
+        db.query(Device)
+        .filter(
+            Device.user_id == current_user.id,
+            Device.runtime_status == "idle",
+        )
+        .count()
+    )
     if idle_count == 0:
         raise HTTPException(status_code=400, detail="No available devices")
 
-    active = db.query(JobModel).filter(
-        JobModel.user_id == current_user.id,
-        JobModel.type == "send",
-        JobModel.status.in_(["running", "cancelling"]),
-    ).first()
+    active = (
+        db.query(JobModel)
+        .filter(
+            JobModel.user_id == current_user.id,
+            JobModel.type == "send",
+            JobModel.status.in_(["running", "cancelling"]),
+        )
+        .first()
+    )
     if active:
         raise HTTPException(status_code=409, detail="Send job already running")
 
     job_id = run_send_job(industry, body.device_ids)
     status = get_job_status(job_id, current_user.id)
-    return {"ok": True, "job_id": job_id, "status": status.get("status") if status else "unknown"}
+    return {
+        "ok": True,
+        "job_id": job_id,
+        "status": status.get("status") if status else "unknown",
+    }

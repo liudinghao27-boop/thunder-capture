@@ -2,7 +2,14 @@ from core.agent.decision import decide_next_action
 from core.agent.state import Observation
 
 
-def _observation(screen, *, confidence=0.8, blocker="", screenshot_path="screens/1.png", elements=None):
+def _observation(
+    screen,
+    *,
+    confidence=0.8,
+    blocker="",
+    screenshot_path="screens/1.png",
+    elements=None,
+):
     return Observation(
         device_id="device-1",
         adb_serial="serial-1",
@@ -96,9 +103,14 @@ def test_chat_input_disabled_decides_to_stop():
 
 
 def test_unknown_observation_keeps_observing_with_low_confidence_reason():
-    decision = decide_next_action(_observation("unknown", confidence=0.0, screenshot_path=""), goal="send_dm")
+    decision = decide_next_action(
+        _observation("unknown", confidence=0.0, screenshot_path=""), goal="send_dm"
+    )
 
     assert decision.page_state == "unknown"
     assert decision.next_action == "observe"
-    assert decision.reason == "Current screen is unknown; capture more evidence before acting."
+    assert (
+        decision.reason
+        == "Current screen is unknown; capture more evidence before acting."
+    )
     assert decision.screenshot == ""

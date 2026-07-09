@@ -31,7 +31,9 @@ class TaskRunResult:
             "status": self.status,
             "message": self.message,
             "graph_id": self.graph_id,
-            "action_result": self.action_result.as_dict() if self.action_result else None,
+            "action_result": self.action_result.as_dict()
+            if self.action_result
+            else None,
             "observations": [obs.as_dict() for obs in self.observations],
         }
 
@@ -150,16 +152,22 @@ class TaskGraphRunner:
                 device_id=device_id,
                 adb_serial=adb_serial,
                 job_id=job_id,
-                stage="before_execute" if attempt == 0 else f"before_execute_retry_{attempt}",
+                stage="before_execute"
+                if attempt == 0
+                else f"before_execute_retry_{attempt}",
             )
             if not observation:
-                return None, observations, {
-                    "action": "stop",
-                    "status": "observation_error",
-                    "terminal": True,
-                    "execute_goal": False,
-                    "reason": "Observation failed before execution.",
-                }
+                return (
+                    None,
+                    observations,
+                    {
+                        "action": "stop",
+                        "status": "observation_error",
+                        "terminal": True,
+                        "execute_goal": False,
+                        "reason": "Observation failed before execution.",
+                    },
+                )
             observations.append(observation)
             decision = decide_next_action(observation, goal="send_dm")
             recovery = self.recovery_policy.evaluate(decision, observe_attempt=attempt)
@@ -234,7 +242,10 @@ class TaskGraphRunner:
             observation_error_result = ExecutionResult(
                 ok=False,
                 status=str(before_recovery.get("status") or "observation_error"),
-                message=str(before_recovery.get("reason") or "Observation failed before execution."),
+                message=str(
+                    before_recovery.get("reason")
+                    or "Observation failed before execution."
+                ),
                 action="phone_agent_goal",
                 payload={
                     "stage": "before_execute",
@@ -287,7 +298,9 @@ class TaskGraphRunner:
                     message=(
                         f"Blocked before execution: {before.blocker}"
                         if before.blocker
-                        else str(before_recovery.get("reason") or "Stopped before execution")
+                        else str(
+                            before_recovery.get("reason") or "Stopped before execution"
+                        )
                     ),
                     action="phone_agent_goal",
                     payload={
@@ -366,8 +379,12 @@ class TaskGraphRunner:
             observations.append(after)
 
         if action_result.ok:
-            before_decision = decide_next_action(before, goal="send_dm").as_dict() if before else None
-            after_decision = decide_next_action(after, goal="send_dm").as_dict() if after else None
+            before_decision = (
+                decide_next_action(before, goal="send_dm").as_dict() if before else None
+            )
+            after_decision = (
+                decide_next_action(after, goal="send_dm").as_dict() if after else None
+            )
             ui_texts = []
             if after:
                 for element in after.elements:

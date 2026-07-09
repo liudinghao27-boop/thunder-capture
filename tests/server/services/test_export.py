@@ -74,6 +74,7 @@ def test_generate_xlsx_collection_field():
 
 def test_generate_xlsx_accepts_generator():
     """XLSX generator should consume rows lazily without requiring a list."""
+
     def row_gen():
         for i in range(100):
             yield {"id": i, "text": f"comment {i}"}

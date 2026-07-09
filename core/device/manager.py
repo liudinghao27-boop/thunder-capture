@@ -30,7 +30,9 @@ class MatrixDevice:
             name=str(row.get("name") or row.get("id") or ""),
             user_id=str(row.get("user_id") or ""),
             daily_limit=int(row.get("daily_limit") or DEFAULT_DAILY_LIMIT),
-            min_interval_sec=int(row.get("min_interval_sec") or DEFAULT_MIN_INTERVAL_SEC),
+            min_interval_sec=int(
+                row.get("min_interval_sec") or DEFAULT_MIN_INTERVAL_SEC
+            ),
             runtime_status=str(row.get("runtime_status") or "idle"),
             consecutive_failures=int(row.get("consecutive_failures") or 0),
             cooldown_until=str(row.get("cooldown_until") or ""),
@@ -52,7 +54,13 @@ class MatrixDevice:
         }
 
     def is_available(self) -> bool:
-        if self.runtime_status in {"offline", "keyboard_error", "cooldown", "isolated", "running"}:
+        if self.runtime_status in {
+            "offline",
+            "keyboard_error",
+            "cooldown",
+            "isolated",
+            "running",
+        }:
             return False
         if self.consecutive_failures >= 5:
             return False
@@ -90,7 +98,9 @@ def _load_from_server_db(user_id: str, device_ids: list[str]) -> list[MatrixDevi
                     "min_interval_sec": d.min_interval_sec,
                     "runtime_status": d.runtime_status,
                     "consecutive_failures": d.consecutive_failures,
-                    "cooldown_until": d.cooldown_until.isoformat() if d.cooldown_until else "",
+                    "cooldown_until": d.cooldown_until.isoformat()
+                    if d.cooldown_until
+                    else "",
                     "health_score": d.health_score,
                 }
             )
@@ -113,7 +123,9 @@ def _load_from_system_yaml(device_ids: list[str]) -> list[MatrixDevice]:
     return selected
 
 
-def load_active_devices(user_id: str = "", device_ids: list[str] | None = None) -> list[MatrixDevice]:
+def load_active_devices(
+    user_id: str = "", device_ids: list[str] | None = None
+) -> list[MatrixDevice]:
     requested = [str(d).strip() for d in (device_ids or []) if str(d).strip()]
     # CLI mode: always use system.yaml devices
     if not user_id:

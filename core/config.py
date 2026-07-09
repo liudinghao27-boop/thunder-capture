@@ -30,9 +30,11 @@ CONFIG_DIR = BASE_DIR / "config"
 def _resolve_env(value: Any) -> Any:
     """Recursively resolve ${VAR} placeholders in strings."""
     if isinstance(value, str):
+
         def _replace(m):
             return os.getenv(m.group(1), "")
-        return re.sub(r'\$\{(\w+)\}', _replace, value)
+
+        return re.sub(r"\$\{(\w+)\}", _replace, value)
     if isinstance(value, dict):
         return {k: _resolve_env(v) for k, v in value.items()}
     if isinstance(value, list):
@@ -168,8 +170,10 @@ def _load_industry_from_db(slug: str) -> IndustryConfig | None:
                 noise_keywords=industry.noise_keywords or [],
                 target_users=industry.target_users or [],
                 user_id=industry.user_id,
-                matrix_target_devices=industry.matrix_target_devices or DEFAULT_MATRIX_TARGET_DEVICES,
-                lead_inventory_days=industry.lead_inventory_days or DEFAULT_LEAD_INVENTORY_DAYS,
+                matrix_target_devices=industry.matrix_target_devices
+                or DEFAULT_MATRIX_TARGET_DEVICES,
+                lead_inventory_days=industry.lead_inventory_days
+                or DEFAULT_LEAD_INVENTORY_DAYS,
                 global_daily_limit=industry.global_daily_limit or 0,
                 auto_replenish_enabled=bool(industry.auto_replenish_enabled),
                 replenish_threshold_days=industry.replenish_threshold_days or 1,
@@ -178,7 +182,9 @@ def _load_industry_from_db(slug: str) -> IndustryConfig | None:
                 collect_video_limit=industry.collect_video_limit or 120,
                 compliance_mode=bool(getattr(industry, "compliance_mode", False)),
                 webhook_url=getattr(industry, "webhook_url", "") or "",
-                auto_export_enabled=bool(getattr(industry, "auto_export_enabled", False)),
+                auto_export_enabled=bool(
+                    getattr(industry, "auto_export_enabled", False)
+                ),
                 send_start_time=getattr(industry, "send_start_time", "") or "09:00",
                 send_end_time=getattr(industry, "send_end_time", "") or "13:00",
                 pause_weekends=bool(getattr(industry, "pause_weekends", False)),
@@ -188,7 +194,9 @@ def _load_industry_from_db(slug: str) -> IndustryConfig | None:
                 reply_variants=list(getattr(industry, "reply_variants", []) or []),
             )
     except SQLAlchemyError as e:
-        logging.getLogger("thunder.config").warning("Failed to load industry %s from DB: %s", slug, e)
+        logging.getLogger("thunder.config").warning(
+            "Failed to load industry %s from DB: %s", slug, e
+        )
         return None
 
 
@@ -199,8 +207,9 @@ def load_industry_yaml(slug: str) -> IndustryConfig:
         raise FileNotFoundError(f"行业配置不存在: {path}")
     with open(path, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
-    return IndustryConfig(**{k: v for k, v in data.items()
-                             if k in IndustryConfig.__dataclass_fields__})
+    return IndustryConfig(
+        **{k: v for k, v in data.items() if k in IndustryConfig.__dataclass_fields__}
+    )
 
 
 def load_industry(slug: str) -> IndustryConfig:
@@ -222,12 +231,16 @@ def list_industries() -> list[str]:
     return sorted(slugs)
 
 
-def create_industry(slug: str, name: str, keywords: list[str],
-                    reply_tone: str = "业内人士",
-                    reply_style: str = "亲切专业",
-                    categories: list[str] | None = None,
-                    daily_limit: int = DEFAULT_DAILY_LIMIT,
-                    platforms: list[str] | None = None) -> Path:
+def create_industry(
+    slug: str,
+    name: str,
+    keywords: list[str],
+    reply_tone: str = "业内人士",
+    reply_style: str = "亲切专业",
+    categories: list[str] | None = None,
+    daily_limit: int = DEFAULT_DAILY_LIMIT,
+    platforms: list[str] | None = None,
+) -> Path:
     """新建行业配置文件"""
     path = CONFIG_DIR / "industries" / f"{slug}.yaml"
     if path.exists():

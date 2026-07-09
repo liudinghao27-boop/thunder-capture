@@ -27,15 +27,17 @@ def _seed_device(session_factory, *, cooldown_until=None, runtime_status="idle")
     db = session_factory()
     try:
         db.add(User(id="u1", username="tester", password_hash="x", is_active=True))
-        db.add(Device(
-            id="d1",
-            user_id="u1",
-            name="Device 1",
-            adb_serial="serial-1",
-            runtime_status=runtime_status,
-            cooldown_until=cooldown_until,
-            consecutive_failures=2,
-        ))
+        db.add(
+            Device(
+                id="d1",
+                user_id="u1",
+                name="Device 1",
+                adb_serial="serial-1",
+                runtime_status=runtime_status,
+                cooldown_until=cooldown_until,
+                consecutive_failures=2,
+            )
+        )
         db.commit()
     finally:
         db.close()
@@ -64,7 +66,9 @@ def test_preflight_blocks_device_while_cooldown_is_active(supervisor_db, monkeyp
     assert health_calls["count"] == 0
 
 
-def test_preflight_clears_expired_cooldown_and_runs_health_check(supervisor_db, monkeypatch):
+def test_preflight_clears_expired_cooldown_and_runs_health_check(
+    supervisor_db, monkeypatch
+):
     expired = datetime.now(timezone.utc) - timedelta(minutes=5)
     _seed_device(supervisor_db, cooldown_until=expired, runtime_status="cooldown")
 

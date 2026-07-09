@@ -18,7 +18,10 @@ from server.models.device import Device
 from server.models.industry import Industry
 from server.models.matrix import DeviceState, ExecutionLog, TaskGraph
 from server.models.user import User
-from server.services.agent_decision import extract_agent_decision, extract_agent_decisions
+from server.services.agent_decision import (
+    extract_agent_decision,
+    extract_agent_decisions,
+)
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
 
@@ -98,7 +101,9 @@ def plan_agent_task(
         body.message,
     )
     if industry_slug:
-        AgentMemoryStore(current_user.id, industry_slug).save_plan(plan, name=plan.goal[:128])
+        AgentMemoryStore(current_user.id, industry_slug).save_plan(
+            plan, name=plan.goal[:128]
+        )
     return {"ok": True, "plan": plan.as_dict()}
 
 
@@ -161,7 +166,9 @@ def list_agent_device_state(
             "current_screen": row.current_screen,
             "health": row.health or {},
             "consecutive_failures": row.consecutive_failures,
-            "last_heartbeat": row.last_heartbeat.isoformat() if row.last_heartbeat else None,
+            "last_heartbeat": row.last_heartbeat.isoformat()
+            if row.last_heartbeat
+            else None,
             "updated_at": row.updated_at.isoformat() if row.updated_at else None,
         }
         for row in rows
@@ -215,18 +222,20 @@ def list_agent_execution_logs(
     results = []
     for row in rows:
         payload = row.payload if isinstance(row.payload, dict) else {}
-        results.append({
-            "id": row.id,
-            "job_id": row.job_id,
-            "device_id": row.device_id,
-            "action": row.action,
-            "target": row.target,
-            "status": row.status,
-            "detail": row.detail,
-            "latency_ms": row.latency_ms,
-            "payload": payload,
-            "agent_decision": extract_agent_decision(payload),
-            "agent_decisions": extract_agent_decisions(payload),
-            "created_at": row.created_at.isoformat() if row.created_at else None,
-        })
+        results.append(
+            {
+                "id": row.id,
+                "job_id": row.job_id,
+                "device_id": row.device_id,
+                "action": row.action,
+                "target": row.target,
+                "status": row.status,
+                "detail": row.detail,
+                "latency_ms": row.latency_ms,
+                "payload": payload,
+                "agent_decision": extract_agent_decision(payload),
+                "agent_decisions": extract_agent_decisions(payload),
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+        )
     return results

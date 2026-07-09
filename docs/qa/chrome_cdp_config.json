@@ -1,0 +1,22 @@
+{
+  "app_name": "Thunder Capture QA Chrome",
+  "chrome_path": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+  "cdp_port": 61850,
+  "user_data_dir": "data/chrome_cdp_profile",
+  "anti_detection_flags": [
+    "--disable-blink-features=AutomationControlled",
+    "--exclude-switches=enable-automation",
+    "--disable-infobars",
+    "--disable-extensions",
+    "--disable-background-networking",
+    "--disable-background-timer-throttling",
+    "--disable-renderer-backgrounding",
+    "--disable-features=IsolateOrigins,site-per-process",
+    "--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
+    "--lang=zh-CN",
+    "--window-size=1920,1080"
+  ],
+  "launch_command": "python docs/qa/launch_chrome_cdp.py",
+  "verify_url": "http://localhost:61850/json/version",
+  "note": "Run this launcher before executing Douyin collection tasks. Log in to Douyin manually on the first run."
+}

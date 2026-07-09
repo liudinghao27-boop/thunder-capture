@@ -7,10 +7,12 @@ import os
 import re
 
 from datetime import datetime, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, field_validator
 from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from server.auth import get_current_user
@@ -18,7 +20,10 @@ from server.models import get_db
 from server.models.industry import Industry
 from server.models.user import User
 from server.schemas.industry import (
-    IndustryCreate, IndustryOut, IndustryStats, IndustryUpdate,
+    IndustryCreate,
+    IndustryOut,
+    IndustryStats,
+    IndustryUpdate,
 )
 from server.secret_store import decrypt_secret, has_secret
 from server.services.url_security import is_safe_webhook_url
@@ -45,6 +50,7 @@ def _single_platform(platforms: list[str] | None) -> list[str]:
 def _to_industry_config(industry: Industry):
     """Convert DB model to engine-compatible IndustryConfig."""
     from core.config import IndustryConfig
+
     user = industry.user
     return IndustryConfig(
         name=industry.name,
@@ -67,13 +73,16 @@ def _to_industry_config(industry: Industry):
         noise_keywords=industry.noise_keywords or [],
         target_users=industry.target_users or [],
         user_id=industry.user_id,
-        matrix_target_devices=industry.matrix_target_devices or DEFAULT_MATRIX_TARGET_DEVICES,
+        matrix_target_devices=industry.matrix_target_devices
+        or DEFAULT_MATRIX_TARGET_DEVICES,
         lead_inventory_days=industry.lead_inventory_days or DEFAULT_LEAD_INVENTORY_DAYS,
         global_daily_limit=industry.global_daily_limit or 0,
         auto_replenish_enabled=bool(industry.auto_replenish_enabled),
-        replenish_threshold_days=industry.replenish_threshold_days or DEFAULT_REPLENISH_THRESHOLD_DAYS,
+        replenish_threshold_days=industry.replenish_threshold_days
+        or DEFAULT_REPLENISH_THRESHOLD_DAYS,
         keyword_batch_size=industry.keyword_batch_size or DEFAULT_KEYWORD_BATCH_SIZE,
-        collect_authors_per_run=industry.collect_authors_per_run or DEFAULT_COLLECT_AUTHORS_PER_RUN,
+        collect_authors_per_run=industry.collect_authors_per_run
+        or DEFAULT_COLLECT_AUTHORS_PER_RUN,
         collect_video_limit=industry.collect_video_limit or DEFAULT_COLLECT_VIDEO_LIMIT,
         compliance_mode=bool(getattr(industry, "compliance_mode", False)),
         webhook_url=getattr(industry, "webhook_url", "") or "",
@@ -91,10 +100,14 @@ def _to_industry_config(industry: Industry):
 def _matrix_capacity(ind: Industry, db: Session, user_id: str) -> dict:
     from server.models.device import Device
 
-    active_devices = db.query(Device).filter(
-        Device.user_id == user_id,
-        Device.is_active.is_(True),
-    ).count()
+    active_devices = (
+        db.query(Device)
+        .filter(
+            Device.user_id == user_id,
+            Device.is_active.is_(True),
+        )
+        .count()
+    )
     target_devices = max(active_devices, ind.matrix_target_devices or 30)
     return {
         "active_devices": active_devices,
@@ -125,21 +138,32 @@ class IndustryGenerateConfigReq(BaseModel):
 
 def _has_api_key(user: User | None = None) -> bool:
     """Return True if any LLM API key is available (env, user secret, or system.yaml)."""
-    if os.getenv("THUNDER_DEEPSEEK_KEY") or os.getenv("THUNDER_ZHIPU_KEY") or os.getenv("THUNDER_OPENAI_KEY"):
+    if (
+        os.getenv("THUNDER_DEEPSEEK_KEY")
+        or os.getenv("THUNDER_ZHIPU_KEY")
+        or os.getenv("THUNDER_OPENAI_KEY")
+    ):
         return True
 
     if user:
-        if has_secret(user.deepseek_key) or has_secret(user.zhipu_key) or has_secret(user.openai_key):
+        if (
+            has_secret(user.deepseek_key)
+            or has_secret(user.zhipu_key)
+            or has_secret(user.openai_key)
+        ):
             return True
 
     try:
         from core.config import load_system
+
         cfg = load_system()
         api_keys = cfg.get("api_keys", {})
         if api_keys.get("deepseek") or api_keys.get("zhipu") or api_keys.get("openai"):
             return True
     except Exception as exc:
-        logging.getLogger("thunder.api.industries").debug("_has_api_key system.yaml check failed: %s", exc)
+        logging.getLogger("thunder.api.industries").debug(
+            "_has_api_key system.yaml check failed: %s", exc
+        )
 
     return False
 
@@ -164,6 +188,7 @@ def select_available_llm(user: User | None = None):
     # Fallback to loading system.yaml config
     try:
         from core.config import load_system
+
         cfg = load_system()
         api_keys = cfg.get("api_keys", {})
         if api_keys.get("deepseek"):
@@ -173,7 +198,9 @@ def select_available_llm(user: User | None = None):
         if api_keys.get("openai"):
             return "openai", "gpt-4o-mini"
     except Exception as exc:
-        logging.getLogger("thunder.api.industries").debug("select_available_llm system.yaml check failed: %s", exc)
+        logging.getLogger("thunder.api.industries").debug(
+            "select_available_llm system.yaml check failed: %s", exc
+        )
 
     # Default fallback
     return "deepseek", "deepseek-v4-flash"
@@ -185,7 +212,7 @@ def generate_industry_config(
     current_user: User = Depends(get_current_user),
 ):
     provider, model = select_available_llm(current_user)
-    
+
     # Check if current user has overriding API keys
     user_key = None
     if provider == "deepseek" and current_user.deepseek_key:
@@ -196,6 +223,7 @@ def generate_industry_config(
         user_key = decrypt_secret(current_user.openai_key)
 
     from server.services.llm import get_llm_client
+
     try:
         client = get_llm_client(provider=provider, model=model, api_key=user_key)
     except Exception as e:
@@ -207,7 +235,7 @@ def generate_industry_config(
             model=model,
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": prompt}
+                {"role": "user", "content": prompt},
             ],
             temperature=0.7,
             max_tokens=1500,
@@ -224,7 +252,7 @@ def generate_industry_config(
     except Exception as e:
         raise HTTPException(
             status_code=520,
-            detail=f"解析 LLM 返回的 JSON 失败，原始输出: {result[:200]}... 错误: {str(e)}"
+            detail=f"解析 LLM 返回的 JSON 失败，原始输出: {result[:200]}... 错误: {str(e)}",
         )
 
     name = config_data.get("name", "未命名项目")
@@ -235,7 +263,7 @@ def generate_industry_config(
     categories = config_data.get("categories", [])
 
     # Validate and normalize slug format
-    slug = re.sub(r'[^a-z0-9_-]', '', slug.lower())
+    slug = re.sub(r"[^a-z0-9_-]", "", slug.lower())
     if not slug or not slug[0].isalpha():
         slug = "ind-" + slug if slug else "industry"
     slug = slug[:32]
@@ -279,7 +307,9 @@ def _slugify_seed(seed: str, fallback: str = "industry") -> str:
     return raw[:32]
 
 
-def _build_bigdata_fallback_config(description: str, seed_keyword: str, user: User | None = None) -> dict:
+def _build_bigdata_fallback_config(
+    description: str, seed_keyword: str, user: User | None = None
+) -> dict:
     seed = (seed_keyword or "").strip() or (description or "").strip()[:12] or "项目"
     desc = (description or "").strip()
     provider, model = select_available_llm(user)
@@ -315,12 +345,147 @@ def _build_bigdata_fallback_config(description: str, seed_keyword: str, user: Us
         "categories": [f"{seed}咨询", "费用咨询", "课程咨询", "资料咨询", "其他"],
         "intent_keywords": intent_terms,
         "noise_keywords": ["无关", "广告", "表情", "路过", "互关", "抽奖"],
-        "target_users": [f"关注{seed}的人", f"咨询{seed}课程的人", f"需要{seed}方案的人"],
+        "target_users": [],
         "llm_provider": provider,
         "llm_model": model,
         "bigdata_used": False,
-        "bigdata_note": "抖音热门大数据采集器尚未启用，已基于业务描述和种子词生成可用配置。",
+        "bigdata_note": "抖音热门大数据暂不可用，已基于业务描述和种子词生成可用配置。",
     }
+
+
+def _clean_string_list(values, *, limit: int = 40) -> list[str]:
+    cleaned: list[str] = []
+    seen = set()
+    for value in values or []:
+        item = str(value).strip()
+        if not item or item in seen:
+            continue
+        seen.add(item)
+        cleaned.append(item)
+        if len(cleaned) >= limit:
+            break
+    return cleaned
+
+
+def _normalize_bigdata_ai_config(
+    config_data: dict,
+    *,
+    description: str,
+    seed_keyword: str,
+    user: User | None,
+    sample_count: int,
+) -> dict:
+    fallback = _build_bigdata_fallback_config(description, seed_keyword, user)
+    provider, model = select_available_llm(user)
+
+    name = (
+        str(config_data.get("name") or fallback["name"]).strip()[:10]
+        or fallback["name"]
+    )
+    slug = _slugify_seed(str(config_data.get("slug") or seed_keyword or name))
+    keywords = (
+        _clean_string_list(config_data.get("keywords"), limit=40)
+        or fallback["keywords"]
+    )
+    categories = (
+        _clean_string_list(config_data.get("categories"), limit=10)
+        or fallback["categories"]
+    )
+    intent_keywords = (
+        _clean_string_list(config_data.get("intent_keywords"), limit=30)
+        or fallback["intent_keywords"]
+    )
+    noise_keywords = (
+        _clean_string_list(config_data.get("noise_keywords"), limit=30)
+        or fallback["noise_keywords"]
+    )
+    target_users = _clean_string_list(config_data.get("target_users"), limit=50)
+
+    return {
+        "name": name,
+        "slug": slug,
+        "keywords": keywords,
+        "reply_tone": str(
+            config_data.get("reply_tone") or fallback["reply_tone"]
+        ).strip(),
+        "reply_style": str(
+            config_data.get("reply_style") or fallback["reply_style"]
+        ).strip(),
+        "reply_hook": str(
+            config_data.get("reply_hook") or fallback["reply_hook"]
+        ).strip(),
+        "categories": categories,
+        "intent_keywords": intent_keywords,
+        "noise_keywords": noise_keywords,
+        "target_users": target_users,
+        "llm_provider": provider,
+        "llm_model": model,
+        "bigdata_used": True,
+        "bigdata_sample_count": sample_count,
+        "bigdata_note": f"已接入抖音热门数据样本 {sample_count} 条，并完成 AI 提炼配置。",
+    }
+
+
+def _build_bigdata_prompt(
+    description: str, seed_keyword: str, text_pool: list[str]
+) -> str:
+    data_lines = "\n".join(
+        f"{idx + 1}. {text}" for idx, text in enumerate(text_pool[:80])
+    )
+    return (
+        f"业务描述：{description}\n"
+        f"种子搜索词：{seed_keyword}\n\n"
+        "抖音热门视频/评论文本池：\n"
+        f"{data_lines}\n\n"
+        "请基于这些真实文本提炼获客项目配置，必须返回合法 JSON。"
+    )
+
+
+async def _collect_douyin_bigdata_text_pool(seed_keyword: str) -> dict:
+    """Collect a small Douyin text pool for project-config AI generation."""
+    import shutil
+
+    from adapters.mediacrawler.runner import (
+        configure_mediacrawler,
+        prepare_mediacrawler_workspace,
+        run_platform,
+    )
+    from core.browser_orchestrator import ShadowBrowser
+
+    workspace = prepare_mediacrawler_workspace()
+    base_cfg_path = workspace / "config" / "base_config.py"
+    cookie_path = Path(__file__).resolve().parents[2] / "data" / "douyin_cookies.json"
+    shadow_browser = ShadowBrowser(
+        user_data_dir=str(Path(__file__).resolve().parents[2] / "data" / "chrome_data")
+    )
+    try:
+        configure_mediacrawler(base_cfg_path, max_comments=80, max_notes=12)
+        shadow_browser.start()
+        configure_mediacrawler(
+            base_cfg_path,
+            cdp_port=shadow_browser.port,
+            cookie_path=cookie_path,
+            max_comments=80,
+            max_notes=12,
+        )
+        comments = await run_platform(
+            "douyin",
+            [seed_keyword],
+            workspace=workspace,
+            cdp_port=shadow_browser.port,
+        )
+        texts = _clean_string_list(
+            [
+                c.get("text") or c.get("content") or c.get("desc") or c.get("title")
+                for c in comments
+            ],
+            limit=80,
+        )
+        return {"sample_count": len(texts), "texts": texts}
+    finally:
+        shadow_browser.close()
+        if workspace.exists():
+            shutil.rmtree(workspace, ignore_errors=True)
 
 
 BIGDATA_SYSTEM_PROMPT = """你是一个专业的互联网数据分析师和获客配置专家。请根据用户提供的“业务描述”以及从抖音平台采集到的“热门视频描述与用户评论数据”（大数据文本池），分析用户的真实关注点、痛点以及搜索意图，并生成一套精准的行业匹配配置。
@@ -341,17 +506,92 @@ async def generate_industry_config_bigdata(
     req: IndustryGenerateBigDataConfigReq,
     current_user: User = Depends(get_current_user),
 ):
-    """Generate a usable config without blocking on the retired big-data collector."""
-    return _build_bigdata_fallback_config(req.description, req.seed_keyword, current_user)
+    """Generate config from a Douyin text pool; fall back only when collection/LLM is unavailable."""
+    log = logging.getLogger("thunder.api.industries")
+    try:
+        text_pool = await _collect_douyin_bigdata_text_pool(req.seed_keyword)
+    except Exception as exc:
+        log.warning("big-data collection failed; falling back to seed config: %s", exc)
+        fallback = _build_bigdata_fallback_config(
+            req.description, req.seed_keyword, current_user
+        )
+        fallback["bigdata_note"] = (
+            f"抖音热门大数据采集失败，已基于业务描述和种子词生成可用配置。原因：{str(exc)[:120]}"
+        )
+        return fallback
 
+    texts = _clean_string_list(text_pool.get("texts"), limit=80)
+    sample_count = int(text_pool.get("sample_count") or len(texts))
+    if not texts:
+        fallback = _build_bigdata_fallback_config(
+            req.description, req.seed_keyword, current_user
+        )
+        fallback["bigdata_note"] = (
+            "抖音热门大数据未采集到有效文本，已基于业务描述和种子词生成可用配置。"
+        )
+        return fallback
 
+    provider, model = select_available_llm(current_user)
+    user_key = None
+    if provider == "deepseek" and current_user.deepseek_key:
+        user_key = decrypt_secret(current_user.deepseek_key)
+    elif provider == "zhipu" and current_user.zhipu_key:
+        user_key = decrypt_secret(current_user.zhipu_key)
+    elif provider == "openai" and current_user.openai_key:
+        user_key = decrypt_secret(current_user.openai_key)
+
+    try:
+        from server.services.llm import get_llm_client
+
+        client = get_llm_client(provider=provider, model=model, api_key=user_key)
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": BIGDATA_SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": _build_bigdata_prompt(
+                        req.description, req.seed_keyword, texts
+                    ),
+                },
+            ],
+            temperature=0.55,
+            max_tokens=1800,
+        )
+        content = resp.choices[0].message.content
+        config_data = json_repair.loads(content.strip() if content else "")
+        if not isinstance(config_data, dict):
+            raise ValueError("LLM result is not a JSON object")
+        return _normalize_bigdata_ai_config(
+            config_data,
+            description=req.description,
+            seed_keyword=req.seed_keyword,
+            user=current_user,
+            sample_count=sample_count,
+        )
+    except Exception as exc:
+        log.warning(
+            "big-data AI generation failed; falling back to seed config: %s", exc
+        )
+        fallback = _build_bigdata_fallback_config(
+            req.description, req.seed_keyword, current_user
+        )
+        fallback["bigdata_note"] = (
+            f"已采集到 {sample_count} 条抖音数据，但 AI 提炼失败，已生成可用兜底配置。原因：{str(exc)[:120]}"
+        )
+        return fallback
 
 
 @router.get("")
 def list_industries(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-    limit: int = Query(default=0, ge=0, le=500, description="0 returns the full list (backward compatible)"),
+    limit: int = Query(
+        default=0,
+        ge=0,
+        le=500,
+        description="0 returns the full list (backward compatible)",
+    ),
     offset: int = Query(default=0, ge=0),
 ):
     """List industries for the current user.
@@ -380,18 +620,26 @@ def create_industry(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if db.query(Industry).filter(
-        Industry.user_id == current_user.id, Industry.slug == data.slug
-    ).first():
+    if (
+        db.query(Industry)
+        .filter(Industry.user_id == current_user.id, Industry.slug == data.slug)
+        .first()
+    ):
         raise HTTPException(status_code=400, detail="Slug already exists")
     payload = data.model_dump()
     if payload.get("reply_variants") is not None:
         payload["reply_variants"] = [
-            normalize_variant(v) for v in payload["reply_variants"] if isinstance(v, dict)
+            normalize_variant(v)
+            for v in payload["reply_variants"]
+            if isinstance(v, dict)
         ]
     industry = Industry(user_id=current_user.id, **payload)
     db.add(industry)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Slug already exists")
     db.refresh(industry)
     return industry
 
@@ -407,10 +655,12 @@ def _industry_ready_state(ind: Industry, db: Session, user: User) -> dict:
         "has_categories": bool(ind.categories),
         "has_reply_persona": bool(ind.reply_tone and ind.reply_style),
         "has_api_key": _has_api_key(user),
-        "has_device": db.query(Device).filter(
+        "has_device": db.query(Device)
+        .filter(
             Device.user_id == user.id,
             Device.is_active.is_(True),
-        ).first()
+        )
+        .first()
         is not None,
         "compliance_ready": not bool(ind.compliance_mode) or bool(ind.webhook_url),
     }
@@ -492,16 +742,25 @@ def delete_industry(
     ind = _get_owned_industry(industry_id, current_user, db)
     slug = ind.slug
 
-    # Clean engine-side data
+    # Clean engine-side data scoped to the current tenant.
     try:
         from server.models.task import TaskQueue, TargetBlogger
-        db.query(TaskQueue).filter(TaskQueue.industry_slug == slug).delete()
-        db.query(TargetBlogger).filter(TargetBlogger.industry_slug == slug).delete()
+
+        db.query(TaskQueue).filter(
+            TaskQueue.industry_slug == slug,
+            TaskQueue.owner_user_id == current_user.id,
+        ).delete()
+        db.query(TargetBlogger).filter(
+            TargetBlogger.industry_slug == slug,
+            TargetBlogger.owner_user_id == current_user.id,
+        ).delete()
         # Note: collected_videos logic might need joining or simpler to ignore for now since it's just dedup memory.
         db.commit()
     except Exception as exc:
         db.rollback()
-        logging.getLogger("thunder.api.industries").warning("delete_industry cleanup failed: %s", exc)
+        logging.getLogger("thunder.api.industries").warning(
+            "delete_industry cleanup failed: %s", exc
+        )
 
     ind.is_active = False
     db.commit()
@@ -529,6 +788,7 @@ def get_replenishment_plan(
 ):
     ind = _get_owned_industry(industry_id, current_user, db)
     from server.services.task_stats import replenishment_plan
+
     cap = _matrix_capacity(ind, db, current_user.id)
     return {
         **replenishment_plan(
@@ -556,6 +816,7 @@ def trigger_replenishment(
 ):
     ind = _get_owned_industry(industry_id, current_user, db)
     from server.services.task_stats import replenishment_plan
+
     cap = _matrix_capacity(ind, db, current_user.id)
     plan = replenishment_plan(
         ind.slug,
@@ -566,7 +827,12 @@ def trigger_replenishment(
         threshold_days=cap["threshold_days"],
     )
     if not body.force and not plan.get("should_replenish"):
-        return {"ok": True, "started": False, "reason": "库存充足，无需补采", "plan": plan}
+        return {
+            "ok": True,
+            "started": False,
+            "reason": "库存充足，无需补采",
+            "plan": plan,
+        }
 
     cfg = _to_industry_config(ind)
     job_id = run_collect_job(cfg, skip_discover=bool(plan.get("skip_discover")))
@@ -606,7 +872,9 @@ def trigger_send(
             .all()
         )
         allowed_ids = {device.id for device in devices}
-        rejected = [device_id for device_id in device_ids if device_id not in allowed_ids]
+        rejected = [
+            device_id for device_id in device_ids if device_id not in allowed_ids
+        ]
         if rejected:
             raise HTTPException(
                 status_code=400,
@@ -647,11 +915,14 @@ def get_industry_stats(
 ):
     ind = _get_owned_industry(industry_id, current_user, db)
     from server.services.task_stats import (
-        queue_stats, blogger_source_stats, inventory_stats,
+        queue_stats,
+        blogger_source_stats,
+        inventory_stats,
         industry_daily_quota_state,
     )
-    qs = queue_stats(ind.slug)
-    bs = blogger_source_stats(ind.slug)
+
+    qs = queue_stats(ind.slug, owner_user_id=current_user.id)
+    bs = blogger_source_stats(ind.slug, owner_user_id=current_user.id)
     cap = _matrix_capacity(ind, db, current_user.id)
     inv = inventory_stats(
         ind.slug,
@@ -659,8 +930,9 @@ def get_industry_stats(
         per_device_daily_limit=cap["per_device_daily_limit"],
         inventory_days=cap["inventory_days"],
         global_daily_limit=cap["global_daily_limit"],
+        owner_user_id=current_user.id,
     )
-    quota = industry_daily_quota_state(ind.slug)
+    quota = industry_daily_quota_state(ind.slug, owner_user_id=current_user.id)
     total = qs.get("total", 0)
     done = qs.get("done", 0)
     failed = qs.get("failed", 0)
@@ -697,24 +969,32 @@ def get_industry_tasks(
 
     query = db.query(TaskQueue).filter(
         TaskQueue.industry_slug == ind.slug,
-        or_(TaskQueue.owner_user_id == current_user.id, TaskQueue.owner_user_id == "", TaskQueue.owner_user_id.is_(None))
+        TaskQueue.owner_user_id == current_user.id,
     )
-    
+
     now = datetime.now().isoformat()
     if status == "retry":
-        query = query.filter(TaskQueue.status == "pending", TaskQueue.retry_after.is_not(None), TaskQueue.retry_after != "", TaskQueue.retry_after > now)
+        query = query.filter(
+            TaskQueue.status == "pending",
+            TaskQueue.retry_after.is_not(None),
+            TaskQueue.retry_after != "",
+            TaskQueue.retry_after > now,
+        )
     elif status == "pending":
-        query = query.filter(TaskQueue.status == "pending", or_(TaskQueue.retry_after.is_(None), TaskQueue.retry_after == "", TaskQueue.retry_after <= now))
+        query = query.filter(
+            TaskQueue.status == "pending",
+            or_(
+                TaskQueue.retry_after.is_(None),
+                TaskQueue.retry_after == "",
+                TaskQueue.retry_after <= now,
+            ),
+        )
     elif status:
         query = query.filter(TaskQueue.status == status)
-        
+
     tasks = query.order_by(TaskQueue.id.desc()).limit(limit).offset(offset).all()
     return [
-        {
-            c.name: getattr(t, c.name)
-            for c in TaskQueue.__table__.columns
-        }
-        for t in tasks
+        {c.name: getattr(t, c.name) for c in TaskQueue.__table__.columns} for t in tasks
     ]
 
 
@@ -727,18 +1007,25 @@ def retry_failed_task(
 ):
     ind = _get_owned_industry(industry_id, current_user, db)
     from server.models.task import TaskQueue
+
     try:
-        task = db.query(TaskQueue).filter(
-            TaskQueue.id == task_id,
-            TaskQueue.industry_slug == ind.slug,
-            or_(TaskQueue.owner_user_id == current_user.id, TaskQueue.owner_user_id == "", TaskQueue.owner_user_id.is_(None))
-        ).first()
-        
+        task = (
+            db.query(TaskQueue)
+            .filter(
+                TaskQueue.id == task_id,
+                TaskQueue.industry_slug == ind.slug,
+                TaskQueue.owner_user_id == current_user.id,
+            )
+            .first()
+        )
+
         if not task:
             raise HTTPException(status_code=404, detail="Task not found")
         if task.status != "failed":
-            raise HTTPException(status_code=400, detail="Only failed tasks can be retried")
-            
+            raise HTTPException(
+                status_code=400, detail="Only failed tasks can be retried"
+            )
+
         task.status = "pending"
         task.consumer_id = None
         task.claim_token = None
@@ -761,12 +1048,17 @@ def retry_all_failed_tasks(
 ):
     ind = _get_owned_industry(industry_id, current_user, db)
     from server.models.task import TaskQueue
+
     try:
-        tasks = db.query(TaskQueue).filter(
-            TaskQueue.industry_slug == ind.slug,
-            TaskQueue.status == "failed",
-            or_(TaskQueue.owner_user_id == current_user.id, TaskQueue.owner_user_id == "", TaskQueue.owner_user_id.is_(None))
-        ).all()
+        tasks = (
+            db.query(TaskQueue)
+            .filter(
+                TaskQueue.industry_slug == ind.slug,
+                TaskQueue.status == "failed",
+                TaskQueue.owner_user_id == current_user.id,
+            )
+            .all()
+        )
         count = len(tasks)
         for task in tasks:
             task.status = "pending"
@@ -801,6 +1093,7 @@ def get_industry_funnel(
         replenishment_plan,
     )
     from server.models.job import Job
+
     cap = _matrix_capacity(ind, db, current_user.id)
     inventory = inventory_stats(
         ind.slug,
@@ -808,6 +1101,7 @@ def get_industry_funnel(
         per_device_daily_limit=cap["per_device_daily_limit"],
         inventory_days=cap["inventory_days"],
         global_daily_limit=cap["global_daily_limit"],
+        owner_user_id=current_user.id,
     )
     replenish = replenishment_plan(
         ind.slug,
@@ -818,7 +1112,7 @@ def get_industry_funnel(
         threshold_days=cap["threshold_days"],
         source_limit=limit,
     )
-    quota = industry_daily_quota_state(ind.slug)
+    quota = industry_daily_quota_state(ind.slug, owner_user_id=current_user.id)
     recent_collect = (
         db.query(Job)
         .filter(
@@ -843,17 +1137,23 @@ def get_industry_funnel(
     if isinstance(recent_payload, str):
         try:
             import json
+
             recent_payload = json.loads(recent_payload)
         except Exception as exc:
-            logging.getLogger("thunder.api.industries").debug("Failed to parse collect payload: %s", exc)
+            logging.getLogger("thunder.api.industries").debug(
+                "Failed to parse collect payload: %s", exc
+            )
             recent_payload = {}
     recent_send_payload = recent_send.payload if recent_send else {}
     if isinstance(recent_send_payload, str):
         try:
             import json
+
             recent_send_payload = json.loads(recent_send_payload)
         except Exception as exc:
-            logging.getLogger("thunder.api.industries").debug("Failed to parse send payload: %s", exc)
+            logging.getLogger("thunder.api.industries").debug(
+                "Failed to parse send payload: %s", exc
+            )
             recent_send_payload = {}
     return {
         "industry_slug": ind.slug,
@@ -869,21 +1169,35 @@ def get_industry_funnel(
         "latest_collect": {
             "job_id": recent_collect.id if recent_collect else "",
             "status": recent_collect.status if recent_collect else "",
-            "created_at": recent_collect.created_at.isoformat() if recent_collect and recent_collect.created_at else None,
-            "completed_at": recent_collect.completed_at.isoformat() if recent_collect and recent_collect.completed_at else None,
+            "created_at": recent_collect.created_at.isoformat()
+            if recent_collect and recent_collect.created_at
+            else None,
+            "completed_at": recent_collect.completed_at.isoformat()
+            if recent_collect and recent_collect.completed_at
+            else None,
             "summary": (dict(recent_payload or {})).get("collect_summary", {}),
         },
         "latest_send": {
             "job_id": recent_send.id if recent_send else "",
             "status": recent_send.status if recent_send else "",
-            "created_at": recent_send.created_at.isoformat() if recent_send and recent_send.created_at else None,
-            "completed_at": recent_send.completed_at.isoformat() if recent_send and recent_send.completed_at else None,
+            "created_at": recent_send.created_at.isoformat()
+            if recent_send and recent_send.created_at
+            else None,
+            "completed_at": recent_send.completed_at.isoformat()
+            if recent_send and recent_send.completed_at
+            else None,
             "summary": (dict(recent_send_payload or {})).get("send_summary", {}),
         },
-        "source_types": source_type_funnel_stats(ind.slug),
-        "bloggers": blogger_source_stats(ind.slug),
-        "keywords": keyword_funnel_stats(ind.slug, limit=limit),
-        "source_performance": source_performance_stats(ind.slug, limit=limit),
+        "source_types": source_type_funnel_stats(
+            ind.slug, owner_user_id=current_user.id
+        ),
+        "bloggers": blogger_source_stats(ind.slug, owner_user_id=current_user.id),
+        "keywords": keyword_funnel_stats(
+            ind.slug, limit=limit, owner_user_id=current_user.id
+        ),
+        "source_performance": source_performance_stats(
+            ind.slug, limit=limit, owner_user_id=current_user.id
+        ),
     }
 
 
@@ -895,7 +1209,8 @@ def get_industry_bloggers(
 ):
     ind = _get_owned_industry(industry_id, current_user, db)
     from server.services.task_stats import get_bloggers
-    bloggers = get_bloggers("all", ind.slug)
+
+    bloggers = get_bloggers("all", ind.slug, owner_user_id=current_user.id)
     return bloggers
 
 
@@ -913,7 +1228,9 @@ class ScheduleConfigUpdate(BaseModel):
         if value is None or value == "":
             return value
         if not is_safe_webhook_url(value):
-            raise ValueError("Effect Webhook URL 必须是安全的 HTTPS 地址，且不能指向私有/本地网络")
+            raise ValueError(
+                "Effect Webhook URL 必须是安全的 HTTPS 地址，且不能指向私有/本地网络"
+            )
         return value
 
 
@@ -928,7 +1245,9 @@ class ComplianceConfigUpdate(BaseModel):
         if value is None or value == "":
             return value
         if not is_safe_webhook_url(value):
-            raise ValueError("Webhook URL 必须是安全的 HTTPS 地址，且不能指向私有/本地网络")
+            raise ValueError(
+                "Webhook URL 必须是安全的 HTTPS 地址，且不能指向私有/本地网络"
+            )
         return value
 
 
@@ -1013,16 +1332,19 @@ def test_webhook(
         raise HTTPException(status_code=400, detail="未配置 Webhook URL")
 
     from server.services.webhook import push_leads_to_webhook
+
     result = push_leads_to_webhook(
         webhook_url=ind.webhook_url,
         industry_slug=ind.slug,
         industry_name=ind.name,
-        leads=[{
-            "id": 0,
-            "user_name": "测试用户",
-            "text": "这是一条测试线索",
-            "status": "pending",
-        }],
+        leads=[
+            {
+                "id": 0,
+                "user_name": "测试用户",
+                "text": "这是一条测试线索",
+                "status": "pending",
+            }
+        ],
         timeout=5.0,
     )
     return {"ok": result.get("ok", False), "status_code": result.get("status_code")}
@@ -1089,13 +1411,15 @@ def add_reply_variant(
 ):
     ind = _get_owned_industry(industry_id, current_user, db)
     variants = list(getattr(ind, "reply_variants", []) or [])
-    new_variant = normalize_variant({
-        "name": body.name,
-        "reply_tone": body.reply_tone,
-        "reply_style": body.reply_style,
-        "reply_hook": body.reply_hook,
-        "weight": body.weight,
-    })
+    new_variant = normalize_variant(
+        {
+            "name": body.name,
+            "reply_tone": body.reply_tone,
+            "reply_style": body.reply_style,
+            "reply_hook": body.reply_hook,
+            "weight": body.weight,
+        }
+    )
     variants.append(new_variant)
     ind.reply_variants = variants
     db.commit()
@@ -1110,7 +1434,10 @@ def list_reply_variants(
     db: Session = Depends(get_db),
 ):
     ind = _get_owned_industry(industry_id, current_user, db)
-    return {"industry_id": ind.id, "variants": list(getattr(ind, "reply_variants", []) or [])}
+    return {
+        "industry_id": ind.id,
+        "variants": list(getattr(ind, "reply_variants", []) or []),
+    }
 
 
 @router.put("/{industry_id}/variants/{variant_id}", response_model=IndustryOut)
@@ -1156,7 +1483,11 @@ def delete_reply_variant(
     db: Session = Depends(get_db),
 ):
     ind = _get_owned_industry(industry_id, current_user, db)
-    variants = [dict(v) for v in (getattr(ind, "reply_variants", []) or []) if v.get("id") != variant_id]
+    variants = [
+        dict(v)
+        for v in (getattr(ind, "reply_variants", []) or [])
+        if v.get("id") != variant_id
+    ]
     ind.reply_variants = variants
     db.commit()
     db.refresh(ind)

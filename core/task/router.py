@@ -73,7 +73,10 @@ class TaskRouter:
             if not isinstance(result, dict):
                 return DispatchResult(True, str(result or "done"), "", key)
             return DispatchResult(
-                True, result.get("status", "done"), result.get("message", ""), key,
+                True,
+                result.get("status", "done"),
+                result.get("message", ""),
+                key,
             )
         except Exception as e:
             log.exception("Task dispatch failed: route=%s", key)

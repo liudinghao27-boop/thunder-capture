@@ -15,6 +15,7 @@ from server.models.task import ConsumerState, IndustryDailyQuota, TaskQueue
 
 log = logging.getLogger("thunder.scheduler")
 
+
 @dataclass
 class ClaimedTask:
     task: dict | None
@@ -29,8 +30,10 @@ class ClaimedTask:
     def task_id(self) -> int:
         return self.task["id"] if self.task else 0
 
+
 def _now():
     return datetime.now(timezone.utc).isoformat()
+
 
 class MatrixTaskScheduler:
     def __init__(
@@ -73,11 +76,19 @@ class MatrixTaskScheduler:
         db = self._get_db()
         try:
             if self._device_daily_limit_reached(db, device_id):
-                return ClaimedTask(None, reserved=False, reason="device_daily_limit_reached")
+                return ClaimedTask(
+                    None, reserved=False, reason="device_daily_limit_reached"
+                )
             if self._device_hourly_limit_reached(db, device_id):
-                return ClaimedTask(None, reserved=False, reason="device_hourly_limit_reached")
+                return ClaimedTask(
+                    None, reserved=False, reason="device_hourly_limit_reached"
+                )
 
-            limits = [limit for limit in (self.global_daily_limit, self.daily_send_max) if limit > 0]
+            limits = [
+                limit
+                for limit in (self.global_daily_limit, self.daily_send_max)
+                if limit > 0
+            ]
             effective_limit = min(limits) if limits else 0
             if effective_limit:
                 day = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -86,8 +97,10 @@ class MatrixTaskScheduler:
                     update(IndustryDailyQuota)
                     .where(
                         IndustryDailyQuota.industry_slug == self.industry_slug,
+                        IndustryDailyQuota.owner_user_id == self.owner_user_id,
                         IndustryDailyQuota.day == day,
-                        IndustryDailyQuota.sent + IndustryDailyQuota.reserved < effective_limit,
+                        IndustryDailyQuota.sent + IndustryDailyQuota.reserved
+                        < effective_limit,
                     )
                     .values(reserved=IndustryDailyQuota.reserved + 1)
                 )
@@ -103,9 +116,8 @@ class MatrixTaskScheduler:
             filters = [
                 TaskQueue.status == "pending",
                 TaskQueue.industry_slug == self.industry_slug,
+                TaskQueue.owner_user_id == self.owner_user_id,
             ]
-            if self.owner_user_id:
-                filters.append(TaskQueue.owner_user_id == self.owner_user_id)
             candidates = (
                 db.query(TaskQueue)
                 .filter(*filters)
@@ -113,49 +125,56 @@ class MatrixTaskScheduler:
                 .limit(100)
                 .all()
             )
-            candidate = next((task for task in candidates if self._retry_after_ready(task.retry_after)), None)
-            if candidate is None:
+            ready_candidates = [
+                task for task in candidates if self._retry_after_ready(task.retry_after)
+            ]
+            if not ready_candidates:
                 db.rollback()
                 return ClaimedTask(None, reserved=False, reason="no_task")
-            token_suffix = str(uuid.uuid4())
-            claim_token = f"{self.job_id}:{token_suffix}" if self.job_id else token_suffix
-            claimed_at = _now()
-            claimed_id = db.execute(
-                update(TaskQueue)
-                .where(TaskQueue.id == candidate.id, TaskQueue.status == "pending")
-                .values(
-                    status="claimed",
-                    consumer_id=device_id,
-                    claim_token=claim_token,
-                    claimed_at=claimed_at,
-                    job_id=self.job_id,
+
+            for candidate in ready_candidates:
+                token_suffix = str(uuid.uuid4())
+                claim_token = (
+                    f"{self.job_id}:{token_suffix}" if self.job_id else token_suffix
                 )
-                .returning(TaskQueue.id)
-            ).scalar_one_or_none()
+                claimed_at = _now()
+                claimed_id = db.execute(
+                    update(TaskQueue)
+                    .where(TaskQueue.id == candidate.id, TaskQueue.status == "pending")
+                    .values(
+                        status="claimed",
+                        consumer_id=device_id,
+                        claim_token=claim_token,
+                        claimed_at=claimed_at,
+                        job_id=self.job_id,
+                    )
+                    .returning(TaskQueue.id)
+                ).scalar_one_or_none()
 
-            if claimed_id is None:
-                db.rollback()
-                return ClaimedTask(None, reserved=False, reason="no_task")
+                if claimed_id is None:
+                    continue
 
-            task = db.query(TaskQueue).filter(TaskQueue.id == claimed_id).one()
-            
-            task_dict = {
-                "id": task.id,
-                "video_id": task.video_id,
-                "comment_id": task.comment_id,
-                "text": task.text,
-                "user_name": task.user_name,
-                "user_id": task.user_id,
-                "sec_uid": getattr(task, "user_id", ""),  # Fallback mappings
-                "short_id": getattr(task, "short_id", ""),
-                "douyin_id": getattr(task, "douyin_id", ""),
-                "unique_id": getattr(task, "unique_id", ""),
-                "claim_token": claim_token,
-                "status": "claimed"
-            }
-            db.commit()
-            return ClaimedTask(task_dict, reserved=True)
-            
+                task = db.query(TaskQueue).filter(TaskQueue.id == claimed_id).one()
+                task_dict = {
+                    "id": task.id,
+                    "video_id": task.video_id,
+                    "comment_id": task.comment_id,
+                    "text": task.text,
+                    "user_name": task.user_name,
+                    "user_id": task.user_id,
+                    "sec_uid": getattr(task, "user_id", ""),  # Fallback mappings
+                    "short_id": getattr(task, "short_id", ""),
+                    "douyin_id": getattr(task, "douyin_id", ""),
+                    "unique_id": getattr(task, "unique_id", ""),
+                    "claim_token": claim_token,
+                    "status": "claimed",
+                }
+                db.commit()
+                return ClaimedTask(task_dict, reserved=True)
+
+            db.rollback()
+            return ClaimedTask(None, reserved=False, reason="no_task")
+
         except Exception as e:
             db.rollback()
             log.exception("claim_for_device failed")
@@ -186,7 +205,11 @@ class MatrixTaskScheduler:
             return True
         parsed = self._parse_dt(str(value))
         if parsed is None:
-            log.warning("Ignoring invalid retry_after value for %s: %r", self.industry_slug, value)
+            log.warning(
+                "Ignoring invalid retry_after value for %s: %r",
+                self.industry_slug,
+                value,
+            )
             return True
         return parsed <= self._now_dt()
 
@@ -194,7 +217,11 @@ class MatrixTaskScheduler:
         if self.device_daily_limit <= 0:
             return False
         today = self._today()
-        state = db.query(ConsumerState).filter(ConsumerState.consumer_id == device_id).first()
+        state = (
+            db.query(ConsumerState)
+            .filter(ConsumerState.consumer_id == device_id)
+            .first()
+        )
         if state is None:
             return False
         if state.last_sent_date != today:
@@ -204,7 +231,11 @@ class MatrixTaskScheduler:
     def _device_hourly_limit_reached(self, db, device_id: str) -> bool:
         if self.hourly_send_limit <= 0:
             return False
-        state = db.query(ConsumerState).filter(ConsumerState.consumer_id == device_id).first()
+        state = (
+            db.query(ConsumerState)
+            .filter(ConsumerState.consumer_id == device_id)
+            .first()
+        )
         if state is None:
             return False
         started_at = self._parse_dt(state.rate_limited_at or "")
@@ -222,7 +253,11 @@ class MatrixTaskScheduler:
     def _record_device_send_success(self, db, device_id: str) -> None:
         today = self._today()
         now = self._now_dt()
-        state = db.query(ConsumerState).filter(ConsumerState.consumer_id == device_id).first()
+        state = (
+            db.query(ConsumerState)
+            .filter(ConsumerState.consumer_id == device_id)
+            .first()
+        )
         if state is None:
             state = ConsumerState(
                 consumer_id=device_id,
@@ -252,6 +287,7 @@ class MatrixTaskScheduler:
     def _ensure_quota_row(self, db, day: str) -> None:
         values = {
             "industry_slug": self.industry_slug,
+            "owner_user_id": self.owner_user_id,
             "day": day,
             "sent": 0,
             "reserved": 0,
@@ -260,33 +296,51 @@ class MatrixTaskScheduler:
         if dialect == "sqlite":
             from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
-            sqlite_statement = sqlite_insert(IndustryDailyQuota).values(**values).on_conflict_do_nothing(
-                index_elements=["industry_slug", "day"]
+            sqlite_statement = (
+                sqlite_insert(IndustryDailyQuota)
+                .values(**values)
+                .on_conflict_do_nothing(
+                    index_elements=["owner_user_id", "industry_slug", "day"]
+                )
             )
             db.execute(sqlite_statement)
             return
         if dialect == "postgresql":
             from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 
-            postgresql_statement = postgresql_insert(IndustryDailyQuota).values(**values).on_conflict_do_nothing(
-                index_elements=["industry_slug", "day"]
+            postgresql_statement = (
+                postgresql_insert(IndustryDailyQuota)
+                .values(**values)
+                .on_conflict_do_nothing(
+                    index_elements=["owner_user_id", "industry_slug", "day"]
+                )
             )
             db.execute(postgresql_statement)
             return
-        quota = db.query(IndustryDailyQuota).filter(
-            IndustryDailyQuota.industry_slug == self.industry_slug,
-            IndustryDailyQuota.day == day,
-        ).first()
+        quota = (
+            db.query(IndustryDailyQuota)
+            .filter(
+                IndustryDailyQuota.industry_slug == self.industry_slug,
+                IndustryDailyQuota.owner_user_id == self.owner_user_id,
+                IndustryDailyQuota.day == day,
+            )
+            .first()
+        )
         if quota is None:
             try:
                 db.add(IndustryDailyQuota(**values))
                 db.flush()
             except IntegrityError:
                 db.rollback()
-                existing = db.query(IndustryDailyQuota).filter(
-                    IndustryDailyQuota.industry_slug == self.industry_slug,
-                    IndustryDailyQuota.day == day,
-                ).first()
+                existing = (
+                    db.query(IndustryDailyQuota)
+                    .filter(
+                        IndustryDailyQuota.industry_slug == self.industry_slug,
+                        IndustryDailyQuota.owner_user_id == self.owner_user_id,
+                        IndustryDailyQuota.day == day,
+                    )
+                    .first()
+                )
                 if existing is None:
                     raise
 
@@ -300,6 +354,7 @@ class MatrixTaskScheduler:
                 update(IndustryDailyQuota)
                 .where(
                     IndustryDailyQuota.industry_slug == self.industry_slug,
+                    IndustryDailyQuota.owner_user_id == self.owner_user_id,
                     IndustryDailyQuota.day == day,
                     IndustryDailyQuota.reserved > 0,
                 )
@@ -323,6 +378,7 @@ class MatrixTaskScheduler:
                 update(IndustryDailyQuota)
                 .where(
                     IndustryDailyQuota.industry_slug == self.industry_slug,
+                    IndustryDailyQuota.owner_user_id == self.owner_user_id,
                     IndustryDailyQuota.day == day,
                     IndustryDailyQuota.reserved > 0,
                 )
@@ -333,15 +389,26 @@ class MatrixTaskScheduler:
         except Exception:
             db.rollback()
 
-    def mark_task_done(self, task_id: int, consumer_id: str, ai_reply: str = "", claim_token: str = "", reply_variant_id: str = ""):
+    def mark_task_done(
+        self,
+        task_id: int,
+        consumer_id: str,
+        ai_reply: str = "",
+        claim_token: str = "",
+        reply_variant_id: str = "",
+    ):
         db = self._get_db()
         try:
-            task = db.query(TaskQueue).filter(
-                TaskQueue.id == task_id,
-                TaskQueue.status == "claimed",
-                TaskQueue.consumer_id == consumer_id,
-                TaskQueue.claim_token == claim_token
-            ).first()
+            task = (
+                db.query(TaskQueue)
+                .filter(
+                    TaskQueue.id == task_id,
+                    TaskQueue.status == "claimed",
+                    TaskQueue.consumer_id == consumer_id,
+                    TaskQueue.claim_token == claim_token,
+                )
+                .first()
+            )
             if task:
                 task.status = "done"
                 task.processed_at = _now()
@@ -357,24 +424,44 @@ class MatrixTaskScheduler:
             db.rollback()
             return False
 
-    def commit_task(self, task_id: int, consumer_id: str, status: str, message: str = "", claim_token: str = "", reply_variant_id: str = ""):
+    def commit_task(
+        self,
+        task_id: int,
+        consumer_id: str,
+        status: str,
+        message: str = "",
+        claim_token: str = "",
+        reply_variant_id: str = "",
+    ):
         if status == "done":
             return self.mark_task_done(
-                task_id, consumer_id, ai_reply=message, claim_token=claim_token, reply_variant_id=reply_variant_id
+                task_id,
+                consumer_id,
+                ai_reply=message,
+                claim_token=claim_token,
+                reply_variant_id=reply_variant_id,
             )
         if status == "fail":
-            return self.mark_task_failed(task_id, consumer_id, error=message, claim_token=claim_token)
+            return self.mark_task_failed(
+                task_id, consumer_id, error=message, claim_token=claim_token
+            )
         return False
 
-    def mark_task_failed(self, task_id: int, consumer_id: str, error: str = "", claim_token: str = ""):
+    def mark_task_failed(
+        self, task_id: int, consumer_id: str, error: str = "", claim_token: str = ""
+    ):
         db = self._get_db()
         try:
-            task = db.query(TaskQueue).filter(
-                TaskQueue.id == task_id,
-                TaskQueue.status == "claimed",
-                TaskQueue.consumer_id == consumer_id,
-                TaskQueue.claim_token == claim_token
-            ).first()
+            task = (
+                db.query(TaskQueue)
+                .filter(
+                    TaskQueue.id == task_id,
+                    TaskQueue.status == "claimed",
+                    TaskQueue.consumer_id == consumer_id,
+                    TaskQueue.claim_token == claim_token,
+                )
+                .first()
+            )
             if task:
                 task.status = "failed"
                 task.processed_at = _now()
@@ -387,20 +474,28 @@ class MatrixTaskScheduler:
             db.rollback()
             return False
 
-    def mark_task_retry(self, task_id: int, consumer_id: str, error: str = "", claim_token: str = ""):
+    def mark_task_retry(
+        self, task_id: int, consumer_id: str, error: str = "", claim_token: str = ""
+    ):
         db = self._get_db()
         try:
-            task = db.query(TaskQueue).filter(
-                TaskQueue.id == task_id,
-                TaskQueue.status == "claimed",
-                TaskQueue.consumer_id == consumer_id,
-                TaskQueue.claim_token == claim_token
-            ).first()
+            task = (
+                db.query(TaskQueue)
+                .filter(
+                    TaskQueue.id == task_id,
+                    TaskQueue.status == "claimed",
+                    TaskQueue.consumer_id == consumer_id,
+                    TaskQueue.claim_token == claim_token,
+                )
+                .first()
+            )
             if task:
                 current_retries = task.retry_count or 0
-                cooldown_minutes = 5 * (3 ** current_retries)
-                retry_after = (datetime.now(timezone.utc) + timedelta(minutes=cooldown_minutes)).isoformat()
-                
+                cooldown_minutes = 5 * (3**current_retries)
+                retry_after = (
+                    datetime.now(timezone.utc) + timedelta(minutes=cooldown_minutes)
+                ).isoformat()
+
                 task.status = "pending"
                 task.consumer_id = None
                 task.claim_token = None
@@ -417,15 +512,21 @@ class MatrixTaskScheduler:
             db.rollback()
             return False
 
-    def release_task_claim(self, task_id: int, consumer_id: str, error: str = "", claim_token: str = ""):
+    def release_task_claim(
+        self, task_id: int, consumer_id: str, error: str = "", claim_token: str = ""
+    ):
         db = self._get_db()
         try:
-            task = db.query(TaskQueue).filter(
-                TaskQueue.id == task_id,
-                TaskQueue.status == "claimed",
-                TaskQueue.consumer_id == consumer_id,
-                TaskQueue.claim_token == claim_token
-            ).first()
+            task = (
+                db.query(TaskQueue)
+                .filter(
+                    TaskQueue.id == task_id,
+                    TaskQueue.status == "claimed",
+                    TaskQueue.consumer_id == consumer_id,
+                    TaskQueue.claim_token == claim_token,
+                )
+                .first()
+            )
             if task:
                 task.status = "pending"
                 task.consumer_id = None
@@ -441,15 +542,21 @@ class MatrixTaskScheduler:
             db.rollback()
             return False
 
-    def mark_reply_variant(self, task_id: int, variant_id: str, consumer_id: str, claim_token: str):
+    def mark_reply_variant(
+        self, task_id: int, variant_id: str, consumer_id: str, claim_token: str
+    ):
         db = self._get_db()
         try:
-            task = db.query(TaskQueue).filter(
-                TaskQueue.id == task_id,
-                TaskQueue.status == "claimed",
-                TaskQueue.consumer_id == consumer_id,
-                TaskQueue.claim_token == claim_token,
-            ).first()
+            task = (
+                db.query(TaskQueue)
+                .filter(
+                    TaskQueue.id == task_id,
+                    TaskQueue.status == "claimed",
+                    TaskQueue.consumer_id == consumer_id,
+                    TaskQueue.claim_token == claim_token,
+                )
+                .first()
+            )
             if task:
                 task.reply_variant_id = variant_id
                 db.commit()

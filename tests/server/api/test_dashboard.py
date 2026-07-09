@@ -154,7 +154,9 @@ def test_dashboard_state_reports_structured_has_llm(db_session, monkeypatch):
 
 
 def test_dashboard_state_includes_device_capacity_and_cooldown(db_session):
-    cooldown_until = (datetime.now(timezone.utc) + timedelta(minutes=30)).replace(microsecond=0)
+    cooldown_until = (datetime.now(timezone.utc) + timedelta(minutes=30)).replace(
+        microsecond=0
+    )
     device = Device(
         id="dev-1",
         user_id=FakeUser.id,

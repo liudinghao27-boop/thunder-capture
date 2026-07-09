@@ -1,0 +1,46 @@
+{
+  "providers": [
+    {
+      "name": "brightdata",
+      "enabled": false,
+      "type": "brightdata",
+      "customer_id": "YOUR_CUSTOMER_ID",
+      "zone": "residential",
+      "zone_password": "YOUR_ZONE_PASSWORD",
+      "country": "cn",
+      "session_id": "thunder_session_1",
+      "rotation_seconds": 300
+    },
+    {
+      "name": "oxylabs",
+      "enabled": false,
+      "type": "oxylabs",
+      "username": "YOUR_OXYLABS_USERNAME",
+      "password": "YOUR_OXYLABS_PASSWORD",
+      "country": "cn",
+      "session_id": "thunder_session_1",
+      "rotation_seconds": 300
+    },
+    {
+      "name": "local_static",
+      "enabled": false,
+      "type": "static",
+      "proxy_url": "http://127.0.0.1:7890",
+      "rotation_seconds": 0
+    }
+  ],
+  "health_check": {
+    "target_url": "https://www.douyin.com/passport/web/login",
+    "timeout_seconds": 10,
+    "interval_seconds": 60,
+    "max_failures_before_remove": 3
+  },
+  "local_pool_server": {
+    "host": "127.0.0.1",
+    "port": 3128
+  },
+  "request_interval": {
+    "min_seconds": 3,
+    "max_seconds": 8
+  }
+}

@@ -7,7 +7,6 @@ Usage:
 from __future__ import annotations
 
 from celery import Celery
-from celery.schedules import crontab
 
 from core.redis import get_redis_url
 
@@ -53,10 +52,6 @@ app.conf.update(
 )
 
 # ── Periodic tasks ──
-app.conf.beat_schedule = {
-    "thunder-send-every-15min": {
-        "task": "adapters.celery.send.run_send_batch",
-        "schedule": crontab(minute="*/15"),
-        "args": ("__all_active__", ""),
-    },
-}
+# NOTE: Cross-tenant beat schedules have been removed. Per-user schedules must
+# be registered dynamically once a tenant-aware beat store is in place.
+app.conf.beat_schedule = {}

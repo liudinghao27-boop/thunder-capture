@@ -23,7 +23,8 @@ log = logging.getLogger("thunder.agent.direct_glm")
 @dataclass
 class GLMAction:
     """Structured action returned by GLM Vision for one step."""
-    action: str = ""       # "tap" | "swipe" | "type" | "key" | "wait" | "done" | "failed"
+
+    action: str = ""  # "tap" | "swipe" | "type" | "key" | "wait" | "done" | "failed"
     x: int = 0
     y: int = 0
     x2: int = 0
@@ -67,6 +68,7 @@ class GLMAction:
 @dataclass
 class StepResult:
     """Result of executing one plan step."""
+
     ok: bool
     step_index: int = 0
     step_name: str = ""
@@ -126,7 +128,7 @@ Rules:
 - Only output the JSON, no other text."""
 
     MAX_STEPS_PER_PLAN_STEP = 5  # max retries per plan step
-    MAX_TOTAL_ACTIONS = 30       # safety limit
+    MAX_TOTAL_ACTIONS = 30  # safety limit
 
     def __init__(
         self,
@@ -136,8 +138,8 @@ Rules:
         api_key: str,
         model: str = "autoglm-phone",
         should_stop: Callable[[], bool] | None = None,
-        perception=None,         # PerceptionService
-        executor=None,           # AgentExecutor
+        perception=None,  # PerceptionService
+        executor=None,  # AgentExecutor
     ):
         self.adb_serial = adb_serial
         self.api_base = api_base.rstrip("/")
@@ -156,13 +158,18 @@ Rules:
 
         body = {
             "model": self.model,
-            "messages": [{
-                "role": "user",
-                "content": [
-                    {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{img_b64}"}},
-                    {"type": "text", "text": prompt},
-                ],
-            }],
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/png;base64,{img_b64}"},
+                        },
+                        {"type": "text", "text": prompt},
+                    ],
+                }
+            ],
             "max_tokens": 300,
             "temperature": 0.1,
         }
@@ -183,7 +190,9 @@ Rules:
             if action.action == "tap":
                 self._client.tap(action.x, action.y)
             elif action.action == "swipe":
-                self._client.swipe(action.x, action.y, action.x2, action.y2, action.duration_ms)
+                self._client.swipe(
+                    action.x, action.y, action.x2, action.y2, action.duration_ms
+                )
             elif action.action == "type":
                 self._client.input_text(action.text)
             elif action.action == "key":
@@ -227,7 +236,8 @@ Rules:
         for i, step in enumerate(plan_steps):
             if self.should_stop():
                 return ExecutionResult(
-                    False, "cancelled",
+                    False,
+                    "cancelled",
                     message="Cancelled during plan execution",
                     action="direct_glm",
                     latency_ms=int((time.perf_counter() - started) * 1000),
@@ -247,7 +257,8 @@ Rules:
                 # 1. Observe
                 try:
                     obs = perception.observe(
-                        device_id="", adb_serial=self.adb_serial,
+                        device_id="",
+                        adb_serial=self.adb_serial,
                     )
                 except Exception:
                     obs = None
@@ -274,7 +285,9 @@ Rules:
                 )
                 if not png:
                     step_result = StepResult(
-                        False, i, step_name,
+                        False,
+                        i,
+                        step_name,
                         error="Screenshot failed",
                         before_screen=obs.screen if obs else "",
                         latency_ms=int((time.perf_counter() - step_started) * 1000),
@@ -288,7 +301,9 @@ Rules:
                     action = GLMAction.from_json(raw)
                 except Exception as e:
                     step_result = StepResult(
-                        False, i, step_name,
+                        False,
+                        i,
+                        step_name,
                         error=f"GLM call failed: {e}",
                         before_screen=obs.screen if obs else "",
                         latency_ms=int((time.perf_counter() - step_started) * 1000),
@@ -299,7 +314,10 @@ Rules:
 
                 if action.action == "done":
                     step_result = StepResult(
-                        True, i, step_name, action=action,
+                        True,
+                        i,
+                        step_name,
+                        action=action,
                         before_screen=obs.screen if obs else "",
                         latency_ms=int((time.perf_counter() - step_started) * 1000),
                     )
@@ -309,7 +327,10 @@ Rules:
 
                 if action.action == "failed":
                     step_result = StepResult(
-                        False, i, step_name, action=action,
+                        False,
+                        i,
+                        step_name,
+                        action=action,
                         error=action.reason,
                         before_screen=obs.screen if obs else "",
                         latency_ms=int((time.perf_counter() - step_started) * 1000),
@@ -326,12 +347,16 @@ Rules:
                 after_screen = ""
                 try:
                     post_obs = perception.observe(
-                        device_id="", adb_serial=self.adb_serial,
+                        device_id="",
+                        adb_serial=self.adb_serial,
                     )
                     after_screen = post_obs.screen if post_obs else ""
                     if post_obs and post_obs.blocker:
                         step_result = StepResult(
-                            False, i, step_name, action=action,
+                            False,
+                            i,
+                            step_name,
+                            action=action,
                             error=f"Blocker: {post_obs.blocker}",
                             before_screen=obs.screen if obs else "",
                             after_screen=after_screen,
@@ -345,7 +370,10 @@ Rules:
 
                 if err:
                     step_result = StepResult(
-                        False, i, step_name, action=action,
+                        False,
+                        i,
+                        step_name,
+                        action=action,
                         error=err,
                         before_screen=obs.screen if obs else "",
                         after_screen=after_screen,
@@ -358,7 +386,9 @@ Rules:
                 # Success for this sub-action, continue trying this step
                 if total_actions >= self.MAX_TOTAL_ACTIONS:
                     step_result = StepResult(
-                        False, i, step_name,
+                        False,
+                        i,
+                        step_name,
                         error="Max total actions reached",
                         latency_ms=int((time.perf_counter() - step_started) * 1000),
                     )
@@ -371,13 +401,17 @@ Rules:
                 # Exhausted retries
                 if last_error:
                     step_result = StepResult(
-                        False, i, step_name,
+                        False,
+                        i,
+                        step_name,
                         error=f"Max retries: {last_error}",
                         latency_ms=0,
                     )
                     step_results.append(step_result)
 
-        all_ok = all(r.ok or r.action and r.action.action == "done" for r in step_results)
+        all_ok = all(
+            r.ok or r.action and r.action.action == "done" for r in step_results
+        )
         return ExecutionResult(
             ok=all_ok,
             status="done" if all_ok else "failed",

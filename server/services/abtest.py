@@ -80,7 +80,9 @@ def select_reply_variant(
 
 def build_variant_result(variant_id: str, rows: list[dict[str, Any]]) -> dict[str, Any]:
     """Aggregate sent/replied/converted for a variant from TaskQueue-like rows."""
-    sent = sum(1 for r in rows if r.get("status") in ("sent", "replied", "converted", "done"))
+    sent = sum(
+        1 for r in rows if r.get("status") in ("sent", "replied", "converted", "done")
+    )
     replied = sum(1 for r in rows if r.get("status") in ("replied", "converted"))
     converted = sum(1 for r in rows if r.get("status") == "converted")
     reply_rate = round(replied / sent, 4) if sent else 0.0
@@ -95,7 +97,9 @@ def build_variant_result(variant_id: str, rows: list[dict[str, Any]]) -> dict[st
     }
 
 
-def pick_winner(results: list[dict[str, Any]], metric: str = "reply_rate") -> str | None:
+def pick_winner(
+    results: list[dict[str, Any]], metric: str = "reply_rate"
+) -> str | None:
     """Return the variant id with the highest metric, or None if empty.
 
     On ties, ``max`` returns the first item with the highest value.

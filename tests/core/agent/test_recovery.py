@@ -31,7 +31,10 @@ def test_recovery_policy_reobserves_unknown_until_retry_limit():
 def test_recovery_policy_stops_on_blocker_or_stop_action():
     policy = RecoveryPolicy(max_observe_retries=2)
 
-    result = policy.evaluate(_decision("stop", page_state="blocked", blocker="risk_control"), observe_attempt=0)
+    result = policy.evaluate(
+        _decision("stop", page_state="blocked", blocker="risk_control"),
+        observe_attempt=0,
+    )
 
     assert result.action == "stop"
     assert result.terminal is True
@@ -42,7 +45,13 @@ def test_recovery_policy_stops_on_blocker_or_stop_action():
 def test_recovery_policy_allows_recoverable_navigation_actions_to_execute_goal():
     policy = RecoveryPolicy(max_observe_retries=2)
 
-    for action in ("open_app", "search_target", "open_target_profile", "open_chat", "input_message"):
+    for action in (
+        "open_app",
+        "search_target",
+        "open_target_profile",
+        "open_chat",
+        "input_message",
+    ):
         result = policy.evaluate(_decision(action), observe_attempt=0)
         assert result.action == action
         assert result.terminal is False

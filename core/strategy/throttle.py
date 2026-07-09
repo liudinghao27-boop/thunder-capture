@@ -70,6 +70,7 @@ class ThrottleManager:
 
     def send_interval(self, *, total_sent: int, base_sec: int = 120) -> int:
         import random
+
         if total_sent <= 3:
             return base_sec + random.randint(30, 90)
         return base_sec + random.randint(0, 30)

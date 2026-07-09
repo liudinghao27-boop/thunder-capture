@@ -46,7 +46,9 @@ def run_mediacrawler(self, platform: str, keywords: list[str], industry_slug: st
 
 
 @app.task(bind=True, max_retries=2)
-def run_full_collection(self, industry_slug: str, keywords: list[str], platforms: list[str] | None = None):
+def run_full_collection(
+    self, industry_slug: str, keywords: list[str], platforms: list[str] | None = None
+):
     """Orchestrate full collection pipeline: discover → classify → enqueue.
 
     Chains: MediaCrawler per platform → batch classify → enqueue tasks
@@ -56,8 +58,7 @@ def run_full_collection(self, industry_slug: str, keywords: list[str], platforms
 
     # Fan-out: collect all platforms in parallel
     jobs = group(
-        run_mediacrawler.s(platform, keywords, industry_slug)
-        for platform in platforms
+        run_mediacrawler.s(platform, keywords, industry_slug) for platform in platforms
     )
 
     # Chain: collect all → classify batch → enqueue

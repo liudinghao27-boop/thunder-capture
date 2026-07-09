@@ -24,7 +24,9 @@ def test_run_mediacrawler_calls_runner_and_returns_count():
 
 def test_run_mediacrawler_returns_zero_on_empty_result():
     """When runner returns no comments, count should be 0."""
-    with patch("adapters.mediacrawler.runner.run_platform", return_value=[]) as mock_run:
+    with patch(
+        "adapters.mediacrawler.runner.run_platform", return_value=[]
+    ) as mock_run:
         result = run_mediacrawler.run("douyin", ["none"], "recruitment")
 
     mock_run.assert_called_once_with("douyin", ["none"])

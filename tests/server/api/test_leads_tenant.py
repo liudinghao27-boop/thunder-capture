@@ -91,17 +91,6 @@ def db_session():
             fetched_at=now,
             owner_user_id=OtherFakeUser.id,
         ),
-        # Owner-agnostic row (empty owner)
-        TaskQueue(
-            industry_slug="test-ind",
-            platform="douyin",
-            video_id="v4",
-            comment_id="c4",
-            text="public row",
-            status="done",
-            fetched_at=now,
-            owner_user_id="",
-        ),
     ]
     for row in rows:
         db.add(row)
@@ -149,9 +138,8 @@ def test_list_leads_filters_by_owner(db_session):
     texts = {lead["text"] for lead in data["leads"]}
     assert "owner row" in texts
     assert "owner failed row" in texts
-    assert "public row" in texts
     assert "other row" not in texts
-    assert data["total"] == 3
+    assert data["total"] == 2
 
 
 def test_lead_stats_filters_by_owner(db_session):
@@ -159,10 +147,9 @@ def test_lead_stats_filters_by_owner(db_session):
         resp = client.get("/api/leads/stats?industry_slug=test-ind")
     assert resp.status_code == 200
     data = resp.json()
-    # done includes the owned done row and the unowned (public) done row
-    assert data["done"] == 2
+    assert data["done"] == 1
     assert data["failed"] == 1
-    assert data["total"] == 3
+    assert data["total"] == 2
 
 
 def test_retry_failed_leads_filters_by_owner(db_session):
@@ -179,7 +166,9 @@ def test_retry_failed_leads_filters_by_owner(db_session):
     db_session.expire_all()
     statuses = {
         row.status
-        for row in db_session.query(TaskQueue).filter(TaskQueue.owner_user_id == FakeUser.id).all()
+        for row in db_session.query(TaskQueue)
+        .filter(TaskQueue.owner_user_id == FakeUser.id)
+        .all()
     }
     assert "failed" not in statuses
 
@@ -189,16 +178,20 @@ def test_retry_failed_leads_does_not_touch_other_owner(db_session):
         resp = client.post("/api/leads/retry-failed?industry_slug=test-ind")
     assert resp.status_code == 200
     db_session.expire_all()
-    other = db_session.query(TaskQueue).filter(
-        TaskQueue.owner_user_id == OtherFakeUser.id
-    ).first()
+    other = (
+        db_session.query(TaskQueue)
+        .filter(TaskQueue.owner_user_id == OtherFakeUser.id)
+        .first()
+    )
     assert other.status == "failed"
 
 
 def test_mark_replied_accepts_done_status(db_session):
     lead = db_session.query(TaskQueue).filter(TaskQueue.comment_id == "c1").first()
     with _client(db_session, FakeUser) as client:
-        resp = client.post(f"/api/leads/{lead.id}/mark-replied", json={"reply_text": "hi"})
+        resp = client.post(
+            f"/api/leads/{lead.id}/mark-replied", json={"reply_text": "hi"}
+        )
     assert resp.status_code == 200
 
 
@@ -217,7 +210,9 @@ def test_mark_replied_rejects_pending_status(db_session):
     db_session.add(lead)
     db_session.commit()
     with _client(db_session, FakeUser) as client:
-        resp = client.post(f"/api/leads/{lead.id}/mark-replied", json={"reply_text": "hi"})
+        resp = client.post(
+            f"/api/leads/{lead.id}/mark-replied", json={"reply_text": "hi"}
+        )
     assert resp.status_code == 400
 
 

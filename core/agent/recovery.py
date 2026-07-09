@@ -29,7 +29,9 @@ class RecoveryDecision:
 class RecoveryPolicy:
     max_observe_retries: int = 2
 
-    def evaluate(self, decision: AgentDecision, *, observe_attempt: int = 0) -> RecoveryDecision:
+    def evaluate(
+        self, decision: AgentDecision, *, observe_attempt: int = 0
+    ) -> RecoveryDecision:
         if decision.next_action == "observe":
             if observe_attempt < self.max_observe_retries:
                 return RecoveryDecision(
@@ -48,10 +50,16 @@ class RecoveryPolicy:
             )
 
         if decision.next_action == "stop":
-            reason = f"Blocked by {decision.blocker}." if decision.blocker else decision.reason
+            reason = (
+                f"Blocked by {decision.blocker}."
+                if decision.blocker
+                else decision.reason
+            )
             return RecoveryDecision(
                 action="stop",
-                status="blocked" if decision.blocker else decision.page_state or "stopped",
+                status="blocked"
+                if decision.blocker
+                else decision.page_state or "stopped",
                 terminal=True,
                 execute_goal=False,
                 reason=reason,

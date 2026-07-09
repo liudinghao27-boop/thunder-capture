@@ -23,7 +23,9 @@ class _FakeQuery:
         self._db.query_count += 1
         if self._db.query_count == 1:
             return None
-        return IndustryDailyQuota(industry_slug="ind", day="2026-07-03")
+        return IndustryDailyQuota(
+            industry_slug="ind", owner_user_id="u1", day="2026-07-03"
+        )
 
 
 class _FakeSession:

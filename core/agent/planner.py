@@ -10,7 +10,9 @@ def build_douyin_dm_plan(search_target: str, user_name: str, message: str) -> Pl
     goal = f"Send one Douyin direct message to {target}"
     steps = [
         ActionStep("open_app", "douyin", confirm="home feed is visible"),
-        ActionStep("search_user", target, {"query": target}, "user search results are visible"),
+        ActionStep(
+            "search_user", target, {"query": target}, "user search results are visible"
+        ),
         ActionStep(
             "select_exact_user",
             target,
@@ -18,8 +20,15 @@ def build_douyin_dm_plan(search_target: str, user_name: str, message: str) -> Pl
             "profile identity matches target",
         ),
         ActionStep("open_dm", target, confirm="chat input is visible"),
-        ActionStep("send_message", target, {"message": message}, "sent message bubble is visible"),
-        ActionStep("verify_sent", target, {"message": message}, "message sent exactly once"),
+        ActionStep(
+            "send_message",
+            target,
+            {"message": message},
+            "sent message bubble is visible",
+        ),
+        ActionStep(
+            "verify_sent", target, {"message": message}, "message sent exactly once"
+        ),
     ]
     return Plan(goal=goal, steps=steps, platform="douyin")
 
@@ -52,7 +61,9 @@ def build_douyin_dm_goal(search_target: str, user_name: str, message: str) -> st
 
 
 class Planner:
-    def plan_dm(self, platform: str, search_target: str, user_name: str, message: str) -> Plan:
+    def plan_dm(
+        self, platform: str, search_target: str, user_name: str, message: str
+    ) -> Plan:
         if platform != "douyin":
             return Plan(
                 goal=f"Send one {platform} direct message",
@@ -60,7 +71,9 @@ class Planner:
                 steps=[
                     ActionStep("open_app", platform),
                     ActionStep("find_user", search_target or user_name),
-                    ActionStep("send_message", search_target or user_name, {"message": message}),
+                    ActionStep(
+                        "send_message", search_target or user_name, {"message": message}
+                    ),
                     ActionStep("verify_sent", search_target or user_name),
                 ],
             )

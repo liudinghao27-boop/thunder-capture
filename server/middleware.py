@@ -36,8 +36,7 @@ class InMemoryRateLimiter:
         if now - self._last_cleanup < 300:  # every 5 minutes
             return
         cutoff = now - self.window_seconds
-        expired = [k for k, v in self._buckets.items()
-                  if not v or v[-1] < cutoff]
+        expired = [k for k, v in self._buckets.items() if not v or v[-1] < cutoff]
         for k in expired:
             del self._buckets[k]
         # If still too many, clear everything
@@ -142,6 +141,7 @@ def _make_limiter(redis_client, max_requests: int, window_seconds: int):
 
 # ── FastAPI middleware ──────────────────────────────────
 
+
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """Per-IP rate limiting middleware.
 
@@ -210,6 +210,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
 
 # ── Security headers middleware ─────────────────────────
+
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     """Add basic security headers to all responses."""

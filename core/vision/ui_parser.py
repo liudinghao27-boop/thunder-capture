@@ -82,7 +82,9 @@ def _element_has(element: UIElement, *needles: str) -> bool:
 class UIParser:
     def dump_xml(self, serial: str) -> str:
         client = ADBClient(serial)
-        client.shell("uiautomator", "dump", "/sdcard/window_dump.xml", timeout=8, check=True)
+        client.shell(
+            "uiautomator", "dump", "/sdcard/window_dump.xml", timeout=8, check=True
+        )
         result = client.shell("cat", "/sdcard/window_dump.xml", timeout=8, check=True)
         return result.stdout
 
@@ -141,9 +143,14 @@ class UIParser:
         text = " ".join([labels, ocr_text or "", package_name or "", activity or ""])
         evidence: list[str] = []
 
-        home_packages = ("com.miui.home", "com.android.launcher", "com.google.android.apps.nexuslauncher")
+        home_packages = (
+            "com.miui.home",
+            "com.android.launcher",
+            "com.google.android.apps.nexuslauncher",
+        )
         if package_name in home_packages or (
-            "com.miui.home:id/" in text and not package_name.startswith("com.ss.android.ugc.aweme")
+            "com.miui.home:id/" in text
+            and not package_name.startswith("com.ss.android.ugc.aweme")
         ):
             return ScreenState(
                 "launcher",
@@ -155,7 +162,9 @@ class UIParser:
         if blocker:
             return ScreenState("blocked", 0.98, blocker=blocker, evidence=[blocker])
 
-        douyin_state = self._infer_douyin_state(elements, text=text, package_name=package_name, activity=activity)
+        douyin_state = self._infer_douyin_state(
+            elements, text=text, package_name=package_name, activity=activity
+        )
         if douyin_state:
             return douyin_state
 
@@ -167,7 +176,15 @@ class UIParser:
             ),
             (
                 "chat",
-                [r"私信", r"聊天", r"发送", r"输入消息", r"说点什么", r"EditText", r"message"],
+                [
+                    r"私信",
+                    r"聊天",
+                    r"发送",
+                    r"输入消息",
+                    r"说点什么",
+                    r"EditText",
+                    r"message",
+                ],
                 ["chat/input controls"],
             ),
             (
@@ -197,7 +214,13 @@ class UIParser:
             ),
             (
                 "dm_unavailable",
-                [r"对方设置了隐私", r"不能发私信", r"无法发送", r"消息发送失败", r"对方回复后才能发消息"],
+                [
+                    r"对方设置了隐私",
+                    r"不能发私信",
+                    r"无法发送",
+                    r"消息发送失败",
+                    r"对方回复后才能发消息",
+                ],
                 ["dm unavailable text"],
             ),
         ]
@@ -236,18 +259,29 @@ class UIParser:
             e
             for e in elements
             if _element_has(e, "message", "private_message", "dm")
-            and ("button" in e.class_name.casefold() or e.clickable or "btn" in e.resource_id.casefold())
+            and (
+                "button" in e.class_name.casefold()
+                or e.clickable
+                or "btn" in e.resource_id.casefold()
+            )
         ]
         editable_inputs = [
             e
             for e in elements
-            if "edittext" in e.class_name.casefold() or _element_has(e, "message_input", "input message")
+            if "edittext" in e.class_name.casefold()
+            or _element_has(e, "message_input", "input message")
         ]
         send_buttons = [e for e in elements if _element_has(e, "send", "send_button")]
-        message_bubbles = [e for e in elements if _element_has(e, "message_bubble", "chat_item") and (e.text or e.content_desc)]
+        message_bubbles = [
+            e
+            for e in elements
+            if _element_has(e, "message_bubble", "chat_item")
+            and (e.text or e.content_desc)
+        ]
 
         if ("chat" in app_text or ".im." in app_text) and (
-            any(not e.enabled for e in editable_inputs) or any(not e.enabled for e in send_buttons)
+            any(not e.enabled for e in editable_inputs)
+            or any(not e.enabled for e in send_buttons)
         ):
             return ScreenState(
                 "chat_input_disabled",
@@ -256,7 +290,9 @@ class UIParser:
                 evidence=["douyin chat input disabled"],
             )
 
-        if message_bubbles and _has(lowered, r"\bsent\b", r"message_status", r"delivered"):
+        if message_bubbles and _has(
+            lowered, r"\bsent\b", r"message_status", r"delivered"
+        ):
             return ScreenState(
                 "message_sent",
                 0.92,
@@ -274,7 +310,12 @@ class UIParser:
             )
 
         if "profile" in app_text and message_buttons:
-            if any(not e.enabled or not e.clickable or _element_has(e, "unavailable", "disabled", "privacy") for e in message_buttons):
+            if any(
+                not e.enabled
+                or not e.clickable
+                or _element_has(e, "unavailable", "disabled", "privacy")
+                for e in message_buttons
+            ):
                 return ScreenState(
                     "dm_unavailable",
                     0.93,
@@ -290,7 +331,13 @@ class UIParser:
         return None
 
     def _infer_blocker(self, text: str) -> str:
-        if _has(text, r"\blog\s*in\b", r"\blogin\b", r"\bsign\s*in\b", r"\bsession\s+(has\s+)?expired\b"):
+        if _has(
+            text,
+            r"\blog\s*in\b",
+            r"\blogin\b",
+            r"\bsign\s*in\b",
+            r"\bsession\s+(has\s+)?expired\b",
+        ):
             return "login_required"
         if _has(
             text,
@@ -301,11 +348,23 @@ class UIParser:
         ):
             return "risk_control"
         blockers = [
-            ("real_name_verification", [r"实名认证", r"身份认证", r"刷脸", r"人脸识别"]),
+            (
+                "real_name_verification",
+                [r"实名认证", r"身份认证", r"刷脸", r"人脸识别"],
+            ),
             ("captcha", [r"验证码", r"安全验证", r"拖动滑块", r"验证"]),
             ("login_required", [r"登录", r"注册", r"手机号登录", r"获取验证码"]),
             ("risk_control", [r"操作频繁", r"账号异常", r"风控", r"暂时无法", r"限制"]),
-            ("dm_unavailable", [r"对方回复后才能发消息", r"对方设置了隐私", r"不能发私信", r"无法发送", r"消息发送失败"]),
+            (
+                "dm_unavailable",
+                [
+                    r"对方回复后才能发消息",
+                    r"对方设置了隐私",
+                    r"不能发私信",
+                    r"无法发送",
+                    r"消息发送失败",
+                ],
+            ),
             ("permission_dialog", [r"允许", r"权限", r"始终允许", r"仅使用期间允许"]),
             ("teen_mode", [r"青少年模式"]),
         ]

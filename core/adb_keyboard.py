@@ -25,7 +25,9 @@ def _apk_path() -> Path:
     return Path(__file__).resolve().parent.parent / "data" / "ADBKeyboard.apk"
 
 
-def _run_adb(serial: str, args: list[str], timeout: float = 8.0) -> subprocess.CompletedProcess:
+def _run_adb(
+    serial: str, args: list[str], timeout: float = 8.0
+) -> subprocess.CompletedProcess:
     validate_adb_serial(serial)
     return subprocess.run(
         ["adb", "-s", serial, *args],
@@ -82,15 +84,23 @@ def install_adb_keyboard(serial: str) -> tuple[bool, str]:
         try:
             retry = _run_adb(serial, ["install", "-r", "-d", str(apk)], timeout=30)
         except subprocess.TimeoutExpired:
-            return False, "install downgrade retry timed out; check USB install permission on the phone"
+            return (
+                False,
+                "install downgrade retry timed out; check USB install permission on the phone",
+            )
         retry_output = (retry.stdout + retry.stderr).strip()
         if retry.returncode == 0 or "success" in retry_output.lower():
             return True, retry_output or "installed with downgrade flag"
-        return False, retry_output or f"adb install -d failed with code {retry.returncode}"
+        return (
+            False,
+            retry_output or f"adb install -d failed with code {retry.returncode}",
+        )
 
     if "INSTALL_FAILED_UPDATE_INCOMPATIBLE" in output:
         try:
-            uninstall = _run_adb(serial, ["uninstall", ADB_KEYBOARD_PACKAGE], timeout=20)
+            uninstall = _run_adb(
+                serial, ["uninstall", ADB_KEYBOARD_PACKAGE], timeout=20
+            )
             reinstall = _run_adb(serial, ["install", "-r", str(apk)], timeout=30)
         except subprocess.TimeoutExpired:
             return False, "install incompatible retry timed out"
@@ -98,9 +108,18 @@ def install_adb_keyboard(serial: str) -> tuple[bool, str]:
         reinstall_output = (reinstall.stdout + reinstall.stderr).strip()
         if reinstall.returncode == 0 or "success" in reinstall_output.lower():
             return True, "; ".join(
-                part for part in [uninstall_output or "uninstalled incompatible package", reinstall_output] if part
+                part
+                for part in [
+                    uninstall_output or "uninstalled incompatible package",
+                    reinstall_output,
+                ]
+                if part
             )
-        return False, reinstall_output or f"adb reinstall failed with code {reinstall.returncode}"
+        return (
+            False,
+            reinstall_output
+            or f"adb reinstall failed with code {reinstall.returncode}",
+        )
 
     return False, output or f"adb install failed with code {result.returncode}"
 
@@ -209,16 +228,24 @@ def adb_device_health(serial: str) -> dict[str, Any]:
             return health
 
         model = _run_adb(serial, ["shell", "getprop", "ro.product.model"], timeout=5)
-        version = _run_adb(serial, ["shell", "getprop", "ro.build.version.release"], timeout=5)
+        version = _run_adb(
+            serial, ["shell", "getprop", "ro.build.version.release"], timeout=5
+        )
         boot = _run_adb(serial, ["shell", "getprop", "sys.boot_completed"], timeout=5)
-        ime = _run_adb(serial, ["shell", "settings", "get", "secure", "default_input_method"], timeout=5)
+        ime = _run_adb(
+            serial,
+            ["shell", "settings", "get", "secure", "default_input_method"],
+            timeout=5,
+        )
         battery = _run_adb(serial, ["shell", "dumpsys", "battery"], timeout=8)
 
         health["model"] = model.stdout.strip()
         health["android_version"] = version.stdout.strip()
         health["boot_completed"] = boot.stdout.strip() == "1"
         health["default_ime"] = ime.stdout.strip()
-        health["adb_keyboard_active"] = ADB_KEYBOARD_PACKAGE.lower() in health["default_ime"].lower()
+        health["adb_keyboard_active"] = (
+            ADB_KEYBOARD_PACKAGE.lower() in health["default_ime"].lower()
+        )
 
         for line in battery.stdout.splitlines():
             if "level:" in line.lower():

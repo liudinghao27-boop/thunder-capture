@@ -81,8 +81,14 @@ def test_successful_action_without_ui_evidence_is_rejected():
     assert result.status == "unconfirmed_send"
     assert result.message == "unconfirmed_send"
     assert memory.plan_updates[-1][1] == "unconfirmed_send"
-    assert result.action_result.payload["agent_decisions"]["before"]["next_action"] == "open_chat"
-    assert result.action_result.payload["agent_decisions"]["after"]["next_action"] == "observe"
+    assert (
+        result.action_result.payload["agent_decisions"]["before"]["next_action"]
+        == "open_chat"
+    )
+    assert (
+        result.action_result.payload["agent_decisions"]["after"]["next_action"]
+        == "observe"
+    )
 
 
 def test_visible_message_keeps_successful_action_confirmed():
@@ -124,9 +130,11 @@ def test_blocked_before_execution_returns_agent_decision_and_skips_action():
     memory = MemoryStub()
     runner = TaskGraphRunner(
         memory=memory,
-        perception=PerceptionStub([
-            _observation("blocked", blocker="risk_control", confidence=0.98),
-        ]),
+        perception=PerceptionStub(
+            [
+                _observation("blocked", blocker="risk_control", confidence=0.98),
+            ]
+        ),
     )
     calls = []
 
@@ -136,7 +144,9 @@ def test_blocked_before_execution_returns_agent_decision_and_skips_action():
         search_target="target-1",
         user_name="test user",
         message="test message",
-        execute_goal=lambda goal: calls.append(goal) or ExecutionResult(ok=True, status="done"),
+        execute_goal=lambda goal: (
+            calls.append(goal) or ExecutionResult(ok=True, status="done")
+        ),
         job_id="job-1",
         task_id="task-1",
     )
@@ -148,7 +158,9 @@ def test_blocked_before_execution_returns_agent_decision_and_skips_action():
     assert decision["page_state"] == "blocked"
     assert decision["next_action"] == "stop"
     assert decision["reason"] == "Blocked by risk_control."
-    observe_logs = [entry for entry in memory.logs if entry[0].action == "observe_screen"]
+    observe_logs = [
+        entry for entry in memory.logs if entry[0].action == "observe_screen"
+    ]
     assert observe_logs[-1][0].payload["decision"]["next_action"] == "stop"
 
 
@@ -156,11 +168,15 @@ def test_unknown_preflight_reobserves_until_recoverable_before_executing():
     memory = MemoryStub()
     runner = TaskGraphRunner(
         memory=memory,
-        perception=PerceptionStub([
-            _observation("unknown", confidence=0.0),
-            _observation("profile_dm_ready", confidence=0.91),
-            _observation("chat", text="test message", elements=[{"text": "test message"}]),
-        ]),
+        perception=PerceptionStub(
+            [
+                _observation("unknown", confidence=0.0),
+                _observation("profile_dm_ready", confidence=0.91),
+                _observation(
+                    "chat", text="test message", elements=[{"text": "test message"}]
+                ),
+            ]
+        ),
     )
     calls = []
 
@@ -170,26 +186,37 @@ def test_unknown_preflight_reobserves_until_recoverable_before_executing():
         search_target="target-1",
         user_name="test user",
         message="test message",
-        execute_goal=lambda goal: calls.append(goal) or ExecutionResult(ok=True, status="done"),
+        execute_goal=lambda goal: (
+            calls.append(goal) or ExecutionResult(ok=True, status="done")
+        ),
         job_id="job-1",
         task_id="task-1",
     )
 
     assert result.ok is True
     assert len(calls) == 1
-    assert [obs.screen for obs in result.observations] == ["unknown", "profile_dm_ready", "chat"]
-    assert result.action_result.payload["agent_decisions"]["before"]["next_action"] == "open_chat"
+    assert [obs.screen for obs in result.observations] == [
+        "unknown",
+        "profile_dm_ready",
+        "chat",
+    ]
+    assert (
+        result.action_result.payload["agent_decisions"]["before"]["next_action"]
+        == "open_chat"
+    )
 
 
 def test_repeated_unknown_preflight_stops_as_ui_unknown_and_skips_execution():
     memory = MemoryStub()
     runner = TaskGraphRunner(
         memory=memory,
-        perception=PerceptionStub([
-            _observation("unknown", confidence=0.0),
-            _observation("unknown", confidence=0.0),
-            _observation("unknown", confidence=0.0),
-        ]),
+        perception=PerceptionStub(
+            [
+                _observation("unknown", confidence=0.0),
+                _observation("unknown", confidence=0.0),
+                _observation("unknown", confidence=0.0),
+            ]
+        ),
     )
     calls = []
 
@@ -199,7 +226,9 @@ def test_repeated_unknown_preflight_stops_as_ui_unknown_and_skips_execution():
         search_target="target-1",
         user_name="test user",
         message="test message",
-        execute_goal=lambda goal: calls.append(goal) or ExecutionResult(ok=True, status="done"),
+        execute_goal=lambda goal: (
+            calls.append(goal) or ExecutionResult(ok=True, status="done")
+        ),
         job_id="job-1",
         task_id="task-1",
     )
@@ -207,6 +236,10 @@ def test_repeated_unknown_preflight_stops_as_ui_unknown_and_skips_execution():
     assert result.ok is False
     assert result.status == "ui_unknown"
     assert calls == []
-    assert [obs.screen for obs in result.observations] == ["unknown", "unknown", "unknown"]
+    assert [obs.screen for obs in result.observations] == [
+        "unknown",
+        "unknown",
+        "unknown",
+    ]
     assert result.action_result.payload["recovery"]["status"] == "ui_unknown"
     assert result.action_result.payload["decision"]["next_action"] == "observe"

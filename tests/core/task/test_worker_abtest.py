@@ -6,8 +6,12 @@ from core.task.worker import DeviceWorker
 
 def _make_industry(**overrides):
     defaults = dict(
-        name="测试", slug="t", keywords=["a"], categories=["c"],
-        reply_tone="默认人设", reply_style="默认风格",
+        name="测试",
+        slug="t",
+        keywords=["a"],
+        categories=["c"],
+        reply_tone="默认人设",
+        reply_style="默认风格",
     )
     defaults.update(overrides)
     return IndustryConfig(**defaults)
@@ -22,9 +26,18 @@ def _mock_reply_client(content="已生成回复"):
 
 
 def test_worker_uses_selected_variant():
-    cfg = _make_industry(reply_variants=[
-        {"id": "v1", "name": "变体1", "reply_tone": "退伍老兵", "reply_style": "稳重", "weight": 1, "enabled": True},
-    ])
+    cfg = _make_industry(
+        reply_variants=[
+            {
+                "id": "v1",
+                "name": "变体1",
+                "reply_tone": "退伍老兵",
+                "reply_style": "稳重",
+                "weight": 1,
+                "enabled": True,
+            },
+        ]
+    )
     worker = DeviceWorker(device_id="d1", adb_serial="", industry=cfg)
 
     with patch("core.task.worker._get_reply_client", return_value=_mock_reply_client()):
@@ -35,9 +48,18 @@ def test_worker_uses_selected_variant():
 
 
 def test_worker_prompt_contains_variant_tone_and_style():
-    cfg = _make_industry(reply_variants=[
-        {"id": "v1", "name": "变体1", "reply_tone": "退伍老兵", "reply_style": "稳重", "weight": 1, "enabled": True},
-    ])
+    cfg = _make_industry(
+        reply_variants=[
+            {
+                "id": "v1",
+                "name": "变体1",
+                "reply_tone": "退伍老兵",
+                "reply_style": "稳重",
+                "weight": 1,
+                "enabled": True,
+            },
+        ]
+    )
     worker = DeviceWorker(device_id="d1", adb_serial="", industry=cfg)
 
     mock_client = _mock_reply_client()
@@ -65,9 +87,18 @@ def test_worker_uses_default_tone_when_no_variant():
 
 
 def test_worker_skips_disabled_variants():
-    cfg = _make_industry(reply_variants=[
-        {"id": "v1", "name": "变体1", "reply_tone": "退伍老兵", "reply_style": "稳重", "weight": 1, "enabled": False},
-    ])
+    cfg = _make_industry(
+        reply_variants=[
+            {
+                "id": "v1",
+                "name": "变体1",
+                "reply_tone": "退伍老兵",
+                "reply_style": "稳重",
+                "weight": 1,
+                "enabled": False,
+            },
+        ]
+    )
     worker = DeviceWorker(device_id="d1", adb_serial="", industry=cfg)
 
     mock_client = _mock_reply_client()
@@ -83,9 +114,18 @@ def test_worker_skips_disabled_variants():
 
 
 def test_variant_id_passed_to_scheduler_on_success():
-    cfg = _make_industry(reply_variants=[
-        {"id": "v1", "name": "变体1", "reply_tone": "退伍老兵", "reply_style": "稳重", "weight": 1, "enabled": True},
-    ])
+    cfg = _make_industry(
+        reply_variants=[
+            {
+                "id": "v1",
+                "name": "变体1",
+                "reply_tone": "退伍老兵",
+                "reply_style": "稳重",
+                "weight": 1,
+                "enabled": True,
+            },
+        ]
+    )
     worker = DeviceWorker(device_id="d1", adb_serial="", industry=cfg)
     worker._init_agent_safe = MagicMock(return_value=True)
 
@@ -104,11 +144,16 @@ def test_variant_id_passed_to_scheduler_on_success():
     worker._scheduler.commit_task = MagicMock(return_value=True)
     worker._scheduler.release = MagicMock()
 
-    with patch("core.task.worker._get_reply_client", return_value=_mock_reply_client()), \
-         patch("core.task.worker.DeviceSupervisor.preflight", return_value=MagicMock(ok=True)), \
-         patch("core.task.worker.DeviceSupervisor.mark_finished"), \
-         patch("core.task.runner.TaskGraphRunner") as mock_runner_class, \
-         patch("core.task.worker.time.sleep"):
+    with (
+        patch("core.task.worker._get_reply_client", return_value=_mock_reply_client()),
+        patch(
+            "core.task.worker.DeviceSupervisor.preflight",
+            return_value=MagicMock(ok=True),
+        ),
+        patch("core.task.worker.DeviceSupervisor.mark_finished"),
+        patch("core.task.runner.TaskGraphRunner") as mock_runner_class,
+        patch("core.task.worker.time.sleep"),
+    ):
         mock_runner = MagicMock()
         mock_runner.run_douyin_dm.return_value = MagicMock(ok=True, message="")
         mock_runner_class.return_value = mock_runner
@@ -117,8 +162,7 @@ def test_variant_id_passed_to_scheduler_on_success():
 
     assert summary["sent"] == 1
     worker._scheduler.commit_task.assert_called_with(
-        1, "d1", "done", "",
-        claim_token="token-1", reply_variant_id="v1"
+        1, "d1", "done", "", claim_token="token-1", reply_variant_id="v1"
     )
 
 
@@ -147,11 +191,16 @@ def test_worker_reads_short_id_from_multiple_keys():
     worker._scheduler.claim_for_device = MagicMock(side_effect=[claim, no_claim])
     worker._scheduler.commit_task = MagicMock(return_value=True)
 
-    with patch("core.task.worker._get_reply_client", return_value=_mock_reply_client()), \
-         patch("core.task.worker.DeviceSupervisor.preflight", return_value=MagicMock(ok=True)), \
-         patch("core.task.worker.DeviceSupervisor.mark_finished"), \
-         patch("core.task.runner.TaskGraphRunner") as mock_runner_class, \
-         patch("core.task.worker.time.sleep"):
+    with (
+        patch("core.task.worker._get_reply_client", return_value=_mock_reply_client()),
+        patch(
+            "core.task.worker.DeviceSupervisor.preflight",
+            return_value=MagicMock(ok=True),
+        ),
+        patch("core.task.worker.DeviceSupervisor.mark_finished"),
+        patch("core.task.runner.TaskGraphRunner") as mock_runner_class,
+        patch("core.task.worker.time.sleep"),
+    ):
         mock_runner = MagicMock()
         mock_runner.run_douyin_dm.side_effect = _capture_run_douyin_dm
         mock_runner_class.return_value = mock_runner
@@ -198,9 +247,13 @@ def test_worker_marks_keyboard_error_when_agent_init_fails():
     assert summary["status"] == "keyboard_error"
     assert summary["failed"] == 1
     worker._supervisor.mark_failure.assert_called_once()
-    assert worker._supervisor.mark_failure.call_args.kwargs["status"] == "keyboard_error"
+    assert (
+        worker._supervisor.mark_failure.call_args.kwargs["status"] == "keyboard_error"
+    )
     worker._supervisor.mark_finished.assert_called_once()
-    assert worker._supervisor.mark_finished.call_args.kwargs["status"] == "keyboard_error"
+    assert (
+        worker._supervisor.mark_finished.call_args.kwargs["status"] == "keyboard_error"
+    )
 
 
 def test_worker_isolates_device_on_risk_blocker_result():
@@ -226,9 +279,11 @@ def test_worker_isolates_device_on_risk_blocker_result():
     worker._supervisor.mark_failure = MagicMock()
     worker._supervisor.mark_finished = MagicMock()
 
-    with patch("core.agent.perception.PerceptionService", return_value=MagicMock()), \
-         patch("core.task.runner.TaskGraphRunner") as mock_runner_class, \
-         patch("core.task.worker.time.sleep"):
+    with (
+        patch("core.agent.perception.PerceptionService", return_value=MagicMock()),
+        patch("core.task.runner.TaskGraphRunner") as mock_runner_class,
+        patch("core.task.worker.time.sleep"),
+    ):
         mock_runner = MagicMock()
         mock_runner.run_douyin_dm.return_value = MagicMock(
             ok=False,

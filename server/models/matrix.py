@@ -23,7 +23,9 @@ class DeviceState(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey("sa_users.id"), nullable=False, index=True)
-    device_id = Column(String(36), ForeignKey("sa_devices.id"), nullable=False, index=True)
+    device_id = Column(
+        String(36), ForeignKey("sa_devices.id"), nullable=False, index=True
+    )
     job_id = Column(String(36), ForeignKey("sa_jobs.id"), nullable=True, index=True)
     status = Column(String(32), nullable=False, default="idle", index=True)
     current_app = Column(String(64), default="")
@@ -65,7 +67,9 @@ class AgentMemory(Base):
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey("sa_users.id"), nullable=False, index=True)
     industry_slug = Column(String(64), default="", index=True)
-    device_id = Column(String(36), ForeignKey("sa_devices.id"), nullable=True, index=True)
+    device_id = Column(
+        String(36), ForeignKey("sa_devices.id"), nullable=True, index=True
+    )
     subject_type = Column(String(64), default="", index=True)
     subject_id = Column(String(128), default="", index=True)
     memory_type = Column(String(32), nullable=False, default="observation", index=True)
@@ -83,7 +87,9 @@ class ScreenSnapshot(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey("sa_users.id"), nullable=False, index=True)
-    device_id = Column(String(36), ForeignKey("sa_devices.id"), nullable=False, index=True)
+    device_id = Column(
+        String(36), ForeignKey("sa_devices.id"), nullable=False, index=True
+    )
     job_id = Column(String(36), ForeignKey("sa_jobs.id"), nullable=True, index=True)
     task_id = Column(String(36), nullable=True, index=True)
     stage = Column(String(32), default="")
@@ -107,7 +113,9 @@ class ExecutionLog(Base):
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey("sa_users.id"), nullable=False, index=True)
     job_id = Column(String(36), ForeignKey("sa_jobs.id"), nullable=True, index=True)
-    device_id = Column(String(36), ForeignKey("sa_devices.id"), nullable=True, index=True)
+    device_id = Column(
+        String(36), ForeignKey("sa_devices.id"), nullable=True, index=True
+    )
     action = Column(String(64), nullable=False, default="", index=True)
     target = Column(String(128), default="")
     status = Column(String(32), nullable=False, default="started", index=True)

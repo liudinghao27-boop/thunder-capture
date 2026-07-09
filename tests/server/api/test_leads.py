@@ -117,9 +117,7 @@ def test_export_xlsx_returns_file(fake_session):
 
 
 def test_export_invalid_format_returns_400(fake_session):
-    req = LeadExportRequest.model_construct(
-        industry_slug="recruitment", format="pdf"
-    )
+    req = LeadExportRequest.model_construct(industry_slug="recruitment", format="pdf")
     with pytest.raises(HTTPException) as exc_info:
         export_leads(req, FakeUser())
     assert exc_info.value.status_code == 400
@@ -135,6 +133,7 @@ def test_export_invalid_industry_slug_rejected(fake_session):
 def test_export_quotes_filename(fake_session, monkeypatch):
     """Content-Disposition filename should be URL-quoted to avoid response splitting."""
     import urllib.parse
+
     captured = {}
 
     class FakeStreamingResponse:
@@ -158,6 +157,7 @@ def test_export_quotes_filename(fake_session, monkeypatch):
 
 def test_lead_export_request_validates_industry_slug():
     from pydantic import ValidationError
+
     with pytest.raises(ValidationError):
         LeadExportRequest(industry_slug="bad slug", format="csv")
     with pytest.raises(ValidationError):

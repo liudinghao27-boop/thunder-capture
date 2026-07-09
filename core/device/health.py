@@ -9,7 +9,9 @@ from core.device.adb_client import ADBClient, ADBError
 def is_adb_keyboard_ready(serial: str) -> bool:
     try:
         client = ADBClient(serial)
-        ime = client.shell("settings", "get", "secure", "default_input_method", timeout=5)
+        ime = client.shell(
+            "settings", "get", "secure", "default_input_method", timeout=5
+        )
         return ADB_KEYBOARD_PACKAGE.lower() in ime.text.lower()
     except ADBError:
         return False

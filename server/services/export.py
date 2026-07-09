@@ -77,13 +77,17 @@ def _write_csv_rows(rows: Iterable[dict], fields: list[str]) -> Iterable[str]:
         yield output.getvalue()
 
 
-def generate_csv(rows: Iterable[dict], fields: list[str] | None = None) -> Iterable[str]:
+def generate_csv(
+    rows: Iterable[dict], fields: list[str] | None = None
+) -> Iterable[str]:
     """Yield CSV lines as strings (StreamingResponse compatible)."""
     fields = fields or DEFAULT_EXPORT_FIELDS
     return _write_csv_rows(rows, fields)
 
 
-def generate_xlsx(rows: Iterable[dict], fields: list[str] | None = None) -> Iterable[bytes]:
+def generate_xlsx(
+    rows: Iterable[dict], fields: list[str] | None = None
+) -> Iterable[bytes]:
     """Yield an XLSX workbook as byte chunks.
 
     Uses an openpyxl write-only workbook and a temporary file so that the whole

@@ -209,27 +209,34 @@ def test_run_collect_job_persists_queue_funnel_summary(db_session):
         target_users=["target-a"],
         user_id="u1",
     )
-    comments = [{
-        "industry_slug": "test-ind",
-        "text": "想咨询报名流程",
-        "source_sec_uid": "sec-a",
-        "source_short_id": "comment-1",
-        "source_video_id": "video-1",
-    }]
+    comments = [
+        {
+            "industry_slug": "test-ind",
+            "text": "想咨询报名流程",
+            "source_sec_uid": "sec-a",
+            "source_short_id": "comment-1",
+            "source_video_id": "video-1",
+        }
+    ]
 
     async def fake_run_discovery(*args, **kwargs):
         return comments
 
-    with patch("server.workers.run_discovery", fake_run_discovery), \
-         patch("server.workers.classify_batch", return_value=comments), \
-         patch("server.workers.enqueue_classified_result", return_value={
-             "received": 1,
-             "valid": 1,
-             "inserted": 0,
-             "duplicates": 1,
-             "invalid": 0,
-         }), \
-         patch("server.workers.get_llm_client", return_value=object()):
+    with (
+        patch("server.workers.run_discovery", fake_run_discovery),
+        patch("server.workers.classify_batch", return_value=comments),
+        patch(
+            "server.workers.enqueue_classified_result",
+            return_value={
+                "received": 1,
+                "valid": 1,
+                "inserted": 0,
+                "duplicates": 1,
+                "invalid": 0,
+            },
+        ),
+        patch("server.workers.get_llm_client", return_value=object()),
+    ):
         job_id = run_collect_job(cfg)
         time.sleep(0.2)
 
@@ -281,16 +288,21 @@ def test_run_collect_job_persists_source_breakdown_summary(db_session):
     async def fake_run_discovery(*args, **kwargs):
         return comments
 
-    with patch("server.workers.run_discovery", fake_run_discovery), \
-         patch("server.workers.classify_batch", return_value=comments), \
-         patch("server.workers.enqueue_classified_result", return_value={
-             "received": 2,
-             "valid": 2,
-             "inserted": 2,
-             "duplicates": 0,
-             "invalid": 0,
-         }), \
-         patch("server.workers.get_llm_client", return_value=object()):
+    with (
+        patch("server.workers.run_discovery", fake_run_discovery),
+        patch("server.workers.classify_batch", return_value=comments),
+        patch(
+            "server.workers.enqueue_classified_result",
+            return_value={
+                "received": 2,
+                "valid": 2,
+                "inserted": 2,
+                "duplicates": 0,
+                "invalid": 0,
+            },
+        ),
+        patch("server.workers.get_llm_client", return_value=object()),
+    ):
         job_id = run_collect_job(cfg)
         time.sleep(0.2)
 
@@ -324,8 +336,10 @@ def test_run_collect_job_marks_empty_discovery_with_warning(db_session):
     async def fake_run_discovery(*args, **kwargs):
         return []
 
-    with patch("server.workers.run_discovery", fake_run_discovery), \
-         patch("server.workers.get_llm_client", return_value=object()):
+    with (
+        patch("server.workers.run_discovery", fake_run_discovery),
+        patch("server.workers.get_llm_client", return_value=object()),
+    ):
         job_id = run_collect_job(cfg)
         time.sleep(0.2)
 
@@ -336,6 +350,64 @@ def test_run_collect_job_marks_empty_discovery_with_warning(db_session):
     assert summary["enqueued"] == 0
     assert summary["empty_reason"] == "no_source_comments"
     assert "MediaCrawler" in summary["warning"]
+
+
+def test_run_collect_job_fails_discovery_timeout_instead_of_stalling(db_session):
+    cfg = IndustryConfig(
+        name="Test",
+        slug="test-ind",
+        keywords=["kw"],
+        reply_tone="",
+        reply_style="",
+        categories=["consult"],
+        platforms=["douyin"],
+        user_id="u1",
+    )
+
+    async def fake_run_discovery(*args, **kwargs):
+        raise TimeoutError("MediaCrawler douyin timed out after 0.01s")
+
+    with (
+        patch("server.workers.run_discovery", fake_run_discovery),
+        patch("server.workers.get_llm_client", return_value=object()),
+    ):
+        job_id = run_collect_job(cfg)
+        time.sleep(0.2)
+
+    status = get_job_status(job_id, user_id="u1")
+    assert status["status"] == "failed"
+    assert status["progress"] == 100
+    assert status["phase"] == "discover_timeout"
+    assert "timed out" in status["error"]
+    assert status["collect_summary"]["empty_reason"] == "discovery_timeout"
+
+
+def test_run_collect_job_classifies_douyin_login_failure(db_session):
+    cfg = IndustryConfig(
+        name="Test",
+        slug="test-ind",
+        keywords=["kw"],
+        reply_tone="",
+        reply_style="",
+        categories=["consult"],
+        platforms=["douyin"],
+        user_id="u1",
+    )
+
+    async def fake_run_discovery(*args, **kwargs):
+        raise RuntimeError("[DouYinLogin.popup_login_dialog] login button not found")
+
+    with (
+        patch("server.workers.run_discovery", fake_run_discovery),
+        patch("server.workers.get_llm_client", return_value=object()),
+    ):
+        job_id = run_collect_job(cfg)
+        time.sleep(0.2)
+
+    status = get_job_status(job_id, user_id="u1")
+    assert status["status"] == "failed"
+    assert status["collect_summary"]["empty_reason"] == "crawler_login_required"
+    assert "data/douyin_cookies.json" in status["collect_summary"]["warning"]
 
 
 def test_cancel_job_persists_cancel_request(db_session):
@@ -387,6 +459,7 @@ def test_cancel_send_job_releases_claimed_task_and_quota_reservation(db_session)
     db_session.add(
         IndustryDailyQuota(
             industry_slug="test-ind",
+            owner_user_id="u1",
             day=day,
             sent=0,
             reserved=1,
@@ -407,7 +480,11 @@ def test_cancel_send_job_releases_claimed_task_and_quota_reservation(db_session)
     result = cancel_job("job-quota", user_id="u1")
 
     task = db_session.query(TaskQueue).filter_by(comment_id="c1").one()
-    quota = db_session.query(IndustryDailyQuota).filter_by(industry_slug="test-ind", day=day).one()
+    quota = (
+        db_session.query(IndustryDailyQuota)
+        .filter_by(industry_slug="test-ind", day=day)
+        .one()
+    )
     assert result is not None
     assert result["released_claimed_tasks"] == 1
     assert task.status == "pending"
@@ -433,7 +510,9 @@ def test_run_senders_returns_cancelled_when_device_thread_does_not_exit(monkeypa
         def connection(self):
             raise RuntimeError("broker unavailable")
 
-    monkeypatch.setattr(worker_module, "load_active_devices", lambda **_kwargs: [DeviceStub()])
+    monkeypatch.setattr(
+        worker_module, "load_active_devices", lambda **_kwargs: [DeviceStub()]
+    )
     monkeypatch.setattr(worker_module, "_SENDER_JOIN_POLL_SECONDS", 0.01)
     monkeypatch.setattr(worker_module, "_SENDER_CANCEL_GRACE_SECONDS", 0.03)
     monkeypatch.setattr("adapters.celery.app.app", BrokenCeleryApp())

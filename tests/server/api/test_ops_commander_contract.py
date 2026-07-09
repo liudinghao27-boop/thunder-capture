@@ -46,7 +46,11 @@ class _OpsCommanderShellParser(HTMLParser):
             self._current_nav_key = attr_map["data-nav"]
             self._current_nav_text = []
 
-        if tag == "span" and self._current_nav_key is not None and not self._in_nav_label_span:
+        if (
+            tag == "span"
+            and self._current_nav_key is not None
+            and not self._in_nav_label_span
+        ):
             self._in_nav_label_span = True
             self._nav_label_span_depth = 1
             return
@@ -65,7 +69,9 @@ class _OpsCommanderShellParser(HTMLParser):
 
     def handle_endtag(self, tag: str) -> None:
         if tag == "button" and self._current_nav_key is not None:
-            self.primary_nav_labels[self._current_nav_key] = "".join(self._current_nav_text).strip()
+            self.primary_nav_labels[self._current_nav_key] = "".join(
+                self._current_nav_text
+            ).strip()
             self._current_nav_key = None
             self._current_nav_text = []
             return
@@ -112,8 +118,7 @@ def test_primary_navigation_uses_business_labels():
         "settings": "系统设置",
     }
     actual_labels = {
-        nav_key: shell.primary_nav_labels.get(nav_key)
-        for nav_key in expected_labels
+        nav_key: shell.primary_nav_labels.get(nav_key) for nav_key in expected_labels
     }
     assert actual_labels == expected_labels
 

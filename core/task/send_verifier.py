@@ -35,17 +35,27 @@ def verify_send(message: str, evidence: SendEvidence) -> SendVerification:
         return SendVerification(True, "message_sent_signal", evidence.after_confidence)
 
     has_sent_marker = any(marker in visible_text for marker in _SENT_MARKERS)
-    if normalized_message and normalized_message in normalized_visible_text and has_sent_marker:
-        return SendVerification(True, "message_visible", max(0.8, evidence.after_confidence))
+    if (
+        normalized_message
+        and normalized_message in normalized_visible_text
+        and has_sent_marker
+    ):
+        return SendVerification(
+            True, "message_visible", max(0.8, evidence.after_confidence)
+        )
 
     if (
         evidence.after_screen == "chat"
         and normalized_message
         and normalized_message in normalized_visible_text
     ):
-        return SendVerification(True, "message_visible", max(0.8, evidence.after_confidence))
+        return SendVerification(
+            True, "message_visible", max(0.8, evidence.after_confidence)
+        )
 
     if evidence.blocker:
         return SendVerification(False, evidence.blocker, 1.0)
 
-    return SendVerification(False, "unconfirmed_send", min(0.49, evidence.after_confidence))
+    return SendVerification(
+        False, "unconfirmed_send", min(0.49, evidence.after_confidence)
+    )

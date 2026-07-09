@@ -22,7 +22,7 @@ if not _raw_key:
     if IS_PRODUCTION:
         raise RuntimeError(
             "THUNDER_SECRET_KEY must be set via environment variable in production. "
-            "Generate one with: python -c \"import secrets; print(secrets.token_hex(32))\""
+            'Generate one with: python -c "import secrets; print(secrets.token_hex(32))"'
         )
     dev_key_path = BASE_DIR / "data" / ".thunder_secret_key"
     dev_key_path.parent.mkdir(parents=True, exist_ok=True)

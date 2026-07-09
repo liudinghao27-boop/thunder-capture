@@ -6,7 +6,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from server.auth import create_access_token, get_current_user, hash_password, verify_password
+from server.auth import (
+    create_access_token,
+    get_current_user,
+    hash_password,
+    verify_password,
+)
 from server.models import get_db
 from server.models.user import User
 from server.schemas.user import TokenResponse, UserLogin, UserOut, UserRegister
@@ -38,7 +43,10 @@ def _registration_open(has_users: bool) -> bool:
     if not has_users:
         return True
     return os.getenv("THUNDER_ALLOW_REGISTRATION", "").lower() in {
-        "1", "true", "yes", "on",
+        "1",
+        "true",
+        "yes",
+        "on",
     }
 
 

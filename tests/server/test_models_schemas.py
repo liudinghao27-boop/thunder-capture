@@ -29,8 +29,12 @@ def test_industry_model_has_compliance_columns():
 
 def test_industry_config_has_compliance_fields():
     cfg = IndustryConfig(
-        name="测试", slug="test-ind", keywords=["a"], reply_tone="测试",
-        reply_style="测试", categories=["c"],
+        name="测试",
+        slug="test-ind",
+        keywords=["a"],
+        reply_tone="测试",
+        reply_style="测试",
+        categories=["c"],
         compliance_mode=True,
         webhook_url="https://example.com/hook",
         auto_export_enabled=True,
@@ -42,9 +46,13 @@ def test_industry_config_has_compliance_fields():
 
 def test_industry_create_has_schedule_fields():
     data = IndustryCreate(
-        name="测试", slug="test-schedule",
-        send_start_time="09:00", send_end_time="21:00",
-        pause_weekends=True, daily_send_max=100, hourly_send_limit=6,
+        name="测试",
+        slug="test-schedule",
+        send_start_time="09:00",
+        send_end_time="21:00",
+        pause_weekends=True,
+        daily_send_max=100,
+        hourly_send_limit=6,
         effect_webhook_url="https://example.com/events",
     )
     assert data.send_start_time == "09:00"
@@ -63,10 +71,17 @@ def test_industry_model_has_schedule_columns():
 
 def test_industry_config_has_schedule_fields():
     cfg = IndustryConfig(
-        name="测试", slug="test-schedule", keywords=["a"], reply_tone="测试",
-        reply_style="测试", categories=["c"],
-        send_start_time="10:00", send_end_time="22:00",
-        pause_weekends=True, daily_send_max=200, hourly_send_limit=8,
+        name="测试",
+        slug="test-schedule",
+        keywords=["a"],
+        reply_tone="测试",
+        reply_style="测试",
+        categories=["c"],
+        send_start_time="10:00",
+        send_end_time="22:00",
+        pause_weekends=True,
+        daily_send_max=200,
+        hourly_send_limit=8,
         effect_webhook_url="https://example.com/events",
     )
     assert cfg.send_start_time == "10:00"
@@ -90,13 +105,26 @@ def test_industry_update_accepts_compliance_fields():
 
 def test_industry_out_defaults():
     out = IndustryOut(
-        id="1", user_id="u1", name="测试", slug="test-ind",
-        keywords=[], platforms=["douyin"], reply_tone="a", reply_style="b",
-        reply_hook="", categories=[], daily_limit=15,
-        video_max_age_days=14, comment_max_age_hours=48,
-        llm_provider="deepseek", llm_model="deepseek-v4-flash",
-        intent_keywords=[], noise_keywords=[], target_users=[],
-        is_active=True, created_at="2026-06-15T10:00:00",
+        id="1",
+        user_id="u1",
+        name="测试",
+        slug="test-ind",
+        keywords=[],
+        platforms=["douyin"],
+        reply_tone="a",
+        reply_style="b",
+        reply_hook="",
+        categories=[],
+        daily_limit=15,
+        video_max_age_days=14,
+        comment_max_age_hours=48,
+        llm_provider="deepseek",
+        llm_model="deepseek-v4-flash",
+        intent_keywords=[],
+        noise_keywords=[],
+        target_users=[],
+        is_active=True,
+        created_at="2026-06-15T10:00:00",
     )
     assert out.compliance_mode is False
     assert out.webhook_url == ""
@@ -142,6 +170,7 @@ def test_industry_out_model_validate():
     ind.reply_variants = []
     ind.is_active = True
     from datetime import datetime, timezone
+
     ind.created_at = datetime(2026, 6, 15, 10, 0, 0, tzinfo=timezone.utc)
     out = IndustryOut.model_validate(ind)
     assert out.compliance_mode is False
@@ -166,8 +195,15 @@ def test_single_platform_validation():
 @patch("server.services.url_security.socket.gethostbyname")
 def test_webhook_url_validator_accepts_empty_and_https(mock_gethost):
     mock_gethost.return_value = "8.8.8.8"
-    assert IndustryCreate(name="测试", slug="test-ind", webhook_url="").webhook_url == ""
-    assert IndustryCreate(name="测试", slug="test-ind", webhook_url="https://x.com").webhook_url == "https://x.com"
+    assert (
+        IndustryCreate(name="测试", slug="test-ind", webhook_url="").webhook_url == ""
+    )
+    assert (
+        IndustryCreate(
+            name="测试", slug="test-ind", webhook_url="https://x.com"
+        ).webhook_url
+        == "https://x.com"
+    )
 
 
 @patch("server.services.url_security.socket.gethostbyname")
@@ -179,7 +215,9 @@ def test_webhook_url_validator_rejects_http(mock_gethost):
 
 def test_webhook_url_validator_rejects_private_ip():
     with pytest.raises(ValueError):
-        IndustryCreate(name="测试", slug="test-ind", webhook_url="https://192.168.1.1/hook")
+        IndustryCreate(
+            name="测试", slug="test-ind", webhook_url="https://192.168.1.1/hook"
+        )
 
 
 def test_webhook_url_validator_rejects_invalid():
@@ -189,6 +227,7 @@ def test_webhook_url_validator_rejects_invalid():
 
 def test_task_queue_has_effect_columns():
     from server.models.task import TaskQueue
+
     t = TaskQueue(video_id="v1", comment_id="c1")
     assert hasattr(t, "replied_at")
     assert hasattr(t, "converted_at")
@@ -224,7 +263,8 @@ def test_create_default_admin_does_not_print_generated_password(monkeypatch, cap
 
 def test_industry_create_has_reply_variants():
     data = IndustryCreate(
-        name="测试", slug="test-ab",
+        name="测试",
+        slug="test-ab",
         reply_variants=[{"id": "v1", "name": "默认", "weight": 1}],
     )
     assert len(data.reply_variants) == 1
@@ -237,8 +277,12 @@ def test_industry_model_has_reply_variants_column():
 
 def test_industry_config_has_reply_variants():
     cfg = IndustryConfig(
-        name="测试", slug="test-ab", keywords=["a"], reply_tone="测试",
-        reply_style="测试", categories=["c"],
+        name="测试",
+        slug="test-ab",
+        keywords=["a"],
+        reply_tone="测试",
+        reply_style="测试",
+        categories=["c"],
         reply_variants=[{"id": "v1", "name": "默认"}],
     )
     assert cfg.reply_variants[0]["id"] == "v1"

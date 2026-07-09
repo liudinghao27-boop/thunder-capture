@@ -162,9 +162,17 @@ def test_jobs_view_normalizes_sent_status_and_exposes_latest_evidence(db_session
     assert "发送确认" in (job["final_reason"] or "")
     assert job["latest_execution"]["agent_decision"]["next_action"] == "confirm_success"
     assert detail["latest_execution"]["device_id"] == "dev-1"
-    assert detail["latest_execution"]["agent_decision"]["next_action"] == "confirm_success"
-    assert detail["latest_execution"]["agent_decision"]["screenshot"] == "data/acceptance/success.png"
-    assert detail["latest_execution"]["agent_decisions"]["before"]["next_action"] == "open_chat"
+    assert (
+        detail["latest_execution"]["agent_decision"]["next_action"] == "confirm_success"
+    )
+    assert (
+        detail["latest_execution"]["agent_decision"]["screenshot"]
+        == "data/acceptance/success.png"
+    )
+    assert (
+        detail["latest_execution"]["agent_decisions"]["before"]["next_action"]
+        == "open_chat"
+    )
     assert detail["latest_snapshot"]["image_path"] == "data/acceptance/success.png"
     assert detail["latest_snapshot"]["blocker"] == "对方回复后才能发消息"
 
@@ -238,7 +246,9 @@ def test_agent_logs_and_execution_monitor_expose_agent_decision(db_session):
     assert device["decision_screenshot"] == "data/evidence/risk.png"
 
 
-def test_jobs_view_marks_unconfirmed_send_without_collapsing_into_generic_failure(db_session):
+def test_jobs_view_marks_unconfirmed_send_without_collapsing_into_generic_failure(
+    db_session,
+):
     now = datetime.now(timezone.utc)
     db_session.add(
         Job(
@@ -292,7 +302,9 @@ def test_jobs_view_status_filter_accepts_normalized_status(db_session):
                 type="send",
                 status="done",
                 progress=100,
-                payload={"send_summary": {"ok": True, "sent_total": 1, "failed_total": 0}},
+                payload={
+                    "send_summary": {"ok": True, "sent_total": 1, "failed_total": 0}
+                },
                 created_at=now,
                 updated_at=now,
                 completed_at=now,
@@ -306,7 +318,9 @@ def test_jobs_view_status_filter_accepts_normalized_status(db_session):
                 status="failed",
                 progress=100,
                 error="unconfirmed_send",
-                payload={"send_summary": {"ok": False, "sent_total": 0, "failed_total": 1}},
+                payload={
+                    "send_summary": {"ok": False, "sent_total": 0, "failed_total": 1}
+                },
                 created_at=now,
                 updated_at=now,
                 completed_at=now,
@@ -364,7 +378,9 @@ def test_jobs_view_exposes_collect_queue_funnel_summary(db_session):
     assert detail_resp.json()["collect_summary"] == collect_summary
 
 
-def test_devices_view_merges_runtime_state_and_acceptance_entrypoints(db_session, monkeypatch):
+def test_devices_view_merges_runtime_state_and_acceptance_entrypoints(
+    db_session, monkeypatch
+):
     now = datetime.now(timezone.utc)
     db_session.add(
         Device(

@@ -87,12 +87,15 @@ def _make_fake_db(quota=None, task=None, consumer_state=None):
 
 def test_claim_respects_industry_daily_max(scheduler_db):
     db = scheduler_db()
-    db.add(IndustryDailyQuota(
-        industry_slug="test",
-        day=datetime.now(timezone.utc).strftime("%Y-%m-%d"),
-        sent=1,
-        reserved=0,
-    ))
+    db.add(
+        IndustryDailyQuota(
+            industry_slug="test",
+            owner_user_id="u1",
+            day=datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+            sent=1,
+            reserved=0,
+        )
+    )
     db.commit()
     db.close()
     scheduler = MatrixTaskScheduler(
@@ -108,16 +111,28 @@ def test_claim_respects_industry_daily_max(scheduler_db):
 
 def test_claim_reserves_daily_send_max_slot(scheduler_db):
     db = scheduler_db()
-    db.add(IndustryDailyQuota(
-        industry_slug="test",
-        day=datetime.now(timezone.utc).strftime("%Y-%m-%d"),
-        sent=1,
-        reserved=0,
-    ))
-    db.add(TaskQueue(
-        industry_slug="test", owner_user_id="u1", video_id="v1", comment_id="c1",
-        text="hi", user_name="u", user_id="uid", short_id="sid", status="pending",
-    ))
+    db.add(
+        IndustryDailyQuota(
+            industry_slug="test",
+            owner_user_id="u1",
+            day=datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+            sent=1,
+            reserved=0,
+        )
+    )
+    db.add(
+        TaskQueue(
+            industry_slug="test",
+            owner_user_id="u1",
+            video_id="v1",
+            comment_id="c1",
+            text="hi",
+            user_name="u",
+            user_id="uid",
+            short_id="sid",
+            status="pending",
+        )
+    )
     db.commit()
     db.close()
     scheduler = MatrixTaskScheduler(
@@ -140,15 +155,31 @@ def test_claim_reserves_daily_send_max_slot(scheduler_db):
 def test_claim_skips_pending_task_until_retry_after_expires(scheduler_db):
     future_retry = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
     db = scheduler_db()
-    db.add(TaskQueue(
-        industry_slug="test", owner_user_id="u1", video_id="v1", comment_id="c1",
-        text="cooling down", user_name="u", user_id="uid", status="pending",
-        retry_after=future_retry,
-    ))
-    db.add(TaskQueue(
-        industry_slug="test", owner_user_id="u1", video_id="v2", comment_id="c2",
-        text="ready", user_name="u2", user_id="uid2", status="pending",
-    ))
+    db.add(
+        TaskQueue(
+            industry_slug="test",
+            owner_user_id="u1",
+            video_id="v1",
+            comment_id="c1",
+            text="cooling down",
+            user_name="u",
+            user_id="uid",
+            status="pending",
+            retry_after=future_retry,
+        )
+    )
+    db.add(
+        TaskQueue(
+            industry_slug="test",
+            owner_user_id="u1",
+            video_id="v2",
+            comment_id="c2",
+            text="ready",
+            user_name="u2",
+            user_id="uid2",
+            status="pending",
+        )
+    )
     db.commit()
     db.close()
 
@@ -162,17 +193,37 @@ def test_claim_skips_pending_task_until_retry_after_expires(scheduler_db):
 
 
 def test_claim_handles_retry_after_z_suffix_as_datetime(scheduler_db):
-    future_retry = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat().replace("+00:00", "Z")
+    future_retry = (
+        (datetime.now(timezone.utc) + timedelta(hours=1))
+        .isoformat()
+        .replace("+00:00", "Z")
+    )
     db = scheduler_db()
-    db.add(TaskQueue(
-        industry_slug="test", owner_user_id="u1", video_id="v1", comment_id="c1",
-        text="z cooling down", user_name="u", user_id="uid", status="pending",
-        retry_after=future_retry,
-    ))
-    db.add(TaskQueue(
-        industry_slug="test", owner_user_id="u1", video_id="v2", comment_id="c2",
-        text="ready", user_name="u2", user_id="uid2", status="pending",
-    ))
+    db.add(
+        TaskQueue(
+            industry_slug="test",
+            owner_user_id="u1",
+            video_id="v1",
+            comment_id="c1",
+            text="z cooling down",
+            user_name="u",
+            user_id="uid",
+            status="pending",
+            retry_after=future_retry,
+        )
+    )
+    db.add(
+        TaskQueue(
+            industry_slug="test",
+            owner_user_id="u1",
+            video_id="v2",
+            comment_id="c2",
+            text="ready",
+            user_name="u2",
+            user_id="uid2",
+            status="pending",
+        )
+    )
     db.commit()
     db.close()
 
@@ -188,16 +239,26 @@ def test_claim_handles_retry_after_z_suffix_as_datetime(scheduler_db):
 def test_claim_respects_device_daily_limit(scheduler_db):
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     db = scheduler_db()
-    db.add(ConsumerState(
-        consumer_id="d1",
-        daily_sent=2,
-        daily_limit=2,
-        last_sent_date=today,
-    ))
-    db.add(TaskQueue(
-        industry_slug="test", owner_user_id="u1", video_id="v1", comment_id="c1",
-        text="ready", user_name="u", user_id="uid", status="pending",
-    ))
+    db.add(
+        ConsumerState(
+            consumer_id="d1",
+            daily_sent=2,
+            daily_limit=2,
+            last_sent_date=today,
+        )
+    )
+    db.add(
+        TaskQueue(
+            industry_slug="test",
+            owner_user_id="u1",
+            video_id="v1",
+            comment_id="c1",
+            text="ready",
+            user_name="u",
+            user_id="uid",
+            status="pending",
+        )
+    )
     db.commit()
     db.close()
 
@@ -225,18 +286,27 @@ def test_mark_task_done_increments_device_daily_sent(scheduler_db):
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     db = scheduler_db()
     task = TaskQueue(
-        industry_slug="test", owner_user_id="u1", video_id="v1", comment_id="c1",
-        text="ready", user_name="u", user_id="uid", status="claimed",
-        consumer_id="d1", claim_token="token-1",
+        industry_slug="test",
+        owner_user_id="u1",
+        video_id="v1",
+        comment_id="c1",
+        text="ready",
+        user_name="u",
+        user_id="uid",
+        status="claimed",
+        consumer_id="d1",
+        claim_token="token-1",
     )
     db.add(task)
-    db.add(ConsumerState(
-        consumer_id="d1",
-        daily_sent=1,
-        daily_limit=3,
-        last_sent_date=today,
-        total_sent=4,
-    ))
+    db.add(
+        ConsumerState(
+            consumer_id="d1",
+            daily_sent=1,
+            daily_limit=3,
+            last_sent_date=today,
+            total_sent=4,
+        )
+    )
     db.commit()
     task_id = task.id
     db.close()
@@ -247,7 +317,12 @@ def test_mark_task_done_increments_device_daily_sent(scheduler_db):
         device_daily_limit=3,
     )
     try:
-        assert scheduler.mark_task_done(task_id, "d1", ai_reply="ok", claim_token="token-1") is True
+        assert (
+            scheduler.mark_task_done(
+                task_id, "d1", ai_reply="ok", claim_token="token-1"
+            )
+            is True
+        )
     finally:
         scheduler.close()
 
@@ -265,18 +340,28 @@ def test_claim_respects_device_hourly_limit(scheduler_db):
     now = datetime.now(timezone.utc)
     today = now.strftime("%Y-%m-%d")
     db = scheduler_db()
-    db.add(ConsumerState(
-        consumer_id="d1",
-        daily_sent=2,
-        daily_limit=10,
-        last_sent_date=today,
-        wave_sent=2,
-        rate_limited_at=now.isoformat(),
-    ))
-    db.add(TaskQueue(
-        industry_slug="test", owner_user_id="u1", video_id="v1", comment_id="c1",
-        text="ready", user_name="u", user_id="uid", status="pending",
-    ))
+    db.add(
+        ConsumerState(
+            consumer_id="d1",
+            daily_sent=2,
+            daily_limit=10,
+            last_sent_date=today,
+            wave_sent=2,
+            rate_limited_at=now.isoformat(),
+        )
+    )
+    db.add(
+        TaskQueue(
+            industry_slug="test",
+            owner_user_id="u1",
+            video_id="v1",
+            comment_id="c1",
+            text="ready",
+            user_name="u",
+            user_id="uid",
+            status="pending",
+        )
+    )
     db.commit()
     db.close()
 
@@ -296,18 +381,28 @@ def test_claim_respects_device_hourly_limit(scheduler_db):
 def test_claim_resets_expired_device_hourly_window(scheduler_db):
     old_window = datetime.now(timezone.utc) - timedelta(hours=2)
     db = scheduler_db()
-    db.add(ConsumerState(
-        consumer_id="d1",
-        daily_sent=2,
-        daily_limit=10,
-        last_sent_date=old_window.strftime("%Y-%m-%d"),
-        wave_sent=2,
-        rate_limited_at=old_window.isoformat(),
-    ))
-    db.add(TaskQueue(
-        industry_slug="test", owner_user_id="u1", video_id="v1", comment_id="c1",
-        text="ready", user_name="u", user_id="uid", status="pending",
-    ))
+    db.add(
+        ConsumerState(
+            consumer_id="d1",
+            daily_sent=2,
+            daily_limit=10,
+            last_sent_date=old_window.strftime("%Y-%m-%d"),
+            wave_sent=2,
+            rate_limited_at=old_window.isoformat(),
+        )
+    )
+    db.add(
+        TaskQueue(
+            industry_slug="test",
+            owner_user_id="u1",
+            video_id="v1",
+            comment_id="c1",
+            text="ready",
+            user_name="u",
+            user_id="uid",
+            status="pending",
+        )
+    )
     db.commit()
     db.close()
 
@@ -335,18 +430,27 @@ def test_claim_resets_expired_device_hourly_window(scheduler_db):
 def test_mark_task_done_increments_device_hourly_window(scheduler_db):
     db = scheduler_db()
     task = TaskQueue(
-        industry_slug="test", owner_user_id="u1", video_id="v1", comment_id="c1",
-        text="ready", user_name="u", user_id="uid", status="claimed",
-        consumer_id="d1", claim_token="token-1",
+        industry_slug="test",
+        owner_user_id="u1",
+        video_id="v1",
+        comment_id="c1",
+        text="ready",
+        user_name="u",
+        user_id="uid",
+        status="claimed",
+        consumer_id="d1",
+        claim_token="token-1",
     )
     db.add(task)
-    db.add(ConsumerState(
-        consumer_id="d1",
-        daily_sent=0,
-        daily_limit=10,
-        wave_sent=1,
-        rate_limited_at=datetime.now(timezone.utc).isoformat(),
-    ))
+    db.add(
+        ConsumerState(
+            consumer_id="d1",
+            daily_sent=0,
+            daily_limit=10,
+            wave_sent=1,
+            rate_limited_at=datetime.now(timezone.utc).isoformat(),
+        )
+    )
     db.commit()
     task_id = task.id
     db.close()
@@ -357,7 +461,12 @@ def test_mark_task_done_increments_device_hourly_window(scheduler_db):
         hourly_send_limit=2,
     )
     try:
-        assert scheduler.mark_task_done(task_id, "d1", ai_reply="ok", claim_token="token-1") is True
+        assert (
+            scheduler.mark_task_done(
+                task_id, "d1", ai_reply="ok", claim_token="token-1"
+            )
+            is True
+        )
     finally:
         scheduler.close()
 
@@ -372,13 +481,17 @@ def test_mark_task_done_increments_device_hourly_window(scheduler_db):
 
 def test_mark_task_done_commits_quota_reservation(monkeypatch):
     scheduler = MatrixTaskScheduler(
-        industry_slug="test", owner_user_id="u1", global_daily_limit=10, daily_send_max=0
+        industry_slug="test",
+        owner_user_id="u1",
+        global_daily_limit=10,
+        daily_send_max=0,
     )
     import core.task.scheduler as sched_module
 
-    FakeDb = _make_fake_db(quota={"sent": 0, "reserved": 1}, task={
-        "id": 1, "status": "claimed", "consumer_id": "d1", "claim_token": "t1"
-    })
+    FakeDb = _make_fake_db(
+        quota={"sent": 0, "reserved": 1},
+        task={"id": 1, "status": "claimed", "consumer_id": "d1", "claim_token": "t1"},
+    )
     monkeypatch.setattr(sched_module, "SessionLocal", FakeDb)
 
     scheduler.commit = MagicMock()
@@ -388,13 +501,17 @@ def test_mark_task_done_commits_quota_reservation(monkeypatch):
 
 def test_mark_task_failed_releases_quota_reservation(monkeypatch):
     scheduler = MatrixTaskScheduler(
-        industry_slug="test", owner_user_id="u1", global_daily_limit=10, daily_send_max=0
+        industry_slug="test",
+        owner_user_id="u1",
+        global_daily_limit=10,
+        daily_send_max=0,
     )
     import core.task.scheduler as sched_module
 
-    FakeDb = _make_fake_db(quota={"sent": 0, "reserved": 1}, task={
-        "id": 1, "status": "claimed", "consumer_id": "d1", "claim_token": "t1"
-    })
+    FakeDb = _make_fake_db(
+        quota={"sent": 0, "reserved": 1},
+        task={"id": 1, "status": "claimed", "consumer_id": "d1", "claim_token": "t1"},
+    )
     monkeypatch.setattr(sched_module, "SessionLocal", FakeDb)
 
     scheduler.release = MagicMock()
@@ -404,14 +521,23 @@ def test_mark_task_failed_releases_quota_reservation(monkeypatch):
 
 def test_mark_task_retry_releases_quota_reservation(monkeypatch):
     scheduler = MatrixTaskScheduler(
-        industry_slug="test", owner_user_id="u1", global_daily_limit=10, daily_send_max=0
+        industry_slug="test",
+        owner_user_id="u1",
+        global_daily_limit=10,
+        daily_send_max=0,
     )
     import core.task.scheduler as sched_module
 
-    FakeDb = _make_fake_db(quota={"sent": 0, "reserved": 1}, task={
-        "id": 1, "status": "claimed", "consumer_id": "d1", "claim_token": "t1",
-        "retry_count": 0
-    })
+    FakeDb = _make_fake_db(
+        quota={"sent": 0, "reserved": 1},
+        task={
+            "id": 1,
+            "status": "claimed",
+            "consumer_id": "d1",
+            "claim_token": "t1",
+            "retry_count": 0,
+        },
+    )
     monkeypatch.setattr(sched_module, "SessionLocal", FakeDb)
 
     scheduler.release = MagicMock()
@@ -421,13 +547,17 @@ def test_mark_task_retry_releases_quota_reservation(monkeypatch):
 
 def test_release_task_claim_releases_quota_reservation(monkeypatch):
     scheduler = MatrixTaskScheduler(
-        industry_slug="test", owner_user_id="u1", global_daily_limit=10, daily_send_max=0
+        industry_slug="test",
+        owner_user_id="u1",
+        global_daily_limit=10,
+        daily_send_max=0,
     )
     import core.task.scheduler as sched_module
 
-    FakeDb = _make_fake_db(quota={"sent": 0, "reserved": 1}, task={
-        "id": 1, "status": "claimed", "consumer_id": "d1", "claim_token": "t1"
-    })
+    FakeDb = _make_fake_db(
+        quota={"sent": 0, "reserved": 1},
+        task={"id": 1, "status": "claimed", "consumer_id": "d1", "claim_token": "t1"},
+    )
     monkeypatch.setattr(sched_module, "SessionLocal", FakeDb)
 
     scheduler.release = MagicMock()

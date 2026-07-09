@@ -11,7 +11,9 @@ class HandlerResult:
 
 def test_dispatch_accepts_dataclass_handler_result():
     router = TaskRouter()
-    router.register("douyin", "send_dm", lambda request: HandlerResult("queued", request.device_id))
+    router.register(
+        "douyin", "send_dm", lambda request: HandlerResult("queued", request.device_id)
+    )
 
     result = router.dispatch(DispatchRequest(device_id="device-1"))
 
@@ -20,7 +22,9 @@ def test_dispatch_accepts_dataclass_handler_result():
 
 def test_dispatch_preserves_dispatch_result_and_fills_route():
     router = TaskRouter()
-    router.register("douyin", "send_dm", lambda request: DispatchResult(True, "done", "ok"))
+    router.register(
+        "douyin", "send_dm", lambda request: DispatchResult(True, "done", "ok")
+    )
 
     result = router.dispatch(DispatchRequest())
 

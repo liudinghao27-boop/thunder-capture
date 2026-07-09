@@ -101,7 +101,9 @@ def test_update_settings_empty_string_clears_key(db_session):
 
 def test_update_settings_non_empty_encrypts_key(db_session):
     with _client(db_session) as client:
-        resp = client.post("/api/auth/settings", json={"deepseek_key": "new-secret-key"})
+        resp = client.post(
+            "/api/auth/settings", json={"deepseek_key": "new-secret-key"}
+        )
     assert resp.status_code == 200
     db_session.expire_all()
     user = db_session.query(User).filter(User.id == TEST_USER_ID).first()
@@ -120,7 +122,9 @@ def test_update_settings_ignores_masked_string(db_session):
     assert decrypt_secret(user.deepseek_key) == "****masked"
 
 
-def test_auth_status_reports_registration_closed_when_users_exist(monkeypatch, db_session):
+def test_auth_status_reports_registration_closed_when_users_exist(
+    monkeypatch, db_session
+):
     monkeypatch.delenv("THUNDER_ALLOW_REGISTRATION", raising=False)
     with _client(db_session) as client:
         resp = client.get("/api/auth/status")
@@ -131,7 +135,9 @@ def test_auth_status_reports_registration_closed_when_users_exist(monkeypatch, d
     assert data["mode"] == "login_only"
 
 
-def test_auth_status_reports_registration_open_when_explicitly_enabled(monkeypatch, db_session):
+def test_auth_status_reports_registration_open_when_explicitly_enabled(
+    monkeypatch, db_session
+):
     monkeypatch.setenv("THUNDER_ALLOW_REGISTRATION", "1")
     with _client(db_session) as client:
         resp = client.get("/api/auth/status")

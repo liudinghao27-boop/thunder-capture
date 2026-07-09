@@ -9,7 +9,6 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, field_validator
-from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from server.auth import get_current_user
@@ -23,6 +22,7 @@ router = APIRouter(prefix="/api/leads", tags=["leads"])
 
 
 # ── Models ────────────────────────────────────────
+
 
 class LeadSummary(BaseModel):
     id: int
@@ -59,7 +59,9 @@ class LeadExportRequest(BaseModel):
     @classmethod
     def validate_industry_slug(cls, value: str) -> str:
         if value and re.search(r"[^a-z0-9_-]", value):
-            raise ValueError("industry_slug must contain only lowercase letters, numbers, underscores, and hyphens")
+            raise ValueError(
+                "industry_slug must contain only lowercase letters, numbers, underscores, and hyphens"
+            )
         return value
 
 
@@ -109,15 +111,14 @@ def _lead_from_row(row: dict) -> dict:
 
 
 def _owner_filter(current_user: User):
-    """Return an OR filter matching rows owned by the current user or unowned."""
-    return or_(
-        TaskQueue.owner_user_id == current_user.id,
-        TaskQueue.owner_user_id == "",
-        TaskQueue.owner_user_id.is_(None),
-    )
+    """Return an exact filter matching rows owned by the current user."""
+    if not current_user.id:
+        raise HTTPException(status_code=401, detail="Invalid user session")
+    return TaskQueue.owner_user_id == current_user.id
 
 
 # ── Routes ────────────────────────────────────────
+
 
 @router.get("", response_model=LeadListResponse)
 def list_leads(
@@ -130,6 +131,7 @@ def list_leads(
     """List leads with optional filtering by status and industry."""
     try:
         from server.models import SessionLocal
+
         db = SessionLocal()
     except Exception as exc:
         logging.getLogger("thunder.api.leads").warning("list_leads failed: %s", exc)
@@ -143,7 +145,12 @@ def list_leads(
             query = query.filter(TaskQueue.status == status)
 
         total = query.count()
-        rows = query.order_by(TaskQueue.fetched_at.desc()).limit(limit).offset(offset).all()
+        rows = (
+            query.order_by(TaskQueue.fetched_at.desc())
+            .limit(limit)
+            .offset(offset)
+            .all()
+        )
 
         leads = [_lead_from_row(_taskqueue_row_to_dict(r)) for r in rows]
     finally:
@@ -160,6 +167,7 @@ def lead_stats(
     """Get lead pool statistics by status."""
     try:
         from server.services.task_stats import queue_stats
+
         stats = queue_stats(industry_slug, owner_user_id=current_user.id)
         return {
             "total": stats.get("total", 0),
@@ -181,25 +189,30 @@ def retry_failed_leads(
     """Reset all failed leads in an industry back to pending for retry."""
     try:
         from server.models import SessionLocal
+
         db = SessionLocal()
     except Exception as exc:
-        logging.getLogger("thunder.api.leads").error("retry_failed_leads queue unavailable: %s", exc)
+        logging.getLogger("thunder.api.leads").error(
+            "retry_failed_leads queue unavailable: %s", exc
+        )
         raise HTTPException(status_code=500, detail="Queue unavailable")
 
     try:
         query = db.query(TaskQueue).filter(
-            TaskQueue.status == 'failed',
+            TaskQueue.status == "failed",
             _owner_filter(current_user),
         )
         if industry_slug:
             query = query.filter(TaskQueue.industry_slug == industry_slug)
-        n = query.update({
-            TaskQueue.status: 'pending',
-            TaskQueue.consumer_id: None,
-            TaskQueue.claim_token: None,
-            TaskQueue.claimed_at: None,
-            TaskQueue.error: ''
-        })
+        n = query.update(
+            {
+                TaskQueue.status: "pending",
+                TaskQueue.consumer_id: None,
+                TaskQueue.claim_token: None,
+                TaskQueue.claimed_at: None,
+                TaskQueue.error: "",
+            }
+        )
         db.commit()
         return {
             "ok": True,
@@ -223,7 +236,9 @@ def _build_export_query(db: Session, req: LeadExportRequest, current_user: User)
     return query
 
 
-def _iter_export_rows(req: LeadExportRequest, current_user: User, batch_size: int = 500):
+def _iter_export_rows(
+    req: LeadExportRequest, current_user: User, batch_size: int = 500
+):
     """Yield lead dicts from the database in batches.
 
     The session is kept open until the generator is exhausted so that the
@@ -247,7 +262,7 @@ def _iter_export_rows(req: LeadExportRequest, current_user: User, batch_size: in
 @router.post("/export")
 def export_leads(
     req: LeadExportRequest,
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
 ):
     """Export leads as CSV or XLSX."""
     from server.models import SessionLocal
@@ -265,7 +280,7 @@ def export_leads(
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     filename = f"leads_{req.industry_slug}_{timestamp}"
-    quoted_filename = urllib.parse.quote(filename, safe='')
+    quoted_filename = urllib.parse.quote(filename, safe="")
     fields = req.fields or DEFAULT_EXPORT_FIELDS
 
     row_iterator = _iter_export_rows(req, current_user)
@@ -274,13 +289,17 @@ def export_leads(
         return StreamingResponse(
             generate_csv(row_iterator, fields=fields),
             media_type="text/csv; charset=utf-8-sig",
-            headers={"Content-Disposition": f"attachment; filename=\"{quoted_filename}.csv\""},
+            headers={
+                "Content-Disposition": f'attachment; filename="{quoted_filename}.csv"'
+            },
         )
     if req.format == "xlsx":
         return StreamingResponse(
             generate_xlsx(row_iterator, fields=fields),
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": f"attachment; filename=\"{quoted_filename}.xlsx\""},
+            headers={
+                "Content-Disposition": f'attachment; filename="{quoted_filename}.xlsx"'
+            },
         )
     raise HTTPException(status_code=400, detail="format 必须是 csv 或 xlsx")
 
@@ -289,14 +308,19 @@ def export_leads(
 def mark_lead_replied(
     lead_id: int,
     body: MarkRepliedRequest,
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     from server.models.task import TaskQueue
-    lead = db.query(TaskQueue).filter(
-        TaskQueue.id == lead_id,
-        TaskQueue.owner_user_id == current_user.id,
-    ).first()
+
+    lead = (
+        db.query(TaskQueue)
+        .filter(
+            TaskQueue.id == lead_id,
+            TaskQueue.owner_user_id == current_user.id,
+        )
+        .first()
+    )
     if not lead:
         raise HTTPException(status_code=404, detail="线索不存在")
     if lead.status not in ("done", "replied", "converted"):
@@ -309,10 +333,15 @@ def mark_lead_replied(
 
     if lead.industry_slug:
         from server.models.industry import Industry
-        industry = db.query(Industry).filter(
-            Industry.slug == lead.industry_slug,
-            Industry.user_id == current_user.id,
-        ).first()
+
+        industry = (
+            db.query(Industry)
+            .filter(
+                Industry.slug == lead.industry_slug,
+                Industry.user_id == current_user.id,
+            )
+            .first()
+        )
         if industry and industry.effect_webhook_url:
             push_effect_event(
                 "lead.replied",
@@ -328,14 +357,19 @@ def mark_lead_replied(
 def mark_lead_converted(
     lead_id: int,
     body: MarkConvertedRequest,
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     from server.models.task import TaskQueue
-    lead = db.query(TaskQueue).filter(
-        TaskQueue.id == lead_id,
-        TaskQueue.owner_user_id == current_user.id,
-    ).first()
+
+    lead = (
+        db.query(TaskQueue)
+        .filter(
+            TaskQueue.id == lead_id,
+            TaskQueue.owner_user_id == current_user.id,
+        )
+        .first()
+    )
     if not lead:
         raise HTTPException(status_code=404, detail="线索不存在")
     if lead.status not in ("sent", "replied", "done"):
@@ -348,10 +382,15 @@ def mark_lead_converted(
 
     if lead.industry_slug:
         from server.models.industry import Industry
-        industry = db.query(Industry).filter(
-            Industry.slug == lead.industry_slug,
-            Industry.user_id == current_user.id,
-        ).first()
+
+        industry = (
+            db.query(Industry)
+            .filter(
+                Industry.slug == lead.industry_slug,
+                Industry.user_id == current_user.id,
+            )
+            .first()
+        )
         if industry and industry.effect_webhook_url:
             push_effect_event(
                 "lead.converted",
@@ -366,14 +405,19 @@ def mark_lead_converted(
 @router.post("/{lead_id}/unmark-converted")
 def unmark_lead_converted(
     lead_id: int,
-    current_user = Depends(get_current_user),
+    current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     from server.models.task import TaskQueue
-    lead = db.query(TaskQueue).filter(
-        TaskQueue.id == lead_id,
-        TaskQueue.owner_user_id == current_user.id,
-    ).first()
+
+    lead = (
+        db.query(TaskQueue)
+        .filter(
+            TaskQueue.id == lead_id,
+            TaskQueue.owner_user_id == current_user.id,
+        )
+        .first()
+    )
     if not lead:
         raise HTTPException(status_code=404, detail="线索不存在")
     if lead.status != "converted":

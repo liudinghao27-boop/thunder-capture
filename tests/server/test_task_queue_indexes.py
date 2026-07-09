@@ -18,6 +18,7 @@ def test_task_queue_has_composite_indexes():
 def test_task_queue_has_unique_constraint():
     """Original unique constraint on comment_id + video_id should remain."""
     from sqlalchemy import UniqueConstraint
+
     table_args = TaskQueue.__table_args__
     constraints = [arg for arg in table_args if isinstance(arg, UniqueConstraint)]
     assert len(constraints) == 1

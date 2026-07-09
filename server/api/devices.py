@@ -32,7 +32,7 @@ router = APIRouter(prefix="/api/devices", tags=["devices"])
 _ACCEPTANCE_OUTPUT_DIR = Path(__file__).resolve().parents[2] / "data" / "acceptance"
 
 # Whitelist pattern for ADB serial numbers — prevents command injection
-_ADB_SERIAL_RE = re.compile(r'^[a-zA-Z0-9._:\-]{1,128}$')
+_ADB_SERIAL_RE = re.compile(r"^[a-zA-Z0-9._:\-]{1,128}$")
 
 
 def _resolve_acceptance_evidence_path(path: str) -> Path:
@@ -43,7 +43,9 @@ def _resolve_acceptance_evidence_path(path: str) -> Path:
     else:
         candidate = candidate.resolve()
     if not candidate.is_relative_to(base_dir):
-        raise HTTPException(status_code=403, detail="Evidence path is outside acceptance directory")
+        raise HTTPException(
+            status_code=403, detail="Evidence path is outside acceptance directory"
+        )
     if not candidate.is_file():
         raise HTTPException(status_code=404, detail="Evidence file not found")
     return candidate
@@ -64,7 +66,7 @@ class DeviceCreate(BaseModel):
     daily_limit: int = DEFAULT_DAILY_LIMIT
     min_interval_sec: int = DEFAULT_MIN_INTERVAL_SEC
 
-    @field_validator('adb_serial')
+    @field_validator("adb_serial")
     @classmethod
     def validate_adb_serial(cls, v: str) -> str:
         try:
@@ -222,9 +224,11 @@ def delete_device(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    device = db.query(Device).filter(
-        Device.id == device_id, Device.user_id == current_user.id
-    ).first()
+    device = (
+        db.query(Device)
+        .filter(Device.id == device_id, Device.user_id == current_user.id)
+        .first()
+    )
     if not device:
         _raise_device_not_found()
     db.delete(device)
@@ -238,9 +242,11 @@ async def device_heartbeat(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    device = db.query(Device).filter(
-        Device.id == device_id, Device.user_id == current_user.id
-    ).first()
+    device = (
+        db.query(Device)
+        .filter(Device.id == device_id, Device.user_id == current_user.id)
+        .first()
+    )
     if not device:
         _raise_device_not_found()
 
@@ -248,16 +254,21 @@ async def device_heartbeat(
     try:
         validate_adb_serial(device.adb_serial)
     except ADBError:
-        return {"online": False, "serial": device.adb_serial, "error": "Invalid serial format"}
+        return {
+            "online": False,
+            "serial": device.adb_serial,
+            "error": "Invalid serial format",
+        }
 
     health = await asyncio.to_thread(adb_device_health, device.adb_serial)
     online = bool(health.get("online"))
 
     if online:
         device.last_heartbeat = datetime.now(timezone.utc)
-        
+
         # Check cooldown state
         from server.services.task_stats import get_wave_state
+
         wave = get_wave_state(device.id) or {}
         is_cooldown = False
         if wave.get("rate_limited_at"):
@@ -267,15 +278,21 @@ async def device_heartbeat(
                 if elapsed < 4 * 3600:
                     is_cooldown = True
             except Exception as exc:
-                logging.getLogger("thunder.api.devices").debug("Cooldown parse failed: %s", exc)
+                logging.getLogger("thunder.api.devices").debug(
+                    "Cooldown parse failed: %s", exc
+                )
 
         if is_cooldown:
             device.runtime_status = "cooldown"
         elif device.runtime_status in ("offline", "keyboard_error", "cooldown"):
             device.runtime_status = "idle"
-            
+
         device.keyboard_ready = bool(health.get("adb_keyboard_active"))
-        device.keyboard_message = "ADB Keyboard active" if device.keyboard_ready else "ADB Keyboard not active"
+        device.keyboard_message = (
+            "ADB Keyboard active"
+            if device.keyboard_ready
+            else "ADB Keyboard not active"
+        )
         device.last_checked_at = datetime.now(timezone.utc)
         device.last_error = ""
         db.commit()
@@ -294,9 +311,11 @@ def get_device_health(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    device = db.query(Device).filter(
-        Device.id == device_id, Device.user_id == current_user.id
-    ).first()
+    device = (
+        db.query(Device)
+        .filter(Device.id == device_id, Device.user_id == current_user.id)
+        .first()
+    )
     if not device:
         _raise_device_not_found()
     try:
@@ -306,17 +325,25 @@ def get_device_health(
 
     health = check_device_health(device.adb_serial)
     if health.get("online"):
-        device.runtime_status = "idle" if device.runtime_status == "offline" else device.runtime_status
+        device.runtime_status = (
+            "idle" if device.runtime_status == "offline" else device.runtime_status
+        )
         device.last_heartbeat = datetime.now(timezone.utc)
         device.last_error = ""
     else:
         device.runtime_status = "offline"
         device.last_error = str(health.get("error") or "ADB health failed")[:500]
     device.keyboard_ready = bool(health.get("adb_keyboard_active"))
-    device.keyboard_message = "ADB Keyboard active" if device.keyboard_ready else "ADB Keyboard not active"
+    device.keyboard_message = (
+        "ADB Keyboard active" if device.keyboard_ready else "ADB Keyboard not active"
+    )
     device.last_checked_at = datetime.now(timezone.utc)
     db.commit()
-    return {"ok": bool(health.get("online")), "serial": device.adb_serial, "health": health}
+    return {
+        "ok": bool(health.get("online")),
+        "serial": device.adb_serial,
+        "health": health,
+    }
 
 
 @router.post("/{device_id}/prepare-keyboard", response_model=DeviceOut)
@@ -325,9 +352,11 @@ def prepare_device_keyboard(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    device = db.query(Device).filter(
-        Device.id == device_id, Device.user_id == current_user.id
-    ).first()
+    device = (
+        db.query(Device)
+        .filter(Device.id == device_id, Device.user_id == current_user.id)
+        .first()
+    )
     if not device:
         _raise_device_not_found()
     try:
@@ -347,9 +376,11 @@ def reset_device_fuse(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    device = db.query(Device).filter(
-        Device.id == device_id, Device.user_id == current_user.id
-    ).first()
+    device = (
+        db.query(Device)
+        .filter(Device.id == device_id, Device.user_id == current_user.id)
+        .first()
+    )
     if not device:
         _raise_device_not_found()
     device.consecutive_failures = 0
@@ -394,10 +425,14 @@ class DeviceAcceptanceResponse(BaseModel):
 
 
 def _get_device_for_user(db: Session, user_id: str, device_id: str) -> Device:
-    device = db.query(Device).filter(
-        Device.id == device_id,
-        Device.user_id == user_id,
-    ).first()
+    device = (
+        db.query(Device)
+        .filter(
+            Device.id == device_id,
+            Device.user_id == user_id,
+        )
+        .first()
+    )
     if not device:
         _raise_device_not_found()
     try:
@@ -425,19 +460,30 @@ def _serialize_acceptance_report(report: dict) -> DeviceAcceptanceResponse:
         profile_matches=bool(report.get("profile_matches")),
         blocker=str(observation.get("blocker") or "") or None,
         current_screen=str(observation.get("screen") or "") or None,
-        screenshot_path=str(report.get("screenshot_path") or observation.get("screenshot_path") or "") or None,
+        screenshot_path=str(
+            report.get("screenshot_path") or observation.get("screenshot_path") or ""
+        )
+        or None,
         report_path=str(report.get("report_path") or "") or None,
         health=report.get("health") or {},
         keyboard=report.get("keyboard") or {},
-        before_decision=report.get("before_decision") if isinstance(report.get("before_decision"), dict) else {},
-        after_decision=report.get("after_decision") if isinstance(report.get("after_decision"), dict) else {},
-        send_verification=report.get("send_verification") if isinstance(report.get("send_verification"), dict) else {},
+        before_decision=report.get("before_decision")
+        if isinstance(report.get("before_decision"), dict)
+        else {},
+        after_decision=report.get("after_decision")
+        if isinstance(report.get("after_decision"), dict)
+        else {},
+        send_verification=report.get("send_verification")
+        if isinstance(report.get("send_verification"), dict)
+        else {},
         result=result if isinstance(result, dict) else None,
         observation=observation if isinstance(observation, dict) else None,
     )
 
 
-async def _run_acceptance(device: Device, body: DeviceAcceptanceRequest, *, live_send: bool) -> DeviceAcceptanceResponse:
+async def _run_acceptance(
+    device: Device, body: DeviceAcceptanceRequest, *, live_send: bool
+) -> DeviceAcceptanceResponse:
     args = Namespace(
         serial=device.adb_serial,
         industry=body.industry_slug,
@@ -471,7 +517,9 @@ async def run_device_dry_run(
     return await _run_acceptance(device, body, live_send=False)
 
 
-@router.post("/{device_id}/acceptance/live-send", response_model=DeviceAcceptanceResponse)
+@router.post(
+    "/{device_id}/acceptance/live-send", response_model=DeviceAcceptanceResponse
+)
 async def run_device_live_send(
     device_id: str,
     body: DeviceAcceptanceRequest,
@@ -491,16 +539,20 @@ async def scan_and_register_devices(
         serials = await asyncio.to_thread(ADBClient.list_devices, 15.0)
     except Exception as e:
         import logging
+
         logging.getLogger("thunder.api").exception("Failed to execute adb scan")
-        raise HTTPException(status_code=500, detail=f"Failed to execute adb scan: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to execute adb scan: {str(e)}"
+        )
 
     # Register any newly detected devices and prepare ADB Keyboard best-effort.
     keyboard_status_by_serial = {}
     for s in serials:
-        existing = db.query(Device).filter(
-            Device.user_id == current_user.id,
-            Device.adb_serial == s
-        ).first()
+        existing = (
+            db.query(Device)
+            .filter(Device.user_id == current_user.id, Device.adb_serial == s)
+            .first()
+        )
         keyboard_status_by_serial[s] = await asyncio.to_thread(
             prepare_adb_keyboard, s, True
         )
@@ -527,10 +579,13 @@ async def scan_and_register_devices(
         .order_by(Device.name)
         .all()
     )
-    return [_device_out(d, keyboard_status_by_serial.get(d.adb_serial)) for d in devices]
+    return [
+        _device_out(d, keyboard_status_by_serial.get(d.adb_serial)) for d in devices
+    ]
 
 
 # ── REMOTE SCREEN STREAMING & CONTROL ENDPOINTS ──────────────────
+
 
 def capture_screen_as_jpeg(adb_serial: str) -> bytes | None:
     """Capture screen as PNG via ADB and convert to lightweight JPEG."""
@@ -548,7 +603,9 @@ def capture_screen_as_jpeg(adb_serial: str) -> bytes | None:
         im.save(out, format="JPEG", quality=70)
         return out.getvalue()
     except Exception as exc:
-        logging.getLogger("thunder.api.devices").warning("Screen capture failed: %s", exc)
+        logging.getLogger("thunder.api.devices").warning(
+            "Screen capture failed: %s", exc
+        )
         return None
 
 
@@ -557,10 +614,7 @@ async def mjpeg_generator(adb_serial: str):
     while True:
         frame = await asyncio.to_thread(capture_screen_as_jpeg, adb_serial)
         if frame:
-            yield (
-                b'--frame\r\n'
-                b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n'
-            )
+            yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + frame + b"\r\n")
         else:
             await asyncio.sleep(0.5)
         # Target ~6 FPS
@@ -573,9 +627,11 @@ async def device_screen_stream(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    device = db.query(Device).filter(
-        Device.id == device_id, Device.user_id == current_user.id
-    ).first()
+    device = (
+        db.query(Device)
+        .filter(Device.id == device_id, Device.user_id == current_user.id)
+        .first()
+    )
     if not device:
         _raise_device_not_found()
     try:
@@ -591,7 +647,7 @@ async def device_screen_stream(
     )
     return StreamingResponse(
         mjpeg_generator(device.adb_serial),
-        media_type="multipart/x-mixed-replace; boundary=frame"
+        media_type="multipart/x-mixed-replace; boundary=frame",
     )
 
 
@@ -600,7 +656,9 @@ def get_device_resolution(adb_serial: str) -> tuple[int, int]:
     try:
         return ADBClient(adb_serial).resolution()
     except Exception as exc:
-        logging.getLogger("thunder.api.devices").debug("Resolution check failed for %s: %s", adb_serial, exc)
+        logging.getLogger("thunder.api.devices").debug(
+            "Resolution check failed for %s: %s", adb_serial, exc
+        )
     return 1080, 1920
 
 
@@ -616,9 +674,11 @@ async def device_control_click(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    device = db.query(Device).filter(
-        Device.id == device_id, Device.user_id == current_user.id
-    ).first()
+    device = (
+        db.query(Device)
+        .filter(Device.id == device_id, Device.user_id == current_user.id)
+        .first()
+    )
     if not device:
         _raise_device_not_found()
     try:
@@ -649,9 +709,11 @@ async def device_control_swipe(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    device = db.query(Device).filter(
-        Device.id == device_id, Device.user_id == current_user.id
-    ).first()
+    device = (
+        db.query(Device)
+        .filter(Device.id == device_id, Device.user_id == current_user.id)
+        .first()
+    )
     if not device:
         _raise_device_not_found()
     try:
@@ -667,7 +729,11 @@ async def device_control_swipe(
 
     await asyncio.to_thread(
         ADBClient(device.adb_serial).swipe,
-        real_x1, real_y1, real_x2, real_y2, body.duration_ms
+        real_x1,
+        real_y1,
+        real_x2,
+        real_y2,
+        body.duration_ms,
     )
     return {"ok": True}
 
@@ -683,9 +749,11 @@ async def device_control_key(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    device = db.query(Device).filter(
-        Device.id == device_id, Device.user_id == current_user.id
-    ).first()
+    device = (
+        db.query(Device)
+        .filter(Device.id == device_id, Device.user_id == current_user.id)
+        .first()
+    )
     if not device:
         _raise_device_not_found()
     try:
@@ -693,7 +761,9 @@ async def device_control_key(
     except ADBError:
         raise HTTPException(status_code=400, detail="Invalid ADB serial format")
     if not body.key_code.isdigit():
-        raise HTTPException(status_code=400, detail="Keycode must be a positive integer")
+        raise HTTPException(
+            status_code=400, detail="Keycode must be a positive integer"
+        )
 
     await asyncio.to_thread(ADBClient(device.adb_serial).keyevent, body.key_code)
     return {"ok": True}
@@ -710,9 +780,11 @@ async def device_control_text(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    device = db.query(Device).filter(
-        Device.id == device_id, Device.user_id == current_user.id
-    ).first()
+    device = (
+        db.query(Device)
+        .filter(Device.id == device_id, Device.user_id == current_user.id)
+        .first()
+    )
     if not device:
         _raise_device_not_found()
     try:

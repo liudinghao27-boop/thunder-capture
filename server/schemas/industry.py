@@ -110,14 +110,18 @@ class IndustryCreate(BaseModel):
     @classmethod
     def _validate_webhook_url(cls, value: str) -> str:
         if value and not is_safe_webhook_url(value):
-            raise ValueError("Webhook URL 必须是安全的 HTTPS 地址，且不能指向私有/本地网络")
+            raise ValueError(
+                "Webhook URL 必须是安全的 HTTPS 地址，且不能指向私有/本地网络"
+            )
         return value
 
     @field_validator("effect_webhook_url")
     @classmethod
     def _validate_effect_webhook_url(cls, value: str) -> str:
         if value and not is_safe_webhook_url(value):
-            raise ValueError("Effect Webhook URL 必须是安全的 HTTPS 地址，且不能指向私有/本地网络")
+            raise ValueError(
+                "Effect Webhook URL 必须是安全的 HTTPS 地址，且不能指向私有/本地网络"
+            )
         return value
 
 
@@ -171,14 +175,18 @@ class IndustryUpdate(BaseModel):
     @classmethod
     def _validate_webhook_url(cls, value: Optional[str]) -> Optional[str]:
         if value and not is_safe_webhook_url(value):
-            raise ValueError("Webhook URL 必须是安全的 HTTPS 地址，且不能指向私有/本地网络")
+            raise ValueError(
+                "Webhook URL 必须是安全的 HTTPS 地址，且不能指向私有/本地网络"
+            )
         return value
 
     @field_validator("effect_webhook_url")
     @classmethod
     def _validate_effect_webhook_url(cls, value: Optional[str]) -> Optional[str]:
         if value and not is_safe_webhook_url(value):
-            raise ValueError("Effect Webhook URL 必须是安全的 HTTPS 地址，且不能指向私有/本地网络")
+            raise ValueError(
+                "Effect Webhook URL 必须是安全的 HTTPS 地址，且不能指向私有/本地网络"
+            )
         return value
 
 

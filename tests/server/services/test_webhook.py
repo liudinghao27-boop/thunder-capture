@@ -72,6 +72,7 @@ def test_push_leads_empty_url(mock_post):
 @patch("server.services.webhook.httpx.post")
 def test_push_leads_network_failure(mock_post):
     import httpx
+
     mock_post.side_effect = httpx.ConnectError("connection error")
     result = push_leads_to_webhook(
         webhook_url="https://example.com/hook",

@@ -345,6 +345,10 @@ config/system.yaml
 # Runtime artifacts
 data/chrome_profile/
 data/chrome_data/
+data/chrome_cdp_profile/
+data/chrome_data_backup*/
+data/mc_failures/
+scripts/data/
 data/*.png
 data/*log*
 data/*.db

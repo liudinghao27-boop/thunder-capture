@@ -58,6 +58,7 @@ def test_send_dm_task_skips_when_compliance_mode_enabled(db_session, monkeypatch
         device_id="d1",
         adb_serial="serial1",
         industry_slug="test-ind",
+        user_id="u1",
         task_data={"source_sec_uid": "sec1"},
         reply_msg="hello",
     )
@@ -80,6 +81,7 @@ def test_send_dm_task_runs_when_compliance_mode_disabled(db_session, monkeypatch
         device_id="d1",
         adb_serial="serial1",
         industry_slug="test-ind",
+        user_id="u1",
         task_data={"source_sec_uid": "sec1"},
         reply_msg="hello",
     )
@@ -91,13 +93,21 @@ def test_send_dm_task_runs_when_compliance_mode_disabled(db_session, monkeypatch
     retry_mock.assert_not_called()
 
 
-def test_run_send_batch_all_active(db_session, monkeypatch):
+def test_run_send_batch_requires_user_id(db_session, monkeypatch):
     _seed_industry(db_session, compliance_mode=False)
     with patch("core.task.worker.run_senders") as mock_run:
         mock_run.return_value = {"ok": True, "sent_total": 1}
-        result = run_send_batch.run("__all_active__", "")
+        result = run_send_batch.run("test-ind", "")
+        assert result["ok"] is False
+        assert "user_id is required" in result["error"]
+
+
+def test_run_send_batch_dispatches_for_user(db_session, monkeypatch):
+    _seed_industry(db_session, compliance_mode=False)
+    with patch("core.task.worker.run_senders") as mock_run:
+        mock_run.return_value = {"ok": True, "sent_total": 1}
+        result = run_send_batch.run("test-ind", "u1")
         assert result["ok"] is True
-        assert result["mode"] == "all_active"
         assert mock_run.called
 
 
@@ -110,6 +120,7 @@ def test_send_dm_task_skips_when_industry_missing(db_session, monkeypatch):
         device_id="d1",
         adb_serial="serial1",
         industry_slug="missing-ind",
+        user_id="u1",
         task_data={"source_sec_uid": "sec1"},
         reply_msg="hello",
     )

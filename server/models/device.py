@@ -18,7 +18,7 @@ class Device(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey("sa_users.id"), nullable=False, index=True)
-    name = Column(String(64), nullable=False)             # "oppo-main"
+    name = Column(String(64), nullable=False)  # "oppo-main"
     adb_serial = Column(String(128), nullable=False)
     daily_limit = Column(Integer, default=15)
     min_interval_sec = Column(Integer, default=90)

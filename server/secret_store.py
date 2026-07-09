@@ -60,7 +60,7 @@ def decrypt_secret(value: str | None) -> str:
     value = value or ""
     if not value.startswith(_PREFIX):
         return value
-    token = value[len(_PREFIX):]
+    token = value[len(_PREFIX) :]
     try:
         return _get_fernet().decrypt(token.encode("utf-8")).decode("utf-8")
     except InvalidToken:

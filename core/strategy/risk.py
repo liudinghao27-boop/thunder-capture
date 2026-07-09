@@ -16,7 +16,8 @@ log = logging.getLogger("thunder.strategy.risk")
 @dataclass
 class RiskDecision:
     """Output of risk assessment for a single action."""
-    action: str                # "proceed" | "cooldown" | "isolate" | "nurture"
+
+    action: str  # "proceed" | "cooldown" | "isolate" | "nurture"
     reason: str = ""
     cooldown_hours: int = 0
     should_isolate: bool = False
@@ -43,16 +44,34 @@ class RiskManager:
     # ── Configurable marker sets ──
 
     RATE_LIMIT_MARKERS = (
-        "频繁", "太快", "休息", "稍后再试", "操作过于", "暂停",
-        "frequency", "too fast", "rate limit", "try again later",
+        "频繁",
+        "太快",
+        "休息",
+        "稍后再试",
+        "操作过于",
+        "暂停",
+        "frequency",
+        "too fast",
+        "rate limit",
+        "try again later",
     )
     SHADOW_BAN_MARKERS = (
-        "隐私设置", "无法发送消息", "privacy",
+        "隐私设置",
+        "无法发送消息",
+        "privacy",
     )
     DEVICE_BLOCKER_MARKERS = (
-        "real_name_verification", "captcha", "login_required",
-        "risk_control", "Blocked before execution", "Blocked after execution",
-        "Take_over", "实名认证", "验证码", "登录", "风控",
+        "real_name_verification",
+        "captcha",
+        "login_required",
+        "risk_control",
+        "Blocked before execution",
+        "Blocked after execution",
+        "Take_over",
+        "实名认证",
+        "验证码",
+        "登录",
+        "风控",
     )
 
     def __init__(
@@ -68,7 +87,9 @@ class RiskManager:
     ):
         self._rate_limit_markers = rate_limit_markers or self.RATE_LIMIT_MARKERS
         self._shadow_ban_markers = shadow_ban_markers or self.SHADOW_BAN_MARKERS
-        self._device_blocker_markers = device_blocker_markers or self.DEVICE_BLOCKER_MARKERS
+        self._device_blocker_markers = (
+            device_blocker_markers or self.DEVICE_BLOCKER_MARKERS
+        )
         self.max_consecutive_failures = max_consecutive_failures
         self.base_cooldown_hours = base_cooldown_hours
         self.max_cooldown_hours = max_cooldown_hours

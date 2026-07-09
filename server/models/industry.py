@@ -3,7 +3,16 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, JSON, String
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    JSON,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import relationship
 
 from server.models import Base
@@ -18,14 +27,14 @@ class Industry(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), ForeignKey("sa_users.id"), nullable=False, index=True)
-    name = Column(String(128), nullable=False)          # "征兵咨询"
-    slug = Column(String(64), nullable=False)           # "recruitment"
-    keywords = Column(JSON, default=list)               # ["征兵","当兵"...]
+    name = Column(String(128), nullable=False)  # "征兵咨询"
+    slug = Column(String(64), nullable=False)  # "recruitment"
+    keywords = Column(JSON, default=list)  # ["征兵","当兵"...]
     platforms = Column(JSON, default=lambda: ["douyin"])
     reply_tone = Column(String(64), default="业内人士")  # "退伍老兵"
     reply_style = Column(String(256), default="亲切专业")
     reply_hook = Column(String(256), default="")
-    categories = Column(JSON, default=list)              # ["入伍条件"..]
+    categories = Column(JSON, default=list)  # ["入伍条件"..]
     daily_limit = Column(Integer, default=15)
     video_max_age_days = Column(Integer, default=14)
     comment_max_age_hours = Column(Integer, default=48)
@@ -56,3 +65,7 @@ class Industry(Base):
     created_at = Column(DateTime, default=_utcnow)
 
     user = relationship("User")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "slug", name="uix_industry_user_slug"),
+    )

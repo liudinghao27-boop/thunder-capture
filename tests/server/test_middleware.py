@@ -108,8 +108,9 @@ def test_redis_rate_limiter_remaining():
     assert limiter.remaining("ip1") == 0
 
 
-def test_rate_limit_middleware_falls_back_when_redis_unavailable():
-    """Middleware should use InMemoryRateLimiter when no Redis client is provided."""
+def test_rate_limit_middleware_falls_back_when_redis_unavailable(monkeypatch):
+    """Middleware should use InMemoryRateLimiter when no Redis client is provided and Redis is unreachable."""
+    monkeypatch.setattr("server.middleware.get_redis_client", lambda: None)
     app = MagicMock()
     middleware = RateLimitMiddleware(app, redis_client=None)
     assert isinstance(middleware.auth_limiter, InMemoryRateLimiter)

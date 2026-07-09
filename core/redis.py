@@ -39,5 +39,7 @@ def get_redis_client(**kwargs: Any) -> Any | None:
         client.ping()
         return client
     except redis.exceptions.ConnectionError as e:
-        logger.warning("Redis unavailable at %s: %s. Falling back to in-memory.", url, e)
+        logger.warning(
+            "Redis unavailable at %s: %s. Falling back to in-memory.", url, e
+        )
         return None

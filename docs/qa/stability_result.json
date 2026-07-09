@@ -1,0 +1,55 @@
+{
+  "total": 5,
+  "success_count": 0,
+  "success_rate": 0.0,
+  "risk_control_rate": 1.0,
+  "cdp_failure_rate": 0.0,
+  "average_comments": 0.0,
+  "runs": [
+    {
+      "index": 1,
+      "timestamp": "2026-07-05T17:59:30.481714",
+      "success": false,
+      "comment_count": 0,
+      "risk_control": true,
+      "cdp_failure": false,
+      "error": ""
+    },
+    {
+      "index": 2,
+      "timestamp": "2026-07-05T17:59:52.928381",
+      "success": false,
+      "comment_count": 0,
+      "risk_control": true,
+      "cdp_failure": false,
+      "error": ""
+    },
+    {
+      "index": 3,
+      "timestamp": "2026-07-05T18:00:18.908846",
+      "success": false,
+      "comment_count": 0,
+      "risk_control": true,
+      "cdp_failure": false,
+      "error": ""
+    },
+    {
+      "index": 4,
+      "timestamp": "2026-07-05T18:00:45.850536",
+      "success": false,
+      "comment_count": 0,
+      "risk_control": true,
+      "cdp_failure": false,
+      "error": ""
+    },
+    {
+      "index": 5,
+      "timestamp": "2026-07-05T18:01:10.477581",
+      "success": false,
+      "comment_count": 0,
+      "risk_control": true,
+      "cdp_failure": false,
+      "error": ""
+    }
+  ]
+}

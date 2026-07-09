@@ -13,6 +13,7 @@ sys.path.insert(0, str(BASE_DIR / "deps" / "crawl4ai"))  # Vendored Crawl4AI
 if sys.platform == "win32":
     # Global UTF-8 — prevents subprocess/thread encoding crashes
     import os as _os
+
     _os.environ.setdefault("PYTHONIOENCODING", "utf-8")
     _os.environ.setdefault("PYTHONUTF8", "1")
     for stream_name in ("stdout", "stderr"):
@@ -39,7 +40,17 @@ from fastapi.responses import JSONResponse  # noqa: E402
 from server.config import CORS_ORIGINS  # noqa: E402
 from server.errors import AppError, ErrorCode, serialize_error  # noqa: E402
 from server.middleware import RateLimitMiddleware, SecurityHeadersMiddleware  # noqa: E402
-from server.api import agent, auth, dashboard, devices, industries, jobs, leads, stats  # noqa: E402
+from server.api import (  # noqa: E402
+    agent,
+    auth,
+    dashboard,
+    devices,
+    industries,
+    jobs,
+    leads,
+    stats,
+    system,
+)
 import server.models  # noqa: F401,E402 — ensure model imports resolve
 from server.models import Base, engine  # noqa: E402
 from server.services.migrations import initialize_database  # noqa: E402
@@ -48,6 +59,14 @@ initialize_database(Base, engine)
 
 app = FastAPI(title="Thunder Capture", version="0.2.0")
 error_log = logging.getLogger("thunder.api.errors")
+
+# Optional Prometheus metrics instrumentation (production dependency)
+try:
+    from prometheus_fastapi_instrumentator import Instrumentator
+
+    Instrumentator().instrument(app).expose(app, endpoint="/api/system/metrics")
+except Exception:  # pragma: no cover - optional dependency for local dev
+    logger.info("Prometheus instrumentation not available; metrics endpoint disabled.")
 
 
 def _request_correlation_id(request: Request) -> str:
@@ -82,6 +101,7 @@ async def unhandled_error_handler(request: Request, exc: Exception):
         content=serialize_error(error, correlation_id=correlation_id),
     )
 
+
 # ── Security middleware (order matters: outermost first) ──
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RateLimitMiddleware)
@@ -109,6 +129,7 @@ static_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 app.include_router(auth.router)
+app.include_router(system.router)
 app.include_router(dashboard.router)
 app.include_router(agent.router)
 app.include_router(leads.router)
@@ -119,6 +140,7 @@ app.include_router(stats.router)
 
 # Start auto-recovery background timer
 from server.workers import start_auto_recovery  # noqa: E402
+
 start_auto_recovery()
 
 

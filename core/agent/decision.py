@@ -47,13 +47,19 @@ def _action_for_state(
         return "confirm_success", "Message send evidence is visible."
 
     if page_state == "search_results":
-        return "open_target_profile", "Search results are visible; open the matched target profile."
+        return (
+            "open_target_profile",
+            "Search results are visible; open the matched target profile.",
+        )
 
     if page_state == "profile_dm_ready":
         return "open_chat", "Profile message entry is available; open the private chat."
 
     if page_state == "chat_input_disabled":
-        return "stop", "Chat input is disabled; stop this send attempt and preserve evidence."
+        return (
+            "stop",
+            "Chat input is disabled; stop this send attempt and preserve evidence.",
+        )
 
     if page_state == "dm_unavailable":
         return "stop", "Private message entry is unavailable for this target."
@@ -65,9 +71,18 @@ def _action_for_state(
         return "search_target", "Search page is visible; proceed to target lookup."
 
     if page_state == "launcher":
-        return "open_app", "Device is on launcher; open the target platform before continuing."
+        return (
+            "open_app",
+            "Device is on launcher; open the target platform before continuing.",
+        )
 
     if page_state == "unknown":
-        return "observe", "Current screen is unknown; capture more evidence before acting."
+        return (
+            "observe",
+            "Current screen is unknown; capture more evidence before acting.",
+        )
 
-    return "observe", f"Observed page state {page_state}; capture more evidence before acting."
+    return (
+        "observe",
+        f"Observed page state {page_state}; capture more evidence before acting.",
+    )

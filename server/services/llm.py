@@ -59,6 +59,7 @@ def _resolve_api_key(provider: str) -> str:
     if yk:
         try:
             from core.config import load_system
+
             cfg = load_system()
             section, field = yk
             key = str(cfg.get(section, {}).get(field, ""))
@@ -129,6 +130,7 @@ def clear_client_cache():
 
 
 # ── Convenience shortcuts ───────────────────────────────
+
 
 def get_deepseek_client() -> OpenAI:
     """Get cached DeepSeek client."""

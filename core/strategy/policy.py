@@ -53,9 +53,10 @@ def is_send_window_open(industry: IndustryConfig) -> bool:
 @dataclass
 class PolicyDecision:
     """Result of policy gate check."""
+
     allowed: bool
     reason: str = ""
-    action: str = ""            # "send" | "wait" | "cooldown" | "isolate" | "stop"
+    action: str = ""  # "send" | "wait" | "cooldown" | "isolate" | "stop"
     wait_seconds: int = 0
     meta: dict[str, Any] = field(default_factory=dict)
 
@@ -136,7 +137,11 @@ class SendPolicyGate:
         )
         if wd.action != "send":
             return PolicyDecision(
-                False, wd.reason, wd.action, wd.wait_seconds, wd.meta or {},
+                False,
+                wd.reason,
+                wd.action,
+                wd.wait_seconds,
+                wd.meta or {},
             )
 
         return PolicyDecision(True, "ok", "send")

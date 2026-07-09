@@ -24,7 +24,9 @@ def test_same_state_update_is_allowed_for_heartbeats():
     assert transition(JobState.RUNNING, JobState.RUNNING) is JobState.RUNNING
 
 
-@pytest.mark.parametrize("terminal", [JobState.CANCELLED, JobState.DONE, JobState.FAILED])
+@pytest.mark.parametrize(
+    "terminal", [JobState.CANCELLED, JobState.DONE, JobState.FAILED]
+)
 def test_terminal_job_cannot_change_state(terminal):
     with pytest.raises(ValueError, match="illegal job transition"):
         transition(terminal, JobState.RUNNING)

@@ -107,7 +107,9 @@ class ADBClient:
             text=False,
             timeout=timeout,
         )
-        return parse_adb_devices(_decode_adb_text(result.stdout) + _decode_adb_text(result.stderr))
+        return parse_adb_devices(
+            _decode_adb_text(result.stdout) + _decode_adb_text(result.stderr)
+        )
 
     def run(
         self,
@@ -152,7 +154,9 @@ class ADBClient:
     def tap(self, x: int, y: int) -> ADBResult:
         return self.shell("input", "tap", str(int(x)), str(int(y)), timeout=3)
 
-    def swipe(self, x1: int, y1: int, x2: int, y2: int, duration_ms: int = 300) -> ADBResult:
+    def swipe(
+        self, x1: int, y1: int, x2: int, y2: int, duration_ms: int = 300
+    ) -> ADBResult:
         return self.shell(
             "input",
             "swipe",
@@ -224,7 +228,9 @@ class ADBClient:
             return False
         if ocr_result.status != "ok":
             return False
-        return _normalize_visible_text(expected) in _normalize_visible_text(ocr_result.text)
+        return _normalize_visible_text(expected) in _normalize_visible_text(
+            ocr_result.text
+        )
 
     def force_stop(self, package_name: str) -> ADBResult:
         if not re.match(r"^[a-zA-Z0-9_.]+$", str(package_name or "")):

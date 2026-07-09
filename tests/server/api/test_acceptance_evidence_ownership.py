@@ -35,7 +35,9 @@ def test_evidence_file_requires_owner_metadata(tmp_path, monkeypatch):
     app.dependency_overrides[get_current_user] = lambda: current_user
     try:
         with TestClient(app) as client:
-            res = client.get(f"/api/devices/evidence/file?path={evidence}&report_path={report}")
+            res = client.get(
+                f"/api/devices/evidence/file?path={evidence}&report_path={report}"
+            )
     finally:
         app.dependency_overrides.clear()
 
@@ -72,7 +74,9 @@ def test_evidence_file_allows_owner_metadata(tmp_path, monkeypatch):
     app.dependency_overrides[get_current_user] = lambda: current_user
     try:
         with TestClient(app) as client:
-            res = client.get(f"/api/devices/evidence/file?path={evidence}&report_path={report}")
+            res = client.get(
+                f"/api/devices/evidence/file?path={evidence}&report_path={report}"
+            )
     finally:
         app.dependency_overrides.clear()
 

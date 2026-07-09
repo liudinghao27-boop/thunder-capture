@@ -90,7 +90,11 @@ class OCRService:
                 self._reader_error = f"easyocr not available: {exc}"
                 raise RuntimeError(self._reader_error) from exc
 
-            download_enabled = os.getenv("THUNDER_OCR_DOWNLOAD", "").strip() in {"1", "true", "yes"}
+            download_enabled = os.getenv("THUNDER_OCR_DOWNLOAD", "").strip() in {
+                "1",
+                "true",
+                "yes",
+            }
             try:
                 self._reader = easyocr.Reader(
                     ["ch_sim", "en"],
@@ -99,7 +103,9 @@ class OCRService:
                     download_enabled=download_enabled,
                 )
                 return self._reader
-            except Exception as exc:  # pragma: no cover - model availability is env-specific
+            except (
+                Exception
+            ) as exc:  # pragma: no cover - model availability is env-specific
                 self._reader_error = f"easyocr init failed: {exc}"
                 raise RuntimeError(self._reader_error) from exc
 
@@ -112,7 +118,9 @@ class OCRService:
             reader = self._get_easyocr_reader()
             raw_rows = reader.readtext(np.array(image), detail=1, paragraph=False)
         except Exception as exc:
-            return OCRResult(provider="easyocr", status="unavailable", error=str(exc)[:500])
+            return OCRResult(
+                provider="easyocr", status="unavailable", error=str(exc)[:500]
+            )
 
         rows: list[OCRRow] = []
         for item in raw_rows or []:

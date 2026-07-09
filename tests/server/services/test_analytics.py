@@ -6,7 +6,11 @@ from sqlalchemy.pool import StaticPool
 
 from server.models import Base
 from server.models.task import TaskQueue
-from server.services.analytics import aggregate_by_keyword, aggregate_by_device, query_task_rows
+from server.services.analytics import (
+    aggregate_by_keyword,
+    aggregate_by_device,
+    query_task_rows,
+)
 
 
 TEST_DATABASE_URL = "sqlite:///:memory:"
@@ -65,10 +69,38 @@ def test_query_task_rows_filters_by_date_and_industry(db_session):
     now = datetime.now(timezone.utc)
     old = now - timedelta(days=10)
     rows = [
-        TaskQueue(industry_slug="test", consumer_id="d1", fetched_at=now.isoformat(), status="sent", video_id="v1", comment_id="c1"),
-        TaskQueue(industry_slug="test", consumer_id="d2", fetched_at=old.isoformat(), status="replied", video_id="v2", comment_id="c2"),
-        TaskQueue(industry_slug="other", consumer_id="d3", fetched_at=now.isoformat(), status="sent", video_id="v3", comment_id="c3"),
-        TaskQueue(industry_slug="test", consumer_id="d4", fetched_at="", status="pending", video_id="v4", comment_id="c4"),
+        TaskQueue(
+            industry_slug="test",
+            consumer_id="d1",
+            fetched_at=now.isoformat(),
+            status="sent",
+            video_id="v1",
+            comment_id="c1",
+        ),
+        TaskQueue(
+            industry_slug="test",
+            consumer_id="d2",
+            fetched_at=old.isoformat(),
+            status="replied",
+            video_id="v2",
+            comment_id="c2",
+        ),
+        TaskQueue(
+            industry_slug="other",
+            consumer_id="d3",
+            fetched_at=now.isoformat(),
+            status="sent",
+            video_id="v3",
+            comment_id="c3",
+        ),
+        TaskQueue(
+            industry_slug="test",
+            consumer_id="d4",
+            fetched_at="",
+            status="pending",
+            video_id="v4",
+            comment_id="c4",
+        ),
     ]
     db_session.add_all(rows)
     db_session.commit()
@@ -82,8 +114,24 @@ def test_query_task_rows_filters_by_date_and_industry(db_session):
 def test_query_task_rows_filters_by_owner_user_id(db_session):
     now = datetime.now(timezone.utc)
     rows = [
-        TaskQueue(industry_slug="test", owner_user_id="u1", consumer_id="d1", fetched_at=now.isoformat(), status="sent", video_id="v1", comment_id="c1"),
-        TaskQueue(industry_slug="test", owner_user_id="u2", consumer_id="d2", fetched_at=now.isoformat(), status="replied", video_id="v2", comment_id="c2"),
+        TaskQueue(
+            industry_slug="test",
+            owner_user_id="u1",
+            consumer_id="d1",
+            fetched_at=now.isoformat(),
+            status="sent",
+            video_id="v1",
+            comment_id="c1",
+        ),
+        TaskQueue(
+            industry_slug="test",
+            owner_user_id="u2",
+            consumer_id="d2",
+            fetched_at=now.isoformat(),
+            status="replied",
+            video_id="v2",
+            comment_id="c2",
+        ),
     ]
     db_session.add_all(rows)
     db_session.commit()

@@ -13,4 +13,9 @@ from core.classify import (
 )
 from core.config import IndustryConfig
 
-__all__ = ["classify_batch", "enqueue_classified", "prefilter_comments", "IndustryConfig"]
+__all__ = [
+    "classify_batch",
+    "enqueue_classified",
+    "prefilter_comments",
+    "IndustryConfig",
+]

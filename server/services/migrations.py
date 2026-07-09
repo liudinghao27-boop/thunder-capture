@@ -8,6 +8,7 @@ from dataclasses import dataclass
 
 from sqlalchemy import inspect, text
 from sqlalchemy.engine import Engine
+from sqlalchemy.orm import Session
 
 log = logging.getLogger("thunder.migrations")
 
@@ -84,6 +85,10 @@ ADDITIVE_MIGRATIONS: dict[str, tuple[ColumnSpec, ...]] = {
         ColumnSpec("captured_at", "TIMESTAMP"),
         ColumnSpec("created_at", "TIMESTAMP"),
     ),
+    "sa_target_bloggers": (ColumnSpec("owner_user_id", "VARCHAR(64) DEFAULT ''"),),
+    "sa_industry_daily_quota": (ColumnSpec("owner_user_id", "VARCHAR(64) DEFAULT ''"),),
+    "sa_collected_videos": (ColumnSpec("owner_user_id", "VARCHAR(64) DEFAULT ''"),),
+    "sa_collector_state": (ColumnSpec("owner_user_id", "VARCHAR(64) DEFAULT ''"),),
 }
 
 
@@ -112,11 +117,126 @@ def _add_missing_columns(engine: Engine) -> list[str]:
                 if column.name in existing:
                     continue
                 conn.execute(
-                    text(f"ALTER TABLE {table_name} ADD COLUMN {column.name} {column.ddl}")
+                    text(
+                        f"ALTER TABLE {table_name} ADD COLUMN {column.name} {column.ddl}"
+                    )
                 )
                 added.append(f"{table_name}.{column.name}")
                 existing.add(column.name)
     return added
+
+
+def _backfill_owner_user_id(engine: Engine) -> list[str]:
+    """Backfill owner_user_id for tables that gained the column.
+
+    Existing rows without an owner are attributed to the user that owns the
+    industry with the matching slug. Rows whose industry_slug is shared by
+    multiple users are intentionally skipped and logged so an admin can
+    reconcile them manually.
+
+    For sa_collected_videos, the owner is inferred from TaskQueue.video_id
+    matching CollectedVideo.aweme_id. Aweme IDs mapped to multiple owners are
+    skipped as ambiguous.
+    """
+    updated: list[str] = []
+    with Session(engine) as session:
+        ambiguous_industries = {
+            row[0]
+            for row in session.execute(
+                text(
+                    """
+                    SELECT slug FROM sa_industries
+                    GROUP BY slug
+                    HAVING COUNT(DISTINCT user_id) > 1
+                    """
+                )
+            )
+        }
+        if ambiguous_industries:
+            log.warning(
+                "Skipping backfill for ambiguous slugs shared by multiple users: %s",
+                sorted(ambiguous_industries),
+            )
+
+        tables = [
+            ("sa_task_queue", "industry_slug"),
+            ("sa_target_bloggers", "industry_slug"),
+            ("sa_industry_daily_quota", "industry_slug"),
+            ("sa_collector_state", "industry_slug"),
+        ]
+        for table_name, slug_column in tables:
+            _assert_safe_identifier(table_name)
+            _assert_safe_identifier(slug_column)
+            result = session.execute(
+                text(
+                    f"""
+                    UPDATE {table_name}
+                    SET owner_user_id = COALESCE((
+                        SELECT MAX(sa_industries.user_id)
+                        FROM sa_industries
+                        WHERE sa_industries.slug = {table_name}.{slug_column}
+                          AND sa_industries.user_id IS NOT NULL
+                    ), '')
+                    WHERE (owner_user_id IS NULL OR owner_user_id = '')
+                      AND {slug_column} NOT IN (
+                          SELECT slug FROM sa_industries
+                          GROUP BY slug
+                          HAVING COUNT(DISTINCT user_id) > 1
+                      )
+                    """
+                )
+            )
+            count = getattr(result, "rowcount", 0) or 0
+            if count:
+                updated.append(f"{table_name}:{count}")
+
+        # Backfill sa_collected_videos from TaskQueue.video_id -> aweme_id
+        ambiguous_aweme = {
+            row[0]
+            for row in session.execute(
+                text(
+                    """
+                    SELECT video_id FROM sa_task_queue
+                    WHERE video_id IS NOT NULL AND video_id != ''
+                    GROUP BY video_id
+                    HAVING COUNT(DISTINCT owner_user_id) > 1
+                    """
+                )
+            )
+        }
+        if ambiguous_aweme:
+            log.warning(
+                "Skipping backfill for ambiguous aweme_ids mapped to multiple owners: %s",
+                sorted(ambiguous_aweme)[:50],
+            )
+
+        result = session.execute(
+            text(
+                """
+                UPDATE sa_collected_videos
+                SET owner_user_id = COALESCE((
+                    SELECT MAX(sa_task_queue.owner_user_id)
+                    FROM sa_task_queue
+                    WHERE sa_task_queue.video_id = sa_collected_videos.aweme_id
+                      AND sa_task_queue.owner_user_id IS NOT NULL
+                      AND sa_task_queue.owner_user_id != ''
+                ), '')
+                WHERE (owner_user_id IS NULL OR owner_user_id = '')
+                  AND aweme_id NOT IN (
+                      SELECT video_id FROM sa_task_queue
+                      WHERE video_id IS NOT NULL AND video_id != ''
+                      GROUP BY video_id
+                      HAVING COUNT(DISTINCT owner_user_id) > 1
+                  )
+                """
+            )
+        )
+        count = getattr(result, "rowcount", 0) or 0
+        if count:
+            updated.append(f"sa_collected_videos:{count}")
+
+        session.commit()
+    return updated
 
 
 def initialize_database(base, engine: Engine) -> list[str]:
@@ -124,6 +244,9 @@ def initialize_database(base, engine: Engine) -> list[str]:
 
     base.metadata.create_all(bind=engine)
     added = _add_missing_columns(engine)
+    backfilled = _backfill_owner_user_id(engine)
+    if backfilled:
+        added.extend(f"backfill {item}" for item in backfilled)
     if added:
         log.info("Applied additive database migrations: %s", ", ".join(added))
     return added

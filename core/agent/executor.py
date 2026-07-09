@@ -203,7 +203,9 @@ class PhoneAgentExecutor:
                 except Exception:
                     return
 
-        thread = threading.Thread(target=_watch, name=f"phone-agent-cancel-{self.adb_serial}", daemon=True)
+        thread = threading.Thread(
+            target=_watch, name=f"phone-agent-cancel-{self.adb_serial}", daemon=True
+        )
         thread.start()
         return stop_event, thread
 

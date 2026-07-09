@@ -5,6 +5,7 @@ if not exist "logs" mkdir logs
 
 rem Local desktop default: run against SQLite so Web UI can start without Docker/PostgreSQL.
 if "%THUNDER_DATABASE_URL%"=="" set THUNDER_DATABASE_URL=sqlite:///data/thunder.db
+if "%THUNDER_MEDIACRAWLER_PROXY_URL%"=="" set THUNDER_MEDIACRAWLER_PROXY_URL=http://127.0.0.1:7897
 set PYTHONUTF8=1
 set PYTHONIOENCODING=utf-8
 

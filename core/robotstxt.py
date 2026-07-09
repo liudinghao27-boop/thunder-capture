@@ -38,7 +38,9 @@ def _fetch_robots_txt(domain: str) -> str | None:
         if resp.status_code == 200:
             return cast(str, resp.text)
         if resp.status_code in (401, 403, 429) or resp.status_code >= 500:
-            log.warning("robots.txt unavailable for %s: HTTP %s", domain, resp.status_code)
+            log.warning(
+                "robots.txt unavailable for %s: HTTP %s", domain, resp.status_code
+            )
             return None
     except requests.RequestException as exc:
         log.warning("robots.txt fetch failed for %s: %s", domain, exc)
@@ -70,7 +72,9 @@ def _cache_entry_valid(entry: tuple[float, RobotsRules] | None) -> bool:
     return time.time() - cached_at < _ROBOTS_CACHE_TTL_SECONDS
 
 
-def check_robots(domain: str, path: str = "/") -> dict[str, bool | float | None | list[str]]:
+def check_robots(
+    domain: str, path: str = "/"
+) -> dict[str, bool | float | None | list[str]]:
     """Check whether a path is allowed by robots.txt.
 
     Network errors and blocking status codes deny by default. That is safer

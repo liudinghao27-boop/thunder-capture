@@ -53,9 +53,11 @@ def test_pause_uses_mark_target_inactive():
 
 def test_cmd_send_does_not_call_reclaim_stale_claims():
     """cmd_send should run without referencing undefined reclaim_stale_claims."""
-    with patch("cli.run_senders") as mock_run, \
-         patch("cli.queue_stats", return_value={"pending": 0, "done": 0}), \
-         patch("cli.load_industry") as mock_load:
+    with (
+        patch("cli.run_senders") as mock_run,
+        patch("cli.queue_stats", return_value={"pending": 0, "done": 0}),
+        patch("cli.load_industry") as mock_load,
+    ):
         mock_ind = MagicMock()
         mock_ind.slug = "test-ind"
         mock_load.return_value = mock_ind

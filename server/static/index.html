@@ -3046,13 +3046,18 @@
                 
                 list.forEach((ind, idx) => {
                     const opt = document.createElement('option');
-                    opt.value = ind.id;
+                    opt.value = ind.slug;
+                    opt.dataset.industryId = ind.id;
                     opt.innerText = ind.name;
                     select.appendChild(opt);
                 });
-                const lastIndustryId = localStorage.getItem('thunder_last_task_industry');
-                if (lastIndustryId && Array.from(select.options).some(opt => opt.value === lastIndustryId)) {
-                    select.value = lastIndustryId;
+                const lastIndustrySlug = localStorage.getItem('thunder_last_task_industry');
+                const options = Array.from(select.options);
+                if (lastIndustrySlug && options.some(opt => opt.value === lastIndustrySlug)) {
+                    select.value = lastIndustrySlug;
+                } else if (lastIndustrySlug) {
+                    const legacyIdOption = options.find(opt => opt.dataset.industryId === lastIndustrySlug);
+                    if (legacyIdOption) select.value = legacyIdOption.value;
                 }
             } catch (e) {}
         }
@@ -3094,7 +3099,10 @@
         }
 
         async function loadTasksView() {
-            const industryId = document.getElementById('task-filter-industry').value;
+            const industrySelect = document.getElementById('task-filter-industry');
+            const industrySlug = industrySelect.value;
+            const selectedOption = industrySelect.selectedOptions && industrySelect.selectedOptions[0];
+            const industryId = selectedOption?.dataset?.industryId || industrySlug;
             const status = document.getElementById('task-filter-status').value;
             const tbody = document.getElementById('tasks-table-body');
             const retryAllBtn = document.getElementById('task-retry-all-btn');
@@ -3103,14 +3111,14 @@
             if (timeHeader) timeHeader.innerText = status === 'done' ? '发送成功时间' : '采集时间';
             tbody.innerHTML = '';
 
-            if (!industryId) {
+            if (!industrySlug) {
                 tbody.innerHTML = `<tr><td colspan="8" class="px-6 py-8 text-center text-slate-500">请先在项目中心创建您的第一个获客项目。</td></tr>`;
                 return;
             }
 
             // Use new /api/leads endpoint
             try {
-                let url = `/api/leads?industry_slug=${industryId}&limit=50`;
+                let url = `/api/leads?industry_slug=${industrySlug}&limit=50`;
                 if (status) url += `&status=${status}`;
                 const resp = await apiFetch(url);
                 const list = resp.leads || [];
@@ -3119,7 +3127,7 @@
                     return;
                 }
                 // Update retry button to use new endpoint
-                if (retryAllBtn) retryAllBtn.onclick = () => retryAllFailed(industryId);
+                if (retryAllBtn) retryAllBtn.onclick = () => retryAllFailed(industrySlug);
 
                 for (const t of list) {
                     const tr = document.createElement('tr');
@@ -3161,8 +3169,8 @@
                         ? `<div class="mt-1 text-[10px] text-cyan-400 truncate" title="${escapeHtml(metaLine)}">${escapeHtml(metaLine)}</div>`
                         : '';
                     const retryButton = t.status === 'failed'
-                        ? `<button onclick="retryTask('${escapeHtml(industryId)}', ${Number(t.id)})" class="px-2.5 py-1 rounded border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/10 text-[10px] font-semibold">重新发送</button>`
-                        : renderLeadActions(t);
+                          ? `<button onclick="retryTask('${escapeHtml(industryId)}', ${Number(t.id)})" class="px-2.5 py-1 rounded border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/10 text-[10px] font-semibold">重新发送</button>`
+                          : renderLeadActions(t);
 
                     tr.innerHTML = `
                         <td class="px-6 py-4">
@@ -3208,12 +3216,12 @@
         }
 
         async function retryAllFailedTasks() {
-            const industryId = document.getElementById('task-filter-industry')?.value;
+            const industrySlug = document.getElementById('task-filter-industry')?.value;
             const status = document.getElementById('task-filter-status')?.value;
-            if (!industryId || status !== 'failed') return;
+            if (!industrySlug || status !== 'failed') return;
             if (!confirm('确定将当前项目所有失败线索重新加入待发送队列吗？')) return;
             try {
-                const res = await apiFetch('/api/leads/retry-failed?industry_slug=' + industryId, { method: 'POST' });
+                const res = await apiFetch('/api/leads/retry-failed?industry_slug=' + industrySlug, { method: 'POST' });
                 showToast(`已重新加入待发送队列：${res.retried || 0} 条`, 'success');
                 await loadTasksView();
                 await refreshSidebarSummary();

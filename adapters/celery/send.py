@@ -30,6 +30,7 @@ def send_dm_task(
     device_id: str,
     adb_serial: str,
     industry_slug: str,
+    user_id: str,
     task_data: dict,
     reply_msg: str,
 ):
@@ -44,11 +45,21 @@ def send_dm_task(
 
     db = SessionLocal()
     try:
-        industry = db.query(Industry).filter(Industry.slug == industry_slug).first()
+        industry = (
+            db.query(Industry)
+            .filter(
+                Industry.slug == industry_slug,
+                Industry.user_id == user_id,
+            )
+            .first()
+        )
         if not industry:
             return {"ok": False, "error": f"Industry {industry_slug} not found"}
         if industry.compliance_mode:
-            log.info("Compliance mode enabled for %s; skipping Celery DM send.", industry_slug)
+            log.info(
+                "Compliance mode enabled for %s; skipping Celery DM send.",
+                industry_slug,
+            )
             return {"ok": True, "skipped": True, "reason": "compliance_mode"}
         cfg = _to_industry_config(industry)
     finally:
@@ -60,44 +71,50 @@ def send_dm_task(
         return bool(is_aborted and is_aborted())
 
     from core.task.worker import DeviceWorker
+
     worker = DeviceWorker(
         device_id=device_id,
         adb_serial=adb_serial,
         industry=cfg,
-        daily_limit=task_data.get("daily_limit", cfg.daily_limit or DEFAULT_DAILY_LIMIT),
+        daily_limit=task_data.get(
+            "daily_limit", cfg.daily_limit or DEFAULT_DAILY_LIMIT
+        ),
         min_interval=task_data.get("min_interval_sec", DEFAULT_MIN_INTERVAL_SEC),
         should_stop=should_stop,
         job_id=task_data.get("job_id", ""),
     )
 
-    log.info("DeviceWorker session started: device=%s industry=%s", device_id, industry_slug)
+    log.info(
+        "DeviceWorker session started: device=%s industry=%s", device_id, industry_slug
+    )
     summary = worker.run()
     log.info("DeviceWorker session finished: device=%s summary=%s", device_id, summary)
     return summary
 
 
 @app.task(bind=True, max_retries=1)
-def run_send_batch(self, industry_slug: str, user_id: str = "", device_ids: list[str] | None = None):
+def run_send_batch(
+    self, industry_slug: str, user_id: str, device_ids: list[str] | None = None
+):
     """Orchestrate batch sending across multiple devices using DB config."""
     from core.task.worker import run_senders
     from server.models import SessionLocal
     from server.models.industry import Industry
     from server.api.industries import _to_industry_config
 
+    if not user_id:
+        return {"ok": False, "error": "user_id is required"}
+
     db = SessionLocal()
     try:
-        if industry_slug == "__all_active__":
-            industries = db.query(Industry).filter(Industry.is_active.is_(True)).all()
-            results = []
-            for ind in industries:
-                cfg = _to_industry_config(ind)
-                results.append(run_senders(cfg, device_ids))
-            return {"ok": True, "mode": "all_active", "industries": len(industries), "results": results}
-
-        industry = db.query(Industry).filter(
-            Industry.slug == industry_slug,
-            Industry.user_id == user_id,
-        ).first()
+        industry = (
+            db.query(Industry)
+            .filter(
+                Industry.slug == industry_slug,
+                Industry.user_id == user_id,
+            )
+            .first()
+        )
         if not industry:
             return {"ok": False, "error": f"Industry {industry_slug} not found"}
         cfg = _to_industry_config(industry)

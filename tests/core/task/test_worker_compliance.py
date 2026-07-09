@@ -52,7 +52,12 @@ def test_run_senders_includes_scheduler_limits_in_celery_task_data(monkeypatch):
             self.id = "dev-1"
 
         def as_sender_dict(self):
-            return {"id": "dev-1", "adb_serial": "", "daily_limit": 15, "min_interval_sec": 90}
+            return {
+                "id": "dev-1",
+                "adb_serial": "",
+                "daily_limit": 15,
+                "min_interval_sec": 90,
+            }
 
     with patch("core.task.worker.load_active_devices", return_value=[FakeDevice()]):
         with patch("core.task.worker.is_send_window_open", return_value=True):
@@ -60,7 +65,9 @@ def test_run_senders_includes_scheduler_limits_in_celery_task_data(monkeypatch):
             mock_send.delay.return_value = MagicMock(id="celery-id-1")
             monkeypatch.setattr("adapters.celery.send.send_dm_task", mock_send)
             with patch("adapters.celery.app.app.connection") as mock_conn:
-                mock_conn.return_value.__enter__.return_value.connect.return_value = None
+                mock_conn.return_value.__enter__.return_value.connect.return_value = (
+                    None
+                )
                 run_senders(industry, device_ids=[])
 
     assert mock_send.delay.called

@@ -95,18 +95,20 @@ def db_session(monkeypatch):
     ]
     for row in rows:
         db.add(row)
-    db.add(TaskQueue(
-        industry_slug="test-ind",
-        platform="douyin",
-        video_id="old-v",
-        comment_id="old-c",
-        text="old",
-        source_keyword="old",
-        consumer_id="dev-old",
-        status="converted",
-        fetched_at=(datetime.now(timezone.utc) - timedelta(days=30)).isoformat(),
-        owner_user_id=FakeUser.id,
-    ))
+    db.add(
+        TaskQueue(
+            industry_slug="test-ind",
+            platform="douyin",
+            video_id="old-v",
+            comment_id="old-c",
+            text="old",
+            source_keyword="old",
+            consumer_id="dev-old",
+            status="converted",
+            fetched_at=(datetime.now(timezone.utc) - timedelta(days=30)).isoformat(),
+            owner_user_id=FakeUser.id,
+        )
+    )
 
     db.commit()
     yield db

@@ -73,9 +73,7 @@ class SessionManager:
         """获取指定会话"""
         if session_id not in self._sessions:
             available = ", ".join(self._sessions.keys())
-            raise KeyError(
-                f"Session '{session_id}' 未找到。可用: {available}"
-            )
+            raise KeyError(f"Session '{session_id}' 未找到。可用: {available}")
         return self._sessions[session_id]
 
     @property
